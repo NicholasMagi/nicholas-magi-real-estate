@@ -1,0 +1,153 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#101827">
+  <title>Nicholas Magi Real Estate</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f3f5f8;
+      color: #172033;
+    }
+    header {
+      background: #101827;
+      color: white;
+      padding: 28px 20px;
+    }
+    header h1 { margin: 0; font-size: 23px; }
+    header p { color: #c5cfdd; margin-bottom: 0; }
+    main { max-width: 950px; margin: auto; padding: 20px; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .card {
+      background: white;
+      padding: 18px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px #0000000b;
+    }
+    .number { font-size: 28px; font-weight: bold; }
+    h2 { font-size: 19px; }
+    input, select, button {
+      width: 100%;
+      padding: 13px;
+      margin: 6px 0;
+      border: 1px solid #d5dbe5;
+      border-radius: 8px;
+      font-size: 15px;
+    }
+    button {
+      background: #101827;
+      color: white;
+      border: 0;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .listing { margin-top: 12px; }
+    .muted { color: #687386; font-size: 13px; }
+    @media (max-width: 500px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>NICHOLAS MAGI</h1>
+    <p>REAL ESTATE · Acquisizione immobiliare</p>
+  </header>
+
+  <main>
+    <h2>Dashboard</h2>
+    <div class="stats">
+      <div class="card">
+        <div class="number" id="total">0</div>
+        <div>Annunci registrati</div>
+      </div>
+      <div class="card">
+        <div class="number" id="private">0</div>
+        <div>Privati</div>
+      </div>
+    </div>
+
+    <section class="card listing">
+      <h2>Registra un nuovo annuncio</h2>
+      <form id="form">
+        <input id="title" placeholder="Titolo / indirizzo immobile" required>
+        <input id="city" placeholder="Comune" required>
+        <input id="price" type="number" placeholder="Prezzo richiesto (€)">
+        <input id="contact" placeholder="Telefono o contatto">
+        <select id="type">
+          <option value="Privato">Privato</option>
+          <option value="Agenzia">Agenzia</option>
+          <option value="Da verificare">Da verificare</option>
+        </select>
+        <input id="url" type="url" placeholder="Link annuncio">
+        <button type="submit">Salva annuncio</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Archivio annunci</h2>
+      <div id="list"></div>
+    </section>
+    <p class="muted">Versione iniziale · Nicholas Magi Real Estate</p>
+  </main>
+
+  <script>
+    let listings = JSON.parse(localStorage.getItem("nmre-listings") || "[]");
+
+    function render() {
+      document.getElementById("total").textContent = listings.length;
+      document.getElementById("private").textContent =
+        listings.filter(x => x.type === "Privato").length;
+
+      document.getElementById("list").innerHTML = listings.map((x, i) => `
+        <article class="card listing">
+          <strong>${escapeHTML(x.title)}</strong>
+          <p>${escapeHTML(x.city)} · ${escapeHTML(x.type)}</p>
+          <p>${x.price ? Number(x.price).toLocaleString("it-IT") + " €" : "Prezzo non indicato"}</p>
+          <p>${escapeHTML(x.contact || "Contatto non indicato")}</p>
+          ${x.url ? `<a href="${escapeHTML(x.url)}" target="_blank" rel="noopener">Apri annuncio</a>` : ""}
+          <button onclick="removeListing(${i})">Elimina</button>
+        </article>
+      `).join("");
+    }
+
+    function escapeHTML(value) {
+      return String(value).replace(/[&<>"']/g, c => ({
+        "&":"&amp;", "<":"&lt;", ">":"&gt;",
+        '"':"&quot;", "'":"&#39;"
+      }[c]));
+    }
+
+    document.getElementById("form").addEventListener("submit", e => {
+      e.preventDefault();
+      listings.unshift({
+        title: document.getElementById("title").value,
+        city: document.getElementById("city").value,
+        price: document.getElementById("price").value,
+        contact: document.getElementById("contact").value,
+        type: document.getElementById("type").value,
+        url: document.getElementById("url").value
+      });
+      localStorage.setItem("nmre-listings", JSON.stringify(listings));
+      e.target.reset();
+      render();
+    });
+
+    function removeListing(i) {
+      listings.splice(i, 1);
+      localStorage.setItem("nmre-listings", JSON.stringify(listings));
+      render();
+    }
+    render();
+  </script>
+</body>
+</html>
