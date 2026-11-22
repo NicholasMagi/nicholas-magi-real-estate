@@ -11,9 +11,14 @@ Il codice della Edge Function `nmre-gmail-reader` fornito e verificato durante l
 - mantiene sempre `tipo_venditore = "Da verificare"`;
 - restituisce candidati e avvisi, senza salvarli automaticamente.
 
-Nel frontend è stata aggiunta una revisione temporanea: i campi sono modificabili e l'utente può scartare il candidato o confermarlo tramite la Edge Function di salvataggio già usata dal modulo manuale.
+Nel branch è stata aggiunta una coda persistente basata su `public.annunci_candidati`:
+- importa solo messaggi il cui contenuto presenta indicatori testuali di una notifica immobiliare;
+- usa `upsert` con vincolo `owner_id,dedup_key` e ignora i duplicati già presenti;
+- ricarica dalla tabella i candidati con stato `da_verificare`;
+- permette di modificare i campi, scartare il candidato o confermarlo;
+- la conferma usa la funzione SQL `nmre_confirm_annuncio_candidato`, che crea l'annuncio e aggiorna il candidato in un'unica transazione, con protezione contro conferme ripetute.
 
-**La coda attuale è temporanea:** i candidati non salvati non sono conservati dopo aver chiuso o aggiornato la pagina. Non è ancora una coda persistente e non è attiva alcuna scansione pianificata.
+La nuova funzione SQL è nella migrazione `supabase/migrations/20261122190000_confirm_gmail_candidate.sql`. **Deve essere eseguita sul progetto Supabase prima di distribuire la versione applicativa di questo branch.** Il codice non è ancora stato distribuito e non è attiva alcuna scansione pianificata.
 
 ## Flusso attuale
 
@@ -35,7 +40,8 @@ Il mittente dell'email non viene inserito come contatto del venditore: è normal
 
 - Le email dei portali non hanno un formato standard: le estrazioni sono suggerimenti, non dati certificati.
 - Il primo URL trovato può essere un link di tracciamento o un collegamento secondario: va controllato.
-- Le chiavi di deduplicazione sono preliminari; non esiste ancora un vincolo univoco persistente nel database.
+- Il filtro di rilevanza usa parole chiave generiche e può non riconoscere alcune notifiche atipiche oppure includere messaggi non pertinenti: serve la prova con email reali.
+- Il vincolo univoco persistente è `(owner_id, dedup_key)` nella tabella `annunci_candidati`; URL di tracciamento diversi possono ancora produrre chiavi diverse.
 - Il parser non scarica allegati.
 - Nessuna classificazione automatica come "Privato" o "Agenzia".
 - Nessuna importazione automatica definitiva.
@@ -46,7 +52,8 @@ Il mittente dell'email non viene inserito come contatto del venditore: è normal
 1. Eseguire i test Deno e la verifica dei tipi.
 2. Provare il parser con notifiche reali rappresentative, oscurando dati personali.
 3. Verificare il codice effettivo della Edge Function di salvataggio e le policy RLS.
-4. Progettare una tabella persistente per la coda, con vincolo univoco per utente e chiave deduplicazione.
-5. Solo dopo approvazione, distribuire la nuova Edge Function e verificare il flusso end-to-end.
+4. Eseguire la migrazione SQL per creare la funzione atomica di conferma.
+5. Verificare che le colonne e le policy RLS della tabella candidati corrispondano al contratto atteso.
+6. Solo dopo approvazione, distribuire la nuova Edge Function e la versione frontend, quindi verificare il flusso end-to-end.
 
 Il progetto Google OAuth è ancora in modalità di test: la continuità dei token deve essere risolta prima di promettere un servizio 24/7.
