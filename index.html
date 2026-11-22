@@ -816,7 +816,9 @@ $("testGmail").addEventListener("click",async()=>{
       results.appendChild(item);
     });
 
-    const candidates=data.candidates||[];
+    const allCandidates=data.candidates||[];
+    const candidates=allCandidates.filter(candidate=>candidate.likelyRealEstate===true);
+    const ignoredCount=allCandidates.length-candidates.length;
     if(candidates.length){
       const rows=candidates
         .filter(candidate=>candidate.deduplicationKey)
@@ -847,7 +849,7 @@ $("testGmail").addEventListener("click",async()=>{
 
     await loadPendingCandidates();
     msg("gmailMsg",
-      `Email analizzate: ${data.total}. Candidati in revisione: ${(data.candidates||[]).length}.`,
+      `Email analizzate: ${data.total}. Candidati immobiliari: ${candidates.length}. Email non importate perché non riconosciute come immobiliari: ${ignoredCount}.`,
       "success"
     );
 
