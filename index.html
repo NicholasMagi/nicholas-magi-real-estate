@@ -91,23 +91,21 @@ button:disabled{opacity:.55;cursor:not-allowed}
 </div>
 
 <section class="panel">
-<h2>Collegamento Gmail</h2>
+<h2>Acquisizione automatica degli annunci</h2>
 <p class="hint">
-La casella viene controllata all’apertura dell’app e poi ogni ora mentre l’app resta aperta. Le notifiche immobiliari riconosciute vengono inserite automaticamente tra i candidati, senza duplicati; potrà verificarle prima di inserirle nell’archivio.
+La casella Gmail viene elaborata dal server in background. Qui non vengono mostrate le email: vede soltanto i dati estratti dagli annunci immobiliari, senza mittente, oggetto o testo dei messaggi.
 </p>
-<div class="actions">
-<button class="gold" id="connectGmail">Collega Gmail</button>
-<button class="secondary" id="testGmail">Leggi nuove email</button>
-<button class="gold" id="importAllGmail" disabled>Importa email immobiliari</button>
+<div class="topline">
+<div><span class="pill">Sincronizzazione automatica attiva</span><div class="small">Controllo della casella ogni ora; aggiornamento della lista ogni 5 minuti mentre il sito è aperto.</div></div>
+<button class="secondary" id="connectGmail">Ricollega Gmail</button>
 </div>
-<div id="gmailMsg" class="status"></div>
-<div id="gmailResults"></div>
+<div id="gmailMsg" class="status">Gmail lavora in background. Gli annunci ambigui richiedono la Sua approvazione.</div>
 </section>
 
 <section class="panel">
 <div class="topline"><h2>Nuovi annunci da verificare</h2><div class="actions"><button class="secondary" id="exportCandidatesCsv">Candidati CSV</button><button class="secondary" id="exportCandidatesXlsx">Candidati Excel</button><button class="secondary" id="refreshCandidates">Aggiorna</button></div></div>
-<p class="hint">Le email importate diventano candidati. Verifichi titolo, comune e prezzo prima di confermarli nell'archivio principale.</p>
-<input id="candidateSearch" type="search" placeholder="Cerca candidati per titolo, comune, fonte o mittente" aria-label="Cerca candidati">
+<p class="hint">Gli annunci riconosciuti come privati sono pronti per l'inserimento. Quelli ambigui restano in questa lista come “Venditore da verificare”: dovrà premere “Accetta come privato” per inserirli nell'archivio.</p>
+<input id="candidateSearch" type="search" placeholder="Cerca per titolo, comune o portale" aria-label="Cerca annunci">
 <div id="candidateList"><p class="hint">Nessun candidato caricato.</p></div>
 <div id="candidateMsg" class="status"></div>
 </section>
@@ -172,9 +170,7 @@ const URL_KEY = "nmre-supabase-url";
 const API_KEY = "nmre-supabase-publishable-key";
 let supabase = null;
 let currentUser = null;
-let lastGmailEmails = [];
-let gmailAutoStarted = false;
-let gmailAutoTimer = null;
+let candidateRefreshTimer = null;
 let listingCache = [];
 let candidateCache = [];
 
@@ -241,14 +237,10 @@ async function showApp(session){
   $("appArea").hidden=false;
   await loadListings();
   await loadCandidates();
-  if(!gmailAutoStarted){
-    gmailAutoStarted=true;
-    $("testGmail").click();
-    gmailAutoTimer=setInterval(()=>{
-      if(currentUser && document.visibilityState==="visible" && !$("testGmail").disabled){
-        $("testGmail").click();
-      }
-    },60*60*1000);
+  if(!candidateRefreshTimer){
+    candidateRefreshTimer=setInterval(()=>{
+      if(currentUser && document.visibilityState==="visible") loadCandidates();
+    },5*60*1000);
   }
 }
 
@@ -275,8 +267,7 @@ async function boot(){
         showApp(session).catch(e=>msg("listMsg",e.message,"error"));
       }else{
         currentUser=null;
-        gmailAutoStarted=false;
-        if(gmailAutoTimer){clearInterval(gmailAutoTimer);gmailAutoTimer=null;}
+        if(candidateRefreshTimer){clearInterval(candidateRefreshTimer);candidateRefreshTimer=null;}
         $("appArea").hidden=true;
         showAuth();
       }
@@ -351,6 +342,7 @@ async function loadCandidates(){
   for(let offset=0;;offset+=pageSize){
     const {data:page,error}=await supabase.from("annunci_candidati")
       .select("*").eq("stato","da_verificare")
+      .in("tipo_venditore",["Privato","Da verificare"])
       .order("created_at",{ascending:false}).order("id",{ascending:true})
       .range(offset,offset+pageSize-1);
     if(error){box.innerHTML="";msg("candidateMsg",error.message,"error");return;}
@@ -358,24 +350,32 @@ async function loadCandidates(){
     if(!page||page.length<pageSize)break;
   }
   candidateCache=data;
-  if(!data.length){box.innerHTML='<p class="hint">Nessun nuovo candidato da verificare.</p>';msg("candidateMsg","");return;}
+  if(!data.length){
+    box.innerHTML='<p class="hint">Nessun nuovo annuncio da valutare. La ricerca automatica continua in background.</p>';
+    msg("candidateMsg","");
+    return;
+  }
   const term=$("candidateSearch").value.trim().toLocaleLowerCase("it");
-  const visible=data.filter(c=>[c.titolo,c.comune,c.portale,c.notification_sender,c.email_subject].filter(Boolean).join(" ").toLocaleLowerCase("it").includes(term));
-  if(!visible.length){box.innerHTML='<p class="hint">Nessun candidato corrisponde alla ricerca.</p>';msg("candidateMsg","0 risultati.");return;}
-  box.innerHTML=visible.map(c=>`<article class="candidate" data-candidate="${safe(c.id)}" data-url="${safe(c.url||"")}" data-seller="${safe(c.tipo_venditore||"Da verificare")}">
-    <div class="meta">${safe(c.portale||"Fonte email")} · ${safe(c.notification_sender||"Mittente non disponibile")}</div>
-    <label>Titolo / oggetto</label><input data-field="titolo" value="${safe(c.titolo||"")}" maxlength="250">
-    <div class="row"><div><label>Comune</label><input data-field="comune" value="${safe(c.comune||"")}" placeholder="Inserire il comune"></div>
-    <div><label>Prezzo (€)</label><input data-field="prezzo" type="number" min="0" step="1" value="${c.prezzo??""}"></div></div>
-    <div class="meta">Email: ${safe(c.email_subject||"")} · ${safe(c.data_pubblicazione||"")}</div>
-    <label>Contatto (se presente)</label><input data-field="contatto" value="${safe(c.contatto||"")}" placeholder="Telefono o email del proprietario">
-    <label>Tipologia venditore</label><select data-field="venditore"><option value="Da verificare">Da verificare</option><option value="Privato">Privato</option><option value="Agenzia">Agenzia</option></select>
-    <div class="candidate-actions"><button class="gold" data-confirm="${safe(c.id)}">Conferma nell'archivio</button><button class="danger" data-discard="${safe(c.id)}">Scarta</button>${validUrl(c.url)?'<a href="'+safe(validUrl(c.url))+'" target="_blank" rel="noopener noreferrer">Apri fonte</a>':""}</div>
-  </article>`).join("");
-  box.querySelectorAll("[data-candidate]").forEach(card=>{card.querySelector('[data-field="venditore"]').value=card.dataset.seller||"Da verificare";});
+  const visible=data.filter(c=>[c.titolo,c.comune,c.portale].filter(Boolean).join(" ").toLocaleLowerCase("it").includes(term));
+  if(!visible.length){box.innerHTML='<p class="hint">Nessun annuncio corrisponde alla ricerca.</p>';msg("candidateMsg","0 risultati.");return;}
+  box.innerHTML=visible.map(c=>{
+    const isPrivate=c.tipo_venditore==="Privato";
+    const published=c.data_pubblicazione&&!Number.isNaN(Date.parse(c.data_pubblicazione))
+      ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data non indicata";
+    const url=validUrl(c.url);
+    return `<article class="candidate" data-candidate="${safe(c.id)}" data-url="${safe(c.url||"")}" data-portal="${safe(c.portale||"Portale non indicato")}">
+      <div class="topline"><span class="meta">${safe(c.portale||"Portale non indicato")} · Pubblicato: ${safe(published)}</span><span class="pill">${isPrivate?"Privato riconosciuto":"Venditore da verificare"}</span></div>
+      <label>Titolo / descrizione dell'annuncio</label><input data-field="titolo" value="${safe(c.titolo||"Annuncio immobiliare")}" maxlength="250">
+      <div class="row"><div><label>Comune</label><input data-field="comune" value="${safe(c.comune||"")}" placeholder="Comune da verificare"></div>
+      <div><label>Prezzo richiesto (€)</label><input data-field="prezzo" type="number" min="0" step="1" value="${c.prezzo??""}" placeholder="Non indicato"></div></div>
+      <label>Contatto del proprietario (se disponibile)</label><input data-field="contatto" value="${safe(c.contatto||"")}" placeholder="Non presente nella notifica">
+      <input type="hidden" data-field="venditore" value="Privato">
+      <div class="candidate-actions"><button class="gold" data-confirm="${safe(c.id)}">${isPrivate?"Inserisci nell'archivio":"Accetta come privato e inserisci"}</button><button class="danger" data-discard="${safe(c.id)}">Scarta</button>${url?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>':""}</div>
+    </article>`;
+  }).join("");
   box.querySelectorAll("[data-confirm]").forEach(btn=>btn.addEventListener("click",()=>confirmCandidate(btn.dataset.confirm,btn)));
   box.querySelectorAll("[data-discard]").forEach(btn=>btn.addEventListener("click",()=>discardCandidate(btn.dataset.discard)));
-  msg("candidateMsg",data.length+" candidati da verificare.","success");
+  msg("candidateMsg",data.length+" annunci da valutare.","success");
 }
 
 async function confirmCandidate(id,button){
@@ -385,7 +385,7 @@ async function confirmCandidate(id,button){
   const seller=value("venditore");
   const contact=value("contatto")||null;
   const sourceUrl=card.dataset.url||null;
-  const sourcePortal=card.querySelector(".meta")?.textContent.split(" · ")[0]||"Email alert";
+  const sourcePortal=card.dataset.portal||"Portale non indicato";
   if(!title||!municipality){msg("candidateMsg","Titolo e comune sono necessari per confermare.","error");return;}
   button.disabled=true;
   const {error}=await supabase.rpc("nmre_confirm_annuncio_candidato",{
@@ -403,100 +403,6 @@ async function discardCandidate(id){
   if(!confirm("Scartare questo candidato?"))return;
   const {error}=await supabase.from("annunci_candidati").update({stato:"scartato",updated_at:new Date().toISOString()}).eq("id",id);
   if(error){msg("candidateMsg",error.message,"error");return;}
-  await loadCandidates();
-}
-
-function guessMunicipality(text){
-  const towns=[
-    "Porto Sant'Elpidio","Porto Recanati","Porto San Giorgio","Civitanova Marche",
-    "Falconara Marittima","Santa Maria Nuova","Maiolati Spontini","Monte San Vito",
-    "Monte Urano","Monte Roberto","Montecassiano","Morro d'Alba","Montemarciano",
-    "Castelfidardo","Ancona","Osimo","Loreto","Recanati","Camerano","Numana",
-    "Sirolo","Jesi","Macerata","Fermo","Senigallia","Filottrano","Polverigi",
-    "Agugliano","Offagna","Chiaravalle","Ostra","Tolentino","Staffolo",
-    "Cupramontana","Monsano","Trecastelli","Corridonia","Montegranaro"
-  ];
-  const normalized=" "+String(text||"").toLocaleLowerCase("it").replace(/[^\p{L}\p{N}]+/gu," ")+" ";
-  return towns.find(t=>normalized.includes(" "+t.toLocaleLowerCase("it")+" "))||"";
-}
-function guessPrice(text){
-  const patterns=[
-    /(?:€|eur\s*)\s?([0-9][0-9. ]{3,})/i,
-    /([0-9][0-9. ]{3,})\s?(?:€|eur)/i,
-    /(?:prezzo|richiesta|in vendita(?: a)?)\s*[:\-]?\s*([0-9][0-9. ]{3,})/i
-  ];
-  for(const pattern of patterns){
-    const match=text.match(pattern);
-    if(!match)continue;
-    const n=Number((match[1]||"").replace(/[. ]/g,""));
-    if(Number.isFinite(n)&&n>=10000&&n<=100000000)return n;
-  }
-  return null;
-}
-
-function guessListingUrl(text){
-  const preferred=["idealista.it","immobiliare.it","casa.it","subito.it","green-acres.it","green-acres.com","gate-away.com","trovacasa.it","wikicasa.it"];
-  const ignored=["unsubscribe","unsub","privacy","terms","cookie","tracking","track.","pixel","open.","click.","newsletter","preferences","account","login","register"];
-  const matches=String(text||"").match(/https?:\/\/[^\s<>"']+/gi)||[];
-  const candidates=[];
-  const allowedHost=host=>preferred.some(domain=>host===domain||host.endsWith("."+domain));
-  for(const raw of matches){
-    const cleaned=raw.replace(/[),.;\]]+$/,"");
-    try{
-      let url=new URL(cleaned);
-      for(let depth=0;depth<3;depth++){
-        const host=url.hostname.toLowerCase().replace(/^www\./,"");
-        if(allowedHost(host)){
-          const nested=["url","target","dest","destination","redirect","redirect_url","adurl","u"].map(k=>url.searchParams.get(k)).find(Boolean);
-          if(nested){
-            try{const decoded=new URL(nested,url);if(allowedHost(decoded.hostname.toLowerCase().replace(/^www\./,""))){url=decoded;continue;}}catch{}
-          }
-          if(ignored.some(word=>(host+" "+url.pathname+" "+url.search).toLowerCase().includes(word)))break;
-          if(/\.(png|jpe?g|gif|webp|svg|css|js)(\?|$)/i.test(url.pathname))break;
-          candidates.push({url:url.toString(),score:100+(url.pathname.length>1?5:0)});
-          break;
-        }
-        const nested=["url","target","dest","destination","redirect","redirect_url","adurl","u","q"].map(k=>url.searchParams.get(k)).find(Boolean);
-        if(!nested)break;
-        try{url=new URL(nested,url);}catch{break;}
-      }
-    }catch{}
-  }
-  candidates.sort((a,b)=>b.score-a.score);
-  return candidates[0]?.url||null;
-}
-function isPropertyEmail(email){
-  const text=[email.subject,email.snippet,email.bodyText,email.from].filter(Boolean).join(" ").toLocaleLowerCase("it");
-  const signals=["immobile","immobili","appartamento","villa","vendita","case in","annuncio","nuovo annuncio","proprietà","prezzo","mq","m²","idealista","immobiliare.it","casa.it","subito.it","green-acres","gate-away"];
-  const signal=signals.some(s=>text.includes(s));
-  const domain=/idealista|immobiliare|casa\.it|green.?acres|subito|gate.?away/i.test(text);
-  return signal&&(domain||!!guessListingUrl(text));
-}
-
-function guessPortal(email,text){
-  const url=guessListingUrl(text);
-  if(url){try{return new URL(url).hostname.replace(/^www\./,"");}catch{}}
-  const sender=(email.from||"").match(/@([\w.-]+)/);
-  return sender?sender[1].replace(/^www\./,""):"Email alert";
-}
-
-async function importEmailCandidate(email,button){
-  button.disabled=true;
-  const text=(email.subject||"")+" "+(email.snippet||"")+" "+(email.bodyText||"");
-  const row={
-    owner_id:currentUser.id,titolo:(email.subject||"Notifica immobiliare").slice(0,250),
-    comune:guessMunicipality(text)||null,prezzo:guessPrice(text),
-    tipo_venditore:"Da verificare",portale:guessPortal(email,text),
-    url:guessListingUrl(text),
-    data_pubblicazione:email.date&&!Number.isNaN(Date.parse(email.date))?new Date(email.date).toISOString():null,
-    notification_sender:email.from||null,email_subject:email.subject||null,
-    source_email_id:email.id,dedup_key:"gmail:"+email.id,
-    stato:"da_verificare"
-  };
-  const {error}=await supabase.from("annunci_candidati").upsert(row,{onConflict:"owner_id,dedup_key",ignoreDuplicates:true});
-  if(error){msg("gmailMsg",error.message,"error");button.disabled=false;return;}
-  button.textContent="Importata";
-  msg("gmailMsg","Email aggiunta ai candidati. Controlli il comune prima di confermare.","success");
   await loadCandidates();
 }
 
@@ -745,10 +651,9 @@ function exportListingsCsv(){
 function exportCandidatesCsv(){
   if(!candidateCache.length){msg("candidateMsg","Non ci sono candidati da esportare.");return;}
   const columns=[
-    ["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],
+    ["Titolo / descrizione","titolo"],["Comune","comune"],["Prezzo richiesto","prezzo"],
     ["Contatto","contatto"],["Venditore","tipo_venditore"],
-    ["Fonte","portale"],["Link","url"],["Mittente email","notification_sender"],
-    ["Oggetto email","email_subject"],["Data email","data_pubblicazione"],
+    ["Portale","portale"],["Link annuncio","url"],["Data pubblicazione","data_pubblicazione"],
     ["Stato","stato"],["Ricevuto il","created_at"]
   ];
   const cell=value=>{
@@ -787,7 +692,7 @@ async function exportXlsx(rows,columns,sheetName,fileName,messageId){
  }catch(error){msg(messageId,"Esportazione Excel non riuscita: "+(error.message||"errore libreria"),"error");}
 }
 $("exportXlsx").addEventListener("click",()=>exportXlsx(listingCache,[["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],["Contatto","contatto"],["Venditore","tipo_venditore"],["Fonte","portale"],["Link","url"],["Data pubblicazione","data_pubblicazione"],["Inserito il","created_at"],["Stato contatto","stato_contatto"],["Note","note_personali"],["Prossimo contatto","prossimo_contatto_il"],["Ultimo contatto","ultimo_contatto_il"]],"Annunci","nicholas-magi-annunci-"+new Date().toISOString().slice(0,10)+".xlsx","listMsg"));
-$("exportCandidatesXlsx").addEventListener("click",()=>exportXlsx(candidateCache,[["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],["Contatto","contatto"],["Venditore","tipo_venditore"],["Fonte","portale"],["Link","url"],["Mittente","notification_sender"],["Oggetto email","email_subject"],["Data email","data_pubblicazione"],["Stato","stato"],["Ricevuto il","created_at"]],"Candidati","nmre-candidati-"+new Date().toISOString().slice(0,10)+".xlsx","candidateMsg"));
+$("exportCandidatesXlsx").addEventListener("click",()=>exportXlsx(candidateCache,[["Titolo / descrizione","titolo"],["Comune","comune"],["Prezzo richiesto","prezzo"],["Contatto","contatto"],["Venditore","tipo_venditore"],["Portale","portale"],["Link annuncio","url"],["Data pubblicazione","data_pubblicazione"],["Stato","stato"],["Ricevuto il","created_at"]],"Annunci da valutare","nmre-annunci-da-valutare-"+new Date().toISOString().slice(0,10)+".xlsx","candidateMsg"));
 
 $("exportCsv").addEventListener("click",exportListingsCsv);
 $("refresh").addEventListener("click",loadListings);
@@ -844,138 +749,6 @@ $("connectGmail").addEventListener("click",async()=>{
     );
 
     button.disabled=false;
-  }
-});
-
-/* TEST LETTURA GMAIL */
-
-async function importAllPropertyEmails(){
-  const button=$("importAllGmail");
-  const eligible=lastGmailEmails.filter(isPropertyEmail);
-  if(!eligible.length){msg("gmailMsg","Nessuna email immobiliare riconosciuta tra quelle lette.");return;}
-  button.disabled=true;
-  button.textContent="Controllo duplicati...";
-  const keys=eligible.map(email=>"gmail:"+email.id);
-  const {data:existing,error:checkError}=await supabase.from("annunci_candidati")
-    .select("dedup_key").eq("owner_id",currentUser.id).in("dedup_key",keys);
-  if(checkError){
-    button.disabled=false;button.textContent="Importa email immobiliari ("+eligible.length+")";
-    msg("gmailMsg","Impossibile verificare i duplicati: "+checkError.message,"error");return;
-  }
-  const known=new Set((existing||[]).map(row=>row.dedup_key));
-  const fresh=eligible.filter(email=>!known.has("gmail:"+email.id));
-  let imported=0,failed=0;
-  button.textContent="Importazione...";
-  for(const email of fresh){
-    const text=[email.subject,email.snippet,email.bodyText].filter(Boolean).join(" ");
-    const row={
-      owner_id:currentUser.id,
-      titolo:(email.subject||"Notifica immobiliare").slice(0,250),
-      comune:guessMunicipality(text)||null,
-      prezzo:guessPrice(text),
-      tipo_venditore:"Da verificare",
-      portale:guessPortal(email,text),
-      url:guessListingUrl(text),
-      data_pubblicazione:email.date&&!Number.isNaN(Date.parse(email.date))?new Date(email.date).toISOString():null,
-      notification_sender:email.from||null,
-      email_subject:email.subject||null,
-      source_email_id:email.id,
-      dedup_key:"gmail:"+email.id,
-      stato:"da_verificare"
-    };
-    const {error}=await supabase.from("annunci_candidati").upsert(row,{onConflict:"owner_id,dedup_key",ignoreDuplicates:true});
-    if(error)failed++;else imported++;
-  }
-  button.textContent="Importazione completata";
-  button.disabled=false;
-  msg("gmailMsg","Email immobiliari trovate: "+eligible.length+". Nuovi candidati: "+imported+". Già presenti: "+(eligible.length-fresh.length)+". Errori: "+failed+".",failed?"error":"success");
-  await loadCandidates();
-}
-
-$("importAllGmail").addEventListener("click",importAllPropertyEmails);
-
-$("testGmail").addEventListener("click",async()=>{
-  const button=$("testGmail");
-  const results=$("gmailResults");
-
-  button.disabled=true;
-  results.replaceChildren();
-  msg("gmailMsg","Lettura delle ultime email in corso...");
-
-  try{
-    const {data,error}=await supabase.functions.invoke(
-      "nmre-gmail-reader",
-      {
-        body:{}
-      }
-    );
-
-    if(error){
-      throw new Error(
-        error.message||"Errore durante la lettura Gmail."
-      );
-    }
-
-    if(!data?.success){
-      throw new Error(
-        data?.error||"Risposta non valida dal lettore Gmail."
-      );
-    }
-
-    lastGmailEmails=data.emails||[];
-    const propertyCount=lastGmailEmails.filter(isPropertyEmail).length;
-    $("importAllGmail").disabled=propertyCount===0;
-    $("importAllGmail").textContent="Importa email immobiliari ("+propertyCount+")";
-    msg("gmailMsg",`Gmail collegato: ${data.account||"account autorizzato"}. Email lette: ${data.total} su ${data.listed??data.total}. ${data.failed?data.failed+" email non leggibili.":""}` ,data.failed?"error":"success");
-    if(propertyCount>0) await importAllPropertyEmails();
-
-    if(!data.emails?.length){
-      results.textContent=
-        "Non sono state trovate email negli ultimi 30 giorni.";
-      return;
-    }
-
-    data.emails.forEach(email=>{
-      const item=document.createElement("div");
-      item.className="gmail-email";
-
-      const subject=document.createElement("b");
-      subject.textContent=email.subject||"Senza oggetto";
-
-      const sender=document.createElement("div");
-      sender.className="gmail-meta";
-      sender.textContent=
-        "Da: "+(email.from||"Mittente sconosciuto");
-
-      const date=document.createElement("div");
-      date.className="gmail-meta";
-      date.textContent=email.date||"";
-
-      const snippet=document.createElement("div");
-      snippet.textContent=email.bodyText||email.snippet||"";
-
-      const importButton=document.createElement("button");
-      importButton.className="secondary";
-      importButton.textContent="Importa tra i candidati";
-      importButton.addEventListener("click",()=>importEmailCandidate(email,importButton));
-      item.append(subject,sender,date,snippet,importButton);
-      results.appendChild(item);
-    });
-
-  }catch(error){
-    msg(
-      "gmailMsg",
-      error.message||"Errore durante il test Gmail.",
-      "error"
-    );
-  }finally{
-    button.disabled=false;
-  }
-});
-
-document.addEventListener("visibilitychange",()=>{
-  if(document.visibilityState==="visible" && currentUser && !$("testGmail").disabled){
-    $("testGmail").click();
   }
 });
 
