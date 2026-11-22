@@ -375,7 +375,9 @@ async function loadCandidates(){
   }).join("");
   box.querySelectorAll("[data-confirm]").forEach(btn=>btn.addEventListener("click",()=>confirmCandidate(btn.dataset.confirm,btn)));
   box.querySelectorAll("[data-discard]").forEach(btn=>btn.addEventListener("click",()=>discardCandidate(btn.dataset.discard)));
-  msg("candidateMsg",data.length+" annunci da valutare.","success");
+  const recognized=data.filter(c=>c.tipo_venditore==="Privato").length;
+  const review=data.length-recognized;
+  msg("candidateMsg",data.length+" annunci · "+recognized+" privati riconosciuti · "+review+" da verificare personalmente.","success");
 }
 
 async function confirmCandidate(id,button){
