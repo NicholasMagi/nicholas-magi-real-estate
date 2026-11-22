@@ -105,7 +105,7 @@ La casella viene controllata all’apertura dell’app e poi ogni ora mentre l�
 </section>
 
 <section class="panel">
-<div class="topline"><h2>Nuovi annunci da verificare</h2><button class="secondary" id="refreshCandidates">Aggiorna</button></div>
+<div class="topline"><h2>Nuovi annunci da verificare</h2><div class="actions"><button class="secondary" id="exportCandidatesCsv">Esporta candidati</button><button class="secondary" id="refreshCandidates">Aggiorna</button></div></div>
 <p class="hint">Le email importate diventano candidati. Verifichi titolo, comune e prezzo prima di confermarli nell'archivio principale.</p>
 <div id="candidateList"><p class="hint">Nessun candidato caricato.</p></div>
 <div id="candidateMsg" class="status"></div>
@@ -169,6 +169,7 @@ let lastGmailEmails = [];
 let gmailAutoStarted = false;
 let gmailAutoTimer = null;
 let listingCache = [];
+let candidateCache = [];
 
 function msg(id,text,type=""){
   $(id).textContent=text;
@@ -340,6 +341,7 @@ async function loadCandidates(){
   const box=$("candidateList");
   const {data,error}=await supabase.from("annunci_candidati").select("*").eq("stato","da_verificare").order("created_at",{ascending:false}).limit(100);
   if(error){box.innerHTML="";msg("candidateMsg",error.message,"error");return;}
+  candidateCache=data;
   if(!data.length){box.innerHTML='<p class="hint">Nessun nuovo candidato da verificare.</p>';msg("candidateMsg","");return;}
   box.innerHTML=data.map(c=>`<article class="candidate" data-candidate="${safe(c.id)}" data-url="${safe(c.url||"")}" data-seller="${safe(c.tipo_venditore||"Da verificare")}">
     <div class="meta">${safe(c.portale||"Fonte email")} · ${safe(c.notification_sender||"Mittente non disponibile")}</div>
@@ -618,6 +620,30 @@ function exportListingsCsv(){
   msg("listMsg","Esportazione CSV completata.","success");
 }
 
+function exportCandidatesCsv(){
+  if(!candidateCache.length){msg("candidateMsg","Non ci sono candidati da esportare.");return;}
+  const columns=[
+    ["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],
+    ["Contatto","contatto"],["Venditore","tipo_venditore"],
+    ["Fonte","portale"],["Link","url"],["Mittente email","notification_sender"],
+    ["Oggetto email","email_subject"],["Data email","data_pubblicazione"],
+    ["Stato","stato"],["Ricevuto il","created_at"]
+  ];
+  const cell=value=>'"'+String(value??"").replace(/"/g,'""')+'"';
+  const csv=[
+    columns.map(c=>cell(c[0])).join(";"),
+    ...candidateCache.map(item=>columns.map(c=>cell(item[c[1]])).join(";"))
+  ].join("\r\n");
+  const blob=new Blob(["\uFEFF",csv],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement("a");
+  link.href=url;
+  link.download="nmre-candidati-"+new Date().toISOString().slice(0,10)+".csv";
+  document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
+  msg("candidateMsg","Esportazione candidati completata.","success");
+}
+$("exportCandidatesCsv").addEventListener("click",exportCandidatesCsv);
+
 $("exportCsv").addEventListener("click",exportListingsCsv);
 $("refresh").addEventListener("click",loadListings);
 $("listingSearch").addEventListener("input",loadListings);
@@ -677,9 +703,19 @@ async function importAllPropertyEmails(){
   const eligible=lastGmailEmails.filter(isPropertyEmail);
   if(!eligible.length){msg("gmailMsg","Nessuna email immobiliare riconosciuta tra quelle lette.");return;}
   button.disabled=true;
-  button.textContent="Importazione...";
+  button.textContent="Controllo duplicati...";
+  const keys=eligible.map(email=>"gmail:"+email.id);
+  const {data:existing,error:checkError}=await supabase.from("annunci_candidati")
+    .select("dedup_key").eq("owner_id",currentUser.id).in("dedup_key",keys);
+  if(checkError){
+    button.disabled=false;button.textContent="Importa email immobiliari ("+eligible.length+")";
+    msg("gmailMsg","Impossibile verificare i duplicati: "+checkError.message,"error");return;
+  }
+  const known=new Set((existing||[]).map(row=>row.dedup_key));
+  const fresh=eligible.filter(email=>!known.has("gmail:"+email.id));
   let imported=0,failed=0;
-  for(const email of eligible){
+  button.textContent="Importazione...";
+  for(const email of fresh){
     const text=[email.subject,email.snippet,email.bodyText].filter(Boolean).join(" ");
     const row={
       owner_id:currentUser.id,
@@ -700,7 +736,7 @@ async function importAllPropertyEmails(){
     if(error)failed++;else imported++;
   }
   button.textContent="Importazione completata";
-  msg("gmailMsg","Email immobiliari elaborate: "+eligible.length+". Operazioni senza errori: "+imported+". Errori: "+failed+". I duplicati vengono ignorati.",failed?"error":"success");
+  msg("gmailMsg","Email immobiliari trovate: "+eligible.length+". Nuovi candidati: "+imported+". Già presenti: "+(eligible.length-fresh.length)+". Errori: "+failed+".",failed?"error":"success");
   await loadCandidates();
 }
 
