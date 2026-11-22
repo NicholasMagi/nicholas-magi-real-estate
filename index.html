@@ -107,6 +107,7 @@ La casella viene controllata all’apertura dell’app e poi ogni ora mentre l�
 <section class="panel">
 <div class="topline"><h2>Nuovi annunci da verificare</h2><div class="actions"><button class="secondary" id="exportCandidatesCsv">Esporta candidati</button><button class="secondary" id="refreshCandidates">Aggiorna</button></div></div>
 <p class="hint">Le email importate diventano candidati. Verifichi titolo, comune e prezzo prima di confermarli nell'archivio principale.</p>
+<input id="candidateSearch" type="search" placeholder="Cerca candidati per titolo, comune, fonte o mittente" aria-label="Cerca candidati">
 <div id="candidateList"><p class="hint">Nessun candidato caricato.</p></div>
 <div id="candidateMsg" class="status"></div>
 </section>
@@ -343,7 +344,10 @@ async function loadCandidates(){
   if(error){box.innerHTML="";msg("candidateMsg",error.message,"error");return;}
   candidateCache=data;
   if(!data.length){box.innerHTML='<p class="hint">Nessun nuovo candidato da verificare.</p>';msg("candidateMsg","");return;}
-  box.innerHTML=data.map(c=>`<article class="candidate" data-candidate="${safe(c.id)}" data-url="${safe(c.url||"")}" data-seller="${safe(c.tipo_venditore||"Da verificare")}">
+  const term=$("candidateSearch").value.trim().toLocaleLowerCase("it");
+  const visible=data.filter(c=>[c.titolo,c.comune,c.portale,c.notification_sender,c.email_subject].filter(Boolean).join(" ").toLocaleLowerCase("it").includes(term));
+  if(!visible.length){box.innerHTML='<p class="hint">Nessun candidato corrisponde alla ricerca.</p>';msg("candidateMsg","0 risultati.");return;}
+  box.innerHTML=visible.map(c=>`<article class="candidate" data-candidate="${safe(c.id)}" data-url="${safe(c.url||"")}" data-seller="${safe(c.tipo_venditore||"Da verificare")}">
     <div class="meta">${safe(c.portale||"Fonte email")} · ${safe(c.notification_sender||"Mittente non disponibile")}</div>
     <label>Titolo / oggetto</label><input data-field="titolo" value="${safe(c.titolo||"")}" maxlength="250">
     <div class="row"><div><label>Comune</label><input data-field="comune" value="${safe(c.comune||"")}" placeholder="Inserire il comune"></div>
@@ -648,6 +652,11 @@ $("exportCsv").addEventListener("click",exportListingsCsv);
 $("refresh").addEventListener("click",loadListings);
 $("listingSearch").addEventListener("input",loadListings);
 $("sellerFilter").addEventListener("change",loadListings);
+let candidateSearchTimer=null;
+$("candidateSearch").addEventListener("input",()=>{
+  clearTimeout(candidateSearchTimer);
+  candidateSearchTimer=setTimeout(loadCandidates,250);
+});
 $("refreshCandidates").addEventListener("click",loadCandidates);
 
 /* COLLEGAMENTO GMAIL */
@@ -736,6 +745,7 @@ async function importAllPropertyEmails(){
     if(error)failed++;else imported++;
   }
   button.textContent="Importazione completata";
+  button.disabled=false;
   msg("gmailMsg","Email immobiliari trovate: "+eligible.length+". Nuovi candidati: "+imported+". Già presenti: "+(eligible.length-fresh.length)+". Errori: "+failed+".",failed?"error":"success");
   await loadCandidates();
 }
