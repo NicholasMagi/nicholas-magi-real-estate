@@ -97,7 +97,8 @@ Colleghi la casella dedicata per leggere le notifiche immobiliari. Il test legge
 </p>
 <div class="actions">
 <button class="gold" id="connectGmail">Collega Gmail</button>
-<button class="secondary" id="testGmail">Test lettura Gmail</button>
+<button class="secondary" id="testGmail">Leggi nuove email</button>
+<button class="gold" id="importAllGmail" disabled>Importa email immobiliari</button>
 </div>
 <div id="gmailMsg" class="status"></div>
 <div id="gmailResults"></div>
@@ -164,6 +165,7 @@ const URL_KEY = "nmre-supabase-url";
 const API_KEY = "nmre-supabase-publishable-key";
 let supabase = null;
 let currentUser = null;
+let lastGmailEmails = [];
 
 function msg(id,text,type=""){
   $(id).textContent=text;
@@ -325,16 +327,17 @@ async function loadCandidates(){
   const {data,error}=await supabase.from("annunci_candidati").select("*").eq("stato","da_verificare").order("created_at",{ascending:false}).limit(100);
   if(error){box.innerHTML="";msg("candidateMsg",error.message,"error");return;}
   if(!data.length){box.innerHTML='<p class="hint">Nessun nuovo candidato da verificare.</p>';msg("candidateMsg","");return;}
-  box.innerHTML=data.map(c=>`<article class="candidate" data-candidate="${safe(c.id)}" data-url="${safe(c.url||"")}">
+  box.innerHTML=data.map(c=>`<article class="candidate" data-candidate="${safe(c.id)}" data-url="${safe(c.url||"")}" data-seller="${safe(c.tipo_venditore||"Da verificare")}">
     <div class="meta">${safe(c.portale||"Fonte email")} · ${safe(c.notification_sender||"Mittente non disponibile")}</div>
     <label>Titolo / oggetto</label><input data-field="titolo" value="${safe(c.titolo||"")}" maxlength="250">
     <div class="row"><div><label>Comune</label><input data-field="comune" value="${safe(c.comune||"")}" placeholder="Inserire il comune"></div>
     <div><label>Prezzo (€)</label><input data-field="prezzo" type="number" min="0" step="1" value="${c.prezzo??""}"></div></div>
     <div class="meta">Email: ${safe(c.email_subject||"")} · ${safe(c.data_pubblicazione||"")}</div>
+    <label>Contatto (se presente)</label><input data-field="contatto" value="${safe(c.contatto||"")}" placeholder="Telefono o email del proprietario">
     <label>Tipologia venditore</label><select data-field="venditore"><option value="Da verificare">Da verificare</option><option value="Privato">Privato</option><option value="Agenzia">Agenzia</option></select>
-    <div class="meta">${safe(c.contatto||"Contatto da verificare")}</div>
     <div class="candidate-actions"><button class="gold" data-confirm="${safe(c.id)}">Conferma nell'archivio</button><button class="danger" data-discard="${safe(c.id)}">Scarta</button>${validUrl(c.url)?'<a href="'+safe(validUrl(c.url))+'" target="_blank" rel="noopener noreferrer">Apri fonte</a>':""}</div>
   </article>`).join("");
+  box.querySelectorAll("[data-candidate]").forEach(card=>{card.querySelector('[data-field="venditore"]').value=card.dataset.seller||"Da verificare";});
   box.querySelectorAll("[data-confirm]").forEach(btn=>btn.addEventListener("click",()=>confirmCandidate(btn.dataset.confirm,btn)));
   box.querySelectorAll("[data-discard]").forEach(btn=>btn.addEventListener("click",()=>discardCandidate(btn.dataset.discard)));
   msg("candidateMsg",data.length+" candidati da verificare.","success");
@@ -345,14 +348,16 @@ async function confirmCandidate(id,button){
   const value=name=>card.querySelector('[data-field="'+name+'"]').value.trim();
   const title=value("titolo"), municipality=value("comune"), price=value("prezzo");
   const seller=value("venditore");
+  const contact=value("contatto")||null;
   const sourceUrl=card.dataset.url||null;
+  const sourcePortal=card.querySelector(".meta")?.textContent.split(" · ")[0]||"Email alert";
   if(!title||!municipality){msg("candidateMsg","Titolo e comune sono necessari per confermare.","error");return;}
   button.disabled=true;
   const {error}=await supabase.rpc("nmre_confirm_annuncio_candidato",{
     p_candidate_id:id,p_titolo:title,p_comune:municipality,
     p_prezzo:price===""?null:Number(price),
-    p_contatto:null,p_tipo_venditore:seller,
-    p_portale:"Email alert",p_url:sourceUrl
+    p_contatto:contact,p_tipo_venditore:seller,
+    p_portale:sourcePortal,p_url:sourceUrl
   });
   if(error){msg("candidateMsg",error.message,"error");button.disabled=false;return;}
   msg("candidateMsg","Annuncio confermato e trasferito nell'archivio.","success");
@@ -373,21 +378,59 @@ function guessMunicipality(text){
 }
 
 function guessPrice(text){
-  const m=text.match(/(?:€|eur\s*)\s?([0-9][0-9. ]{3,})|([0-9][0-9. ]{3,})\s?€/i);
-  if(!m)return null;
-  const n=Number((m[1]||m[2]).replace(/[. ]/g,""));
-  return Number.isFinite(n)&&n>0?n:null;
+  const patterns=[
+    /(?:€|eur\s*)\s?([0-9][0-9. ]{3,})/i,
+    /([0-9][0-9. ]{3,})\s?(?:€|eur)/i,
+    /(?:prezzo|richiesta|in vendita(?: a)?)\s*[:\-]?\s*([0-9][0-9. ]{3,})/i
+  ];
+  for(const pattern of patterns){
+    const match=text.match(pattern);
+    if(!match)continue;
+    const n=Number((match[1]||"").replace(/[. ]/g,""));
+    if(Number.isFinite(n)&&n>=10000&&n<=100000000)return n;
+  }
+  return null;
+}
+
+function guessListingUrl(text){
+  const matches=text.match(/https?:\/\/[^\s<>"']+/gi)||[];
+  for(const raw of matches){
+    const cleaned=raw.replace(/[),.;\]]+$/,"");
+    try{
+      const url=new URL(cleaned);
+      if(url.hostname.includes("google.")&&url.pathname==="/url"){
+        const target=url.searchParams.get("q")||url.searchParams.get("url");
+        if(target&&validUrl(target))return target;
+      }
+      if(!/google\.(com|it)$/.test(url.hostname))return cleaned;
+    }catch{}
+  }
+  return null;
+}
+
+function isPropertyEmail(email){
+  const text=[email.subject,email.snippet,email.bodyText,email.from].filter(Boolean).join(" ").toLocaleLowerCase("it");
+  const signals=["immobile","immobili","appartamento","villa","vendita","case in","annuncio","nuovo annuncio","proprietà","prezzo","mq","m²","idealista","immobiliare.it","casa.it","subito.it","green-acres","gate-away"];
+  const signal=signals.some(s=>text.includes(s));
+  const domain=/idealista|immobiliare|casa\.it|green.?acres|subito|gate.?away/i.test(text);
+  return signal&&(domain||!!guessListingUrl(text));
+}
+
+function guessPortal(email,text){
+  const url=guessListingUrl(text);
+  if(url){try{return new URL(url).hostname.replace(/^www\./,"");}catch{}}
+  const sender=(email.from||"").match(/@([\w.-]+)/);
+  return sender?sender[1].replace(/^www\./,""):"Email alert";
 }
 
 async function importEmailCandidate(email,button){
   button.disabled=true;
   const text=(email.subject||"")+" "+(email.snippet||"")+" "+(email.bodyText||"");
-  const urlMatch=text.match(/https?:\/\/[^\s<>"']+/i);
   const row={
     owner_id:currentUser.id,titolo:(email.subject||"Notifica immobiliare").slice(0,250),
     comune:guessMunicipality(text)||null,prezzo:guessPrice(text),
-    tipo_venditore:"Da verificare",portale:"Email alert",
-    url:urlMatch?urlMatch[0].replace(/[),.;]+$/,""):null,
+    tipo_venditore:"Da verificare",portale:guessPortal(email,text),
+    url:guessListingUrl(text),
     data_pubblicazione:email.date&&!Number.isNaN(Date.parse(email.date))?new Date(email.date).toISOString():null,
     notification_sender:email.from||null,email_subject:email.subject||null,
     source_email_id:email.id,dedup_key:"gmail:"+email.id,
@@ -585,6 +628,38 @@ $("connectGmail").addEventListener("click",async()=>{
 
 /* TEST LETTURA GMAIL */
 
+$("importAllGmail").addEventListener("click",async()=>{
+  const button=$("importAllGmail");
+  const eligible=lastGmailEmails.filter(isPropertyEmail);
+  if(!eligible.length){msg("gmailMsg","Nessuna email immobiliare riconosciuta tra quelle lette.");return;}
+  button.disabled=true;
+  button.textContent="Importazione...";
+  let imported=0,failed=0;
+  for(const email of eligible){
+    const text=[email.subject,email.snippet,email.bodyText].filter(Boolean).join(" ");
+    const row={
+      owner_id:currentUser.id,
+      titolo:(email.subject||"Notifica immobiliare").slice(0,250),
+      comune:guessMunicipality(text)||null,
+      prezzo:guessPrice(text),
+      tipo_venditore:"Da verificare",
+      portale:guessPortal(email,text),
+      url:guessListingUrl(text),
+      data_pubblicazione:email.date&&!Number.isNaN(Date.parse(email.date))?new Date(email.date).toISOString():null,
+      notification_sender:email.from||null,
+      email_subject:email.subject||null,
+      source_email_id:email.id,
+      dedup_key:"gmail:"+email.id,
+      stato:"da_verificare"
+    };
+    const {error}=await supabase.from("annunci_candidati").upsert(row,{onConflict:"owner_id,dedup_key",ignoreDuplicates:true});
+    if(error)failed++;else imported++;
+  }
+  button.textContent="Importazione completata";
+  msg("gmailMsg","Email immobiliari elaborate: "+eligible.length+". Operazioni senza errori: "+imported+". Errori: "+failed+". I duplicati vengono ignorati.",failed?"error":"success");
+  await loadCandidates();
+});
+
 $("testGmail").addEventListener("click",async()=>{
   const button=$("testGmail");
   const results=$("gmailResults");
@@ -613,11 +688,11 @@ $("testGmail").addEventListener("click",async()=>{
       );
     }
 
-    msg(
-      "gmailMsg",
-      `Collegamento riuscito! Email lette: ${data.total}.`,
-      "success"
-    );
+    lastGmailEmails=data.emails||[];
+    const propertyCount=lastGmailEmails.filter(isPropertyEmail).length;
+    $("importAllGmail").disabled=propertyCount===0;
+    $("importAllGmail").textContent="Importa email immobiliari ("+propertyCount+")";
+    msg("gmailMsg",`Gmail collegato: ${data.account||"account autorizzato"}. Email lette: ${data.total}.`,"success");
 
     if(!data.emails?.length){
       results.textContent=
