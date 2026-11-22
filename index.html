@@ -830,6 +830,7 @@ $("testGmail").addEventListener("click",async()=>{
           tipo_venditore:candidate.tipo_venditore||"Da verificare",
           portale:candidate.portale||null,
           url:validUrl(candidate.url),
+          data_pubblicazione:candidate.receivedAt||null,
           notification_sender:candidate.notificationSender||null,
           email_subject:candidate.titolo||null,
           source_email_id:candidate.messageId||null,
