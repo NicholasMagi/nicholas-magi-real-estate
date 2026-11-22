@@ -340,8 +340,17 @@ $("signOut").addEventListener("click",async()=>{
 async function loadCandidates(){
   if(!currentUser)return;
   const box=$("candidateList");
-  const {data,error}=await supabase.from("annunci_candidati").select("*").eq("stato","da_verificare").order("created_at",{ascending:false}).limit(500);
-  if(error){box.innerHTML="";msg("candidateMsg",error.message,"error");return;}
+  const data=[];
+  const pageSize=500;
+  for(let offset=0;;offset+=pageSize){
+    const {data:page,error}=await supabase.from("annunci_candidati")
+      .select("*").eq("stato","da_verificare")
+      .order("created_at",{ascending:false}).order("id",{ascending:true})
+      .range(offset,offset+pageSize-1);
+    if(error){box.innerHTML="";msg("candidateMsg",error.message,"error");return;}
+    data.push(...(page||[]));
+    if(!page||page.length<pageSize)break;
+  }
   candidateCache=data;
   if(!data.length){box.innerHTML='<p class="hint">Nessun nuovo candidato da verificare.</p>';msg("candidateMsg","");return;}
   const term=$("candidateSearch").value.trim().toLocaleLowerCase("it");
@@ -474,12 +483,19 @@ async function loadListings(){
   if(!currentUser)return;
 
   msg("listMsg","Caricamento...");
-  const {data,error}=await supabase.from("annunci").select("*").order("created_at",{ascending:false});
-
-  if(error){
-    $("listingList").innerHTML="";
-    msg("listMsg",error.message,"error");
-    return;
+  const data=[];
+  const pageSize=500;
+  for(let offset=0;;offset+=pageSize){
+    const {data:page,error}=await supabase.from("annunci")
+      .select("*").order("created_at",{ascending:false})
+      .order("id",{ascending:true}).range(offset,offset+pageSize-1);
+    if(error){
+      $("listingList").innerHTML="";
+      msg("listMsg",error.message,"error");
+      return;
+    }
+    data.push(...(page||[]));
+    if(!page||page.length<pageSize)break;
   }
 
   listingCache=data;
