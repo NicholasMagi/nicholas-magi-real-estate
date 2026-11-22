@@ -35,7 +35,7 @@ select cron.schedule(
         )
       ),
       body := '{}'::jsonb,
-      timeout_milliseconds := 10000
+      timeout_milliseconds := 30000
     ) as request_id;
   $job$
 );
