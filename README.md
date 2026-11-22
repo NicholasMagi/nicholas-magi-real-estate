@@ -52,7 +52,13 @@ Il parser è separato in `supabase/functions/nmre-gmail-scheduled/_shared/parser
 
 ## Raccolta dai portali
 
-L'importazione Gmail elabora le notifiche ricevute nella casella collegata. Non equivale a una scansione diretta e universale dei portali immobiliari e non effettua scraping. Le integrazioni dirette devono utilizzare API, feed o accordi autorizzati con ciascun portale, rispettandone condizioni d'uso e limiti tecnici.
+L'importazione Gmail elabora le notifiche ricevute nella casella collegata. Non equivale a una scansione diretta e universale dei portali immobiliari e non effettua scraping. Gli avvisi dei portali riconosciuti includono Idealista, Immobiliare.it, Casa.it, Subito, Green-Acres, Gate-away, Trovacasa e Wikicasa.
+
+Il connettore diretto `nmre-insights-sync` è predisposto per l'API ufficiale Immobiliare.it Insights / Comps Finder: cerca offerte di vendita filtrate per venditore privato e disponibilità del numero telefonico, poi importa i dati della scheda e il link. Il numero stesso non è esposto dal mapping API documentato. Richiede le credenziali professionali Insights come segreti server-side e l'abilitazione del prodotto da parte del fornitore.
+
+Idealista dispone di una Search API, ma rilascia la chiave solo previa richiesta e valutazione del progetto. Il collegamento non viene abilitato finché non si ricevono documentazione tecnica ufficiale e credenziali. Green-Acres documenta un feed XML di pubblicazione degli annunci dell'agenzia, non una API per raccogliere annunci di privati. Subito supporta gestionali autorizzati per la pubblicazione e impone limitazioni sull'uso dei sistemi automatici e sui contatti commerciali agli inserzionisti.
+
+Ogni importazione diretta deve utilizzare API, feed o accordi autorizzati con ciascun portale, rispettandone condizioni d'uso e limiti tecnici. Dettagli: `docs/portal-integrations.md`.
 
 ## Pubblicazione
 
