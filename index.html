@@ -1,4 +1,5 @@
 
+
 <!doctype html>
 <html lang="it">
 <head>
@@ -105,7 +106,9 @@ button{border:0;border-radius:9px;background:var(--navy);color:white;padding:12p
 <div><label>Contatto</label><input id="contact" maxlength="180" placeholder="Telefono o email"></div>
 <div><label>Tipologia venditore</label>
 <select id="sellerType">
-<option>Da verificare</option><option>Privato</option><option>Agenzia</option>
+<option>Da verificare</option>
+<option>Privato</option>
+<option>Agenzia</option>
 </select></div>
 </div>
 <div class="row">
@@ -139,9 +142,11 @@ function msg(id,text,type=""){
   $(id).textContent=text;
   $(id).className="status "+type;
 }
+
 function safe(value){
   return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
+
 function validUrl(value){
   if(!value)return null;
   try{
@@ -149,30 +154,36 @@ function validUrl(value){
     return ["http:","https:"].includes(u.protocol)?u.href:null;
   }catch{return null;}
 }
+
 function euro(value){
   if(value===null||value==="")return "Prezzo non indicato";
   return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(Number(value));
 }
+
 function connect(url,key){
   if(!/^https:\/\/[a-zA-Z0-9.-]+\.supabase\.co\/?$/.test(url)||!key.startsWith("sb_publishable_")){
     throw new Error("Controlli il Project URL e la Publishable Key.");
   }
   supabase=createClient(url.replace(/\/$/,""),key);
 }
+
 function loadConfig(){
   $("projectUrl").value=localStorage.getItem(URL_KEY)||"";
   $("publishableKey").value=localStorage.getItem(API_KEY)||"";
 }
+
 function showSetup(){
   $("setup").hidden=false;
   $("auth").hidden=true;
   $("appArea").hidden=true;
 }
+
 function showAuth(){
   $("setup").hidden=true;
   $("auth").hidden=false;
   $("appArea").hidden=true;
 }
+
 async function showApp(session){
   currentUser=session.user;
   $("userEmail").textContent=currentUser.email||"";
@@ -181,20 +192,29 @@ async function showApp(session){
   $("appArea").hidden=false;
   await loadListings();
 }
+
 async function boot(){
   loadConfig();
   const url=localStorage.getItem(URL_KEY);
   const key=localStorage.getItem(API_KEY);
-  if(!url||!key){showSetup();return;}
+
+  if(!url||!key){
+    showSetup();
+    return;
+  }
+
   try{
     connect(url,key);
     const {data,error}=await supabase.auth.getSession();
     if(error)throw error;
+
     if(data.session)await showApp(data.session);
     else showAuth();
+
     supabase.auth.onAuthStateChange((_event,session)=>{
-      if(session)showApp(session).catch(e=>msg("listMsg",e.message,"error"));
-      else{
+      if(session){
+        showApp(session).catch(e=>msg("listMsg",e.message,"error"));
+      }else{
         currentUser=null;
         $("appArea").hidden=true;
         showAuth();
@@ -205,61 +225,88 @@ async function boot(){
     msg("setupMsg",e.message,"error");
   }
 }
+
 $("saveConfig").addEventListener("click",()=>{
   const url=$("projectUrl").value.trim();
   const key=$("publishableKey").value.trim();
+
   try{
     connect(url,key);
     localStorage.setItem(URL_KEY,url);
     localStorage.setItem(API_KEY,key);
     msg("setupMsg","Collegamento configurato.","success");
     showAuth();
-  }catch(e){msg("setupMsg",e.message,"error");}
+  }catch(e){
+    msg("setupMsg",e.message,"error");
+  }
 });
+
 $("editConfig").addEventListener("click",()=>{
   loadConfig();
   showSetup();
 });
+
 $("signIn").addEventListener("click",async()=>{
   const email=$("email").value.trim();
   const password=$("password").value;
-  if(!email||!password){msg("authMsg","Inserisca email e password.","error");return;}
+
+  if(!email||!password){
+    msg("authMsg","Inserisca email e password.","error");
+    return;
+  }
+
   msg("authMsg","Accesso in corso...");
   const {error}=await supabase.auth.signInWithPassword({email,password});
   if(error)msg("authMsg",error.message,"error");
 });
+
 $("signUp").addEventListener("click",async()=>{
   const email=$("email").value.trim();
   const password=$("password").value;
+
   if(!email||password.length<6){
     msg("authMsg","Inserisca un'email valida e una password di almeno 6 caratteri.","error");
     return;
   }
+
   msg("authMsg","Creazione account in corso...");
   const {data,error}=await supabase.auth.signUp({email,password});
+
   if(error)msg("authMsg",error.message,"error");
   else if(data.session)msg("authMsg","Account creato e accesso effettuato.","success");
   else msg("authMsg","Controlli la Sua email per confermare la registrazione, poi acceda.","success");
 });
+
 $("signOut").addEventListener("click",async()=>{
   const {error}=await supabase.auth.signOut();
   if(error)msg("listMsg",error.message,"error");
 });
+
 async function loadListings(){
   if(!currentUser)return;
+
   msg("listMsg","Caricamento...");
   const {data,error}=await supabase.from("annunci").select("*").order("created_at",{ascending:false});
-  if(error){$("listingList").innerHTML="";msg("listMsg",error.message,"error");return;}
+
+  if(error){
+    $("listingList").innerHTML="";
+    msg("listMsg",error.message,"error");
+    return;
+  }
+
   $("totalCount").textContent=data.length;
   $("privateCount").textContent=data.filter(x=>x.tipo_venditore==="Privato").length;
   $("verifyCount").textContent=data.filter(x=>!x.tipo_venditore||x.tipo_venditore==="Da verificare").length;
+
   if(!data.length){
     $("listingList").innerHTML='<p class="hint">Non ci sono ancora annunci. Inserisca il primo.</p>';
     msg("listMsg","");
     return;
   }
+
   $("listingList").innerHTML=data.map(item=>{
     const url=validUrl(item.url);
+
     return `<article class="listing"><div>
     <h3>${safe(item.titolo)}</h3>
     <div class="meta">${safe(item.comune)} · ${safe(item.contatto||"Contatto non inserito")}<br>${safe(item.portale||"Fonte non indicata")}</div>
@@ -268,20 +315,30 @@ async function loadListings(){
     ${url?` <a href="${safe(url)}" target="_blank" rel="noopener noreferrer">Apri annuncio</a>`:""}
     </div><button class="danger" data-delete="${safe(item.id)}">Elimina</button></article>`;
   }).join("");
+
   $("listingList").querySelectorAll("[data-delete]").forEach(btn=>{
     btn.addEventListener("click",()=>deleteListing(btn.dataset.delete));
   });
+
   msg("listMsg",data.length+" annunci caricati.","success");
 }
+
 $("listingForm").addEventListener("submit",async event=>{
   event.preventDefault();
+
   if(!currentUser)return;
+
   const rawUrl=$("listingUrl").value.trim();
   const cleanUrl=validUrl(rawUrl);
-  if(rawUrl&&!cleanUrl){msg("formMsg","Il link deve iniziare con http:// o https://.","error");return;}
+
+  if(rawUrl&&!cleanUrl){
+    msg("formMsg","Il link deve iniziare con http:// o https://.","error");
+    return;
+  }
+
   const price=$("price").value;
+
   const record={
-    owner_id:currentUser.id,
     titolo:$("title").value.trim(),
     comune:$("municipality").value.trim(),
     prezzo:price===""?null:Number(price),
@@ -290,55 +347,67 @@ $("listingForm").addEventListener("submit",async event=>{
     portale:$("portal").value.trim()||null,
     url:cleanUrl
   };
+
   msg("formMsg","Salvataggio in corso...");
-  const { data: sessionData } = await supabase.auth.getSession();
-const token = sessionData.session?.access_token;
 
-if (!token) {
-  msg("formMsg", "Sessione scaduta. Effettui nuovamente l'accesso.", "error");
-  return;
-}
+  try{
+    const {data:sessionData,error:sessionError}=await supabase.auth.getSession();
 
-const { data, error } = await supabase.functions.invoke(
-  "nmre-search-engine",
-  {
-    body: {
-      titolo: record.titolo,
-      comune: record.comune,
-      prezzo: record.prezzo,
-      contatto: record.contatto,
-      tipo_venditore: record.tipo_venditore,
-      portale: record.portale,
-      url: record.url
-    },
-    headers: {
-      Authorization: Bearer ${token}
+    if(sessionError)throw sessionError;
+
+    const token=sessionData.session?.access_token;
+
+    if(!token){
+      msg("formMsg","Sessione scaduta. Effettui nuovamente l'accesso.","error");
+      return;
     }
-  }
-);
 
-if (error || !data?.success) {
-  msg("formMsg", data?.error || error?.message || "Errore durante il salvataggio.", "error");
-  return;
-}
-  if(error){msg("formMsg",error.message,"error");return;}
-  $("listingForm").reset();
-  msg("formMsg","Annuncio salvato correttamente.","success");
-  await loadListings();
+    const {data,error}=await supabase.functions.invoke(
+      "nmre-search-engine",
+      {
+        body:record,
+        headers:{
+          Authorization:`Bearer ${token}`
+        }
+      }
+    );
+
+    if(error||!data?.success){
+      msg("formMsg",data?.error||error?.message||"Errore durante il salvataggio.","error");
+      return;
+    }
+
+    $("listingForm").reset();
+    msg("formMsg","Annuncio salvato correttamente.","success");
+    await loadListings();
+
+  }catch(error){
+    msg("formMsg",error.message||"Errore di connessione durante il salvataggio.","error");
+  }
 });
+
 async function deleteListing(id){
   if(!confirm("Vuole eliminare questo annuncio?"))return;
+
   const {error}=await supabase.from("annunci").delete().eq("id",id);
-  if(error){msg("listMsg",error.message,"error");return;}
+
+  if(error){
+    msg("listMsg",error.message,"error");
+    return;
+  }
+
   await loadListings();
 }
+
 $("refresh").addEventListener("click",loadListings);
+
 boot().catch(e=>{
   showSetup();
   msg("setupMsg",e.message,"error");
 });
 </script>
-  <script>
+
+<script>
 (async function () {
   try {
     const response = await fetch(
