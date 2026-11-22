@@ -340,7 +340,7 @@ $("signOut").addEventListener("click",async()=>{
 async function loadCandidates(){
   if(!currentUser)return;
   const box=$("candidateList");
-  const {data,error}=await supabase.from("annunci_candidati").select("*").eq("stato","da_verificare").order("created_at",{ascending:false}).limit(100);
+  const {data,error}=await supabase.from("annunci_candidati").select("*").eq("stato","da_verificare").order("created_at",{ascending:false}).limit(500);
   if(error){box.innerHTML="";msg("candidateMsg",error.message,"error");return;}
   candidateCache=data;
   if(!data.length){box.innerHTML='<p class="hint">Nessun nuovo candidato da verificare.</p>';msg("candidateMsg","");return;}
@@ -392,9 +392,24 @@ async function discardCandidate(id){
 }
 
 function guessMunicipality(text){
+  const towns=[
+    "Porto Sant'Elpidio","Porto Recanati","Porto San Giorgio","Civitanova Marche",
+    "Falconara Marittima","Santa Maria Nuova","Maiolati Spontini","Monte San Vito",
+    "Monte Urano","Monte Roberto","Montecassiano","Morro d'Alba","Montemarciano",
+    "Castelfidardo","Ancona","Osimo","Loreto","Recanati","Camerano","Numana",
+    "Sirolo","Jesi","Macerata","Fermo","Senigallia","Filottrano","Polverigi",
+    "Agugliano","Offagna","Chiaravalle","Ostra","Tolentino","Staffolo",
+    "Cupramontana","Monsano","Trecastelli","Corridonia","Montegranaro"
+  ];
+  const normalized=String(text||"").toLocaleLowerCase("it");
+  return towns.find(t=>{
+    const escaped=t.toLocaleLowerCase("it").replace(/[.*+?^${}()|[\]\\]/g,"\\function guessMunicipality(text){
   const towns=["Ancona","Osimo","Castelfidardo","Loreto","Recanati","Camerano","Numana","Sirolo","Jesi","Falconara Marittima","Porto Recanati","Civitanova Marche","Macerata","Monte Urano","Porto Sant'Elpidio","Fermo","Senigallia","Filottrano","Polverigi","Agugliano","Offagna"];
   const normalized=text.toLocaleLowerCase("it");
   return towns.find(t=>normalized.includes(t.toLocaleLowerCase("it")))||"";
+}");
+    return new RegExp("(^|[^\\p{L}])"+escaped+"($|[^\\p{L}])","u").test(normalized);
+  })||"";
 }
 
 function guessPrice(text){
