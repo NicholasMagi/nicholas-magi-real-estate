@@ -5,18 +5,20 @@ import {
   toCandidate
 } from "./provider.ts";
 
-Deno.test("Insight search is restricted to private sale offers with phone available", () => {
+Deno.test("Insight search is restricted to private sale offers with a phone number available", () => {
   const payload = buildInsightsSearchPayload(new Date("2026-11-23T12:00:00Z"), 30, 2);
   if (payload.Filters.clientTypeID !== 1) throw new Error("Client type must be private");
   if (payload.Filters.comparableTypeID !== 1 || payload.Filters.contractTypeID !== 1) throw new Error("Search must target sale offers");
   if (payload.Filters.phoneNumberProvided !== true) throw new Error("Phone availability filter missing");
   if (payload.Pagination.page !== 2 || payload.Pagination.limit !== 10) throw new Error("Pagination mismatch");
-  if (payload.Filters.pubblicationStatusID.join(",") !== "1,2") throw new Error("Only new/published listings should be returned");
+  if (payload.Filters.pubblicationStatusID.join(",") !== "1,2") throw new Error("Publication filters mismatch");
+  if (payload.Filters.categoryTypeID !== 1) throw new Error("Search must target residential properties");
+  if (payload.Filters.minDate !== "24/10/2026T00:00:00Z") throw new Error("Date format or lookback mismatch");
 });
 
-Deno.test("Italian API date is formatted as DD/MM/YYYY", () => {
-  const value = formatInsightsDate(new Date(2026, 10, 23));
-  if (value !== "23/11/2026") throw new Error("Unexpected date: " + value);
+Deno.test("Italian date is formatted in the documented ISO suffix format", () => {
+  const value = formatInsightsDate(new Date("2026-11-23T12:00:00Z"));
+  if (value !== "23/11/2026T00:00:00Z") throw new Error("Unexpected date: " + value);
 });
 
 Deno.test("Only allowed Marche municipalities and official listing URLs are imported", () => {
@@ -30,11 +32,10 @@ Deno.test("Only allowed Marche municipalities and official listing URLs are impo
     grossSquareFootage: 120,
     rooms: 5,
     features: { numberOfBathrooms: 2 },
-    clientType: "Privato",
-    collectionDate: "23/11/2026"
+    collectionDate: "2026-11-23T00:00:00Z"
   }, "user-id");
   if (!candidate) throw new Error("Expected candidate");
-  if (candidate.tipo_venditore !== "Privato") throw new Error("Private seller classification mismatch");
+  if (candidate.tipo_venditore !== "Privato") throw new Error("Search-filtered private seller classification mismatch");
   if (candidate.dedup_key !== "insights:immobiliare:abc-123") throw new Error("Deduplication key mismatch");
   if (candidate.prezzo !== 185000 || candidate.superficie_mq !== 120 || candidate.locali !== 5 || candidate.bagni !== 2) {
     throw new Error("Structured property fields mismatch");
@@ -51,16 +52,14 @@ Deno.test("Only allowed Marche municipalities and official listing URLs are impo
   }, "user-id") !== null) throw new Error("Untrusted listing URL must be skipped");
 });
 
-Deno.test("Missing client classification never gets promoted to private", () => {
+Deno.test("Explicit professional metadata is excluded", () => {
   const candidate = toCandidate({
-    uuid: "abc-124",
+    uuid: "abc-999",
     listingUrl: "https://immobiliare.it/annunci/123456780/",
     location: { municipality: "Osimo" },
-    propertyType: "Appartamento"
+    clientType: "Professionista"
   }, "user-id");
-  if (!candidate || candidate.tipo_venditore !== "Da verificare") {
-    throw new Error("Unknown seller must remain for manual review");
-  }
+  if (candidate !== null) throw new Error("Agency listing must be excluded");
 });
 
 Deno.test("The target municipality allowlist contains the core service area", () => {
