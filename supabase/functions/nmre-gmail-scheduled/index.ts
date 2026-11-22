@@ -55,13 +55,74 @@ function municipality(s:string):string|null {
   return TOWNS.find(t=>n.includes(" "+t.toLocaleLowerCase("it")+" "))||null;
 }
 function price(s:string):number|null {
-  const patterns=[/(?:€|eur\s*)\s?([0-9][0-9. ]{3,})/i,/([0-9][0-9. ]{3,})\s?(?:€|eur)/i,/(?:prezzo|richiesta|in vendita(?: a)?)\s*[:\-]?\s*([0-9][0-9. ]{3,})/i];
-  for(const p of patterns){const m=s.match(p);if(m){const n=Number((m[1]||"").replace(/[. ]/g,""));if(Number.isFinite(n)&&n>=10000&&n<=100000000)return n;}}
+  const patterns=[
+    /(?:€|eur)\s*([0-9][0-9\s.,]*)/i,
+    /([0-9][0-9\s.,]*)\s*(?:€|eur)/i,
+    /(?:prezzo|richiesta|in vendita(?: a)?)\s*[:\-]?\s*(?:€|eur)?\s*([0-9][0-9\s.,]*)/i
+  ];
+  for(const pattern of patterns){
+    const match=String(s||"").match(pattern);
+    if(!match)continue;
+    let raw=match[1].replace(/\s/g,"");
+    const separator=Math.max(raw.lastIndexOf(","),raw.lastIndexOf("."));
+    if(separator>=0 && /^\d{1,2}$/.test(raw.slice(separator+1)) && raw.slice(0,separator).replace(/\D/g,"").length>=2){
+      raw=raw.slice(0,separator).replace(/\D/g,"")+"."+raw.slice(separator+1);
+    }else{
+      raw=raw.replace(/\D/g,"");
+    }
+    const amount=Number(raw);
+    if(Number.isFinite(amount)&&amount>=10000&&amount<=100000000)return Math.round(amount);
+  }
   return null;
 }
+function propertyType(s:string):string|null {
+  const patterns:Array<[string,RegExp]>=[
+    ["Casa indipendente",/\b(?:casa indipendente|casa singola)\b/i],
+    ["Villetta",/\b(?:villetta|villino)\b/i],["Villa",/\bvilla\b/i],
+    ["Monolocale",/\bmonolocale\b/i],["Bilocale",/\bbilocale\b/i],
+    ["Trilocale",/\btrilocale\b/i],["Quadrilocale",/\bquadrilocale\b/i],
+    ["Attico",/\battico\b/i],["Mansarda",/\bmansarda\b/i],
+    ["Appartamento",/\bappartamento\b/i],
+    ["Rustico",/\b(?:rustico|casale|cascina|colonica|podere)\b/i],
+    ["Terratetto",/\bterratetto\b/i],["Terreno",/\bterreno\b/i],
+    ["Garage / Box",/\b(?:garage|box auto|box)\b/i],["Negozio",/\bnegozio\b/i],
+    ["Ufficio",/\bufficio\b/i],["Capannone",/\bcapannone\b/i]
+  ];
+  for(const [label,pattern] of patterns)if(pattern.test(String(s||"")))return label;
+  return null;
+}
+function surface(s:string):number|null {
+  const value=String(s||"");
+  const patterns=[
+    /(?:superficie|metratura|sup\.?)\s*[:\-]?\s*([1-9]\d{1,3})(?:[.,]\d+)?\s*(?:m²|mq|metri quadrati)?/i,
+    /\b([1-9]\d{1,3})(?:[.,]\d+)?\s*(?:m²|mq|metri quadrati)\b/i
+  ];
+  for(const pattern of patterns){
+    const match=value.match(pattern);
+    if(match){const n=Number(match[1]);if(Number.isInteger(n)&&n>=15&&n<=10000)return n;}
+  }
+  return null;
+}
+function rooms(s:string):number|null {
+  const match=String(s||"").match(/\b([1-9]\d?(?:[.,]\d)?)\s*(?:locali|vani)\b/i);
+  if(!match)return null;
+  const value=Number(match[1].replace(",","."));
+  return Number.isFinite(value)&&value>0&&value<=100?value:null;
+}
+function bedrooms(s:string):number|null {
+  const match=String(s||"").match(/\b(\d{1,2})\s*(?:camere(?: da letto)?|camera(?: da letto)?)\b|\b(?:camere(?: da letto)?|camera(?: da letto)?)\s*[:\-]?\s*(\d{1,2})\b/i);
+  const value=match?Number(match[1]||match[2]):null;
+  return value!==null&&value>=0&&value<=20?value:null;
+}
+function bathrooms(s:string):number|null {
+  const match=String(s||"").match(/\b(\d{1,2})\s*(?:bagni|bagno)\b|\b(?:bagni|bagno)\s*[:\-]?\s*(\d{1,2})\b/i);
+  const value=match?Number(match[1]||match[2]):null;
+  return value!==null&&value>=0&&value<=20?value:null;
+}
 function listingUrl(s:string):string|null {
-  const ignored=["unsubscribe","unsub","privacy","terms","cookie","tracking","track.","pixel","open.","click.","newsletter","preferences","account","login","register"];
-  const urls=String(s||"").match(/https?:\/\/[^\s<>"']+/gi)||[]; const found:Array<{url:string;score:number}>=[];
+  const ignored=["unsubscribe","unsub","privacy","terms","cookie","pixel","newsletter","preferences","account","login","register"];
+  const urls=String(s||"").match(/https?:\/\/[^\s<>"']+/gi)||[];
+  const found:Array<{url:string;score:number}>=[];
   const allowed=(h:string)=>PORTALS.some(d=>h===d||h.endsWith("."+d));
   for(const raw of urls){try{
     let u=new URL(raw.replace(/[),.;\]]+$/,""));
@@ -72,18 +133,84 @@ function listingUrl(s:string):string|null {
         if(nested){try{const v=new URL(nested,u);if(allowed(v.hostname.toLowerCase().replace(/^www\./,""))){u=v;continue;}}catch{}}
         if(ignored.some(w=>(h+" "+u.pathname+" "+u.search).toLowerCase().includes(w)))break;
         if(/\.(png|jpe?g|gif|webp|svg|css|js)(\?|$)/i.test(u.pathname))break;
-        found.push({url:u.toString(),score:100+(u.pathname.length>1?5:0)});break;
+        const host=u.hostname.toLowerCase().replace(/^www\./,"");
+        const tracker=/^(?:click|clicks|tracking|track|redirect|links?)\./i.test(host)||/\/(?:f\/a|track|click|redirect)\//i.test(u.pathname);
+        const detail=/\/(?:immobili?|annunci?|appartamenti?|case(?:-in-vendita)?|ville?|vendita)(?:\/|[-_0-9])/i.test(u.pathname)||/\/\d{6,}(?:\/|$)/.test(u.pathname);
+        const score=tracker?5:detail?250:u.pathname.length>1?100:50;
+        found.push({url:u.toString(),score});
+        break;
       }
       const nested=["url","target","dest","destination","redirect","redirect_url","adurl","u","q"].map(k=>u.searchParams.get(k)).find(Boolean);
-      if(!nested)break; try{u=new URL(nested,u);}catch{break;}
+      if(!nested)break;try{u=new URL(nested,u);}catch{break;}
     }
   }catch{}}
-  found.sort((a,b)=>b.score-a.score); return found[0]?.url||null;
+  found.sort((a,b)=>b.score-a.score);
+  return found[0]?.url||null;
 }
 function propertyEmail(e:any):boolean {
-  const s=[e.subject,e.snippet,e.bodyText,e.from].filter(Boolean).join(" ").toLocaleLowerCase("it");
-  const signals=["immobile","immobili","appartamento","villa","vendita","case in","annuncio","nuovo annuncio","proprietà","prezzo","mq","m²","idealista","immobiliare.it","casa.it","subito.it","green-acres","gate-away"];
-  return signals.some(x=>s.includes(x))&&(/idealista|immobiliare|casa\.it|green.?acres|subito|gate.?away/i.test(s)||!!listingUrl(s));
+  const subject=String(e.subject||"").toLocaleLowerCase("it");
+  const text=[e.subject,e.snippet,e.bodyText].filter(Boolean).join(" ").toLocaleLowerCase("it");
+  const excluded=/(verifica il tuo indirizzo|verifica la tua email|hai condiviso alcuni dati|account google|benvenuto|ben arrivato|richiesta di contatto di recupero|ricerca (?:è stata )?salvata|password|reimposta|newsletter|promozion[ei]|subitopiù|attiva il tuo account|conferma il tuo indirizzo|asta giudiziaria|annuncio all['’]asta|\ball['’]asta\b|\baste immobiliari\b|\btribunale\b|\bvendi\s+all['’]asta\b|\bpiena proprietà\s+all['’]asta\b)/i;
+  if(excluded.test(subject)||excluded.test(text))return false;
+  const alertPattern=/(?:\b\d+\s+)?nuov[oi]\s+(?:annunci[oi]?|immobili|case|appartamenti|ville|proprietà)\b|annunci?\s+(?:appena )?pubblicat[oi]|nuov[oi]\s+immobil[ei]|nuov[ae]\s+proprietà|annuncio.{0,100}(?:tua ricerca|vendita|immobiliare)/i;
+  if(!alertPattern.test(subject)&&!alertPattern.test(text.slice(0,5000)))return false;
+  return !!listingUrl(text);
+}
+function listingTitle(e:any):string {
+  const body=String(e.bodyText||"").replace(/https?:\/\/\S+/g," ").replace(/\s+/g," ").trim();
+  const propertyPattern=/\b(?:casa indipendente|villetta|villa|monolocale|bilocale|trilocale|quadrilocale|appartamento|attico|mansarda|rustico|casale|terratetto|terreno|garage|box auto|negozio|ufficio|capannone)\b/i;
+  const match=propertyPattern.exec(body);
+  if(match){
+    const start=Math.max(0,match.index-55);
+    const phrase=body.slice(start,Math.min(body.length,match.index+100))
+      .replace(/^(?:dettagli|scopri|guarda|visualizza|nuovo annuncio)\s*[:\-·]?\s*/i,"")
+      .replace(/\s+/g," ").trim();
+    if(phrase.length>=10)return phrase.slice(0,250);
+  }
+  const subject=String(e.subject||"").trim();
+  const subjectMatch=subject.match(/(?:\d+\s+)?nuov[oi]\s+annunci?[oi]?.{0,140}?:\s*(.+)$/i);
+  if(subjectMatch?.[1])return ("Nuovo annuncio · "+subjectMatch[1].trim()).slice(0,250);
+  return (subject||"Nuovo annuncio immobiliare").slice(0,250);
+}
+async function resolveListingUrl(s:string):Promise<string|null> {
+  const candidate=listingUrl(s);
+  if(!candidate)return null;
+  try{
+    const initial=new URL(candidate);
+    const host=initial.hostname.toLowerCase().replace(/^www\./,"");
+    const tracked=/^(?:click|clicks|tracking|track|redirect|links?)\./i.test(host)||/\/(?:f\/a|track|click|redirect)\//i.test(initial.pathname);
+    if(!tracked)return candidate;
+    const response=await fetch(candidate,{
+      method:"HEAD",redirect:"follow",signal:AbortSignal.timeout(3500)
+    });
+    const finalUrl=new URL(response.url||candidate);
+    const finalHost=finalUrl.hostname.toLowerCase().replace(/^www\./,"");
+    if(PORTALS.some(d=>finalHost===d||finalHost.endsWith("."+d))&&!/^(?:click|clicks|tracking|track|redirect|links?)\./i.test(finalHost)){
+      return finalUrl.toString();
+    }
+  }catch{}
+  return candidate;
+}
+function sellerClassification(value:string):"Privato"|"Da verificare"|"Agenzia" {
+  const text=String(value||"").toLocaleLowerCase("it");
+  const agencyPatterns=[
+    /(?:venditore|inserzionista|proposto da|pubblicato da|annuncio di|a cura di)\s*[:\-]?\s*(?:un[ao]?\s+)?(?:agenzia(?:\s+immobiliare)?|agente immobiliare|professionista)\b/i,
+    /\bda\s+(?:un[ao]?\s+)?agenzia(?:\s+immobiliare)?\b/i,
+    /\bagenzia immobiliare\b.{0,100}\bpropone\b/i,
+    /\bproposto da\s+[A-ZÀ-Ý][\wÀ-ÿ'’.-]+\s+immobiliare\b/i
+  ];
+  if(agencyPatterns.some(pattern=>pattern.test(text)))return "Agenzia";
+  const privatePatterns=[
+    /\bda\s+privato\b/i,
+    /\bvenditore\s*[:\-]?\s*privato\b/i,
+    /\binserzionista\s*[:\-]?\s*privato\b/i,
+    /\bpubblicato\s+da\s+privato\b/i,
+    /\bannuncio\s+privato\b/i,
+    /\bvendita\s+tra\s+privati\b/i,
+    /\bprivato\s+(?:vende|propone)\b/i,
+    /\bsenza\s+agenzia\b/i
+  ];
+  return privatePatterns.some(pattern=>pattern.test(text))?"Privato":"Da verificare";
 }
 async function readEmail(m:any,token:string):Promise<any|null>{
   const r=await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/"+encodeURIComponent(m.id)+"?format=full",{headers:{Authorization:"Bearer "+token}});
@@ -103,25 +230,82 @@ export default {
       if(data[0].email?.toLowerCase()!==ACCOUNT)throw new Error("Casella Gmail non autorizzata");
       const tokens=await decrypt(data[0].token_ciphertext,encryptionSecret);
       const token=await accessToken(tokens,data[0].expires_at,encryptionSecret,ctx.supabaseAdmin);
-      const listResponse=await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=in%3Ainbox%20newer_than%3A30d",{headers:{Authorization:"Bearer "+token}});
+      const listResponse=await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=100&q=newer_than%3A30d",{headers:{Authorization:"Bearer "+token}});
       if(!listResponse.ok)throw new Error("Lettura Gmail non riuscita");
       const list=await listResponse.json(), messages=list.messages||[], emails:Array<any|null>=[];
       for(let i=0;i<messages.length;i+=5)emails.push(...await Promise.all(messages.slice(i,i+5).map((m:any)=>readEmail(m,token))));
-      const candidates=emails.filter((e):e is any=>!!e&&propertyEmail(e));
-      const rows=candidates.map(e=>{
+      const propertyEmails=emails.filter((e):e is any=>!!e&&propertyEmail(e));
+      const classifiedAll=propertyEmails.map(e=>{
         const t=[e.subject,e.snippet,e.bodyText].filter(Boolean).join(" ");
-        const sender=(e.from||"").match(/@([\w.-]+)/);
-        let portal=listingUrl(t);
-        try{portal=portal?new URL(portal).hostname.replace(/^www\./,""):null;}catch{portal=null;}
-        return {owner_id:owner,titolo:(e.subject||"Notifica immobiliare").slice(0,250),comune:municipality(t),prezzo:price(t),tipo_venditore:"Da verificare",portale:portal||(sender?sender[1]:"Email alert"),url:listingUrl(t),data_pubblicazione:e.date&&!Number.isNaN(Date.parse(e.date))?new Date(e.date).toISOString():null,notification_sender:(e.from||"").slice(0,500),email_subject:(e.subject||"").slice(0,500),source_email_id:String(e.id),dedup_key:"gmail:"+String(e.id),stato:"da_verificare"};
+        const seller=sellerClassification(t);
+        return {email:e,text:t,seller};
       });
-      let inserted=0;
+      const classified=classifiedAll.filter(x=>x.seller!=="Agenzia");
+      const retainedIds=new Set(classified.map(x=>String(x.email.id)));
+      const discardedKeys=emails.filter((e):e is any=>!!e&&!retainedIds.has(String(e.id)))
+        .map(e=>"gmail:"+String(e.id));
+      let discardedExisting=0;
+      if(discardedKeys.length){
+        const {data:discarded,error:discardError}=await ctx.supabaseAdmin.from("annunci_candidati")
+          .update({
+            stato:"scartato",notification_sender:null,email_subject:null,
+            updated_at:new Date().toISOString()
+          })
+          .eq("owner_id",owner).eq("stato","da_verificare")
+          .in("dedup_key",discardedKeys).select("id");
+        if(discardError)throw new Error("Pulizia delle notifiche non pertinenti non riuscita");
+        discardedExisting=discarded?.length||0;
+      }
+      const rows=await Promise.all(classified.map(async({email:e,text:t,seller})=>{
+        const url=await resolveListingUrl(t);
+        let portal:string|null=null;
+        try{
+          if(url){
+            const host=new URL(url).hostname.toLowerCase().replace(/^www\./,"");
+            portal=PORTALS.find(d=>host===d||host.endsWith("."+d))||null;
+          }
+        }catch{portal=null;}
+        return {
+          owner_id:owner,titolo:listingTitle(e),comune:municipality(t),prezzo:price(t),
+          tipologia_immobile:propertyType(t),superficie_mq:surface(t),locali:rooms(t),
+          camere:bedrooms(t),bagni:bathrooms(t),tipo_venditore:seller,
+          portale:portal||"Portale non indicato",url,
+          data_pubblicazione:e.date&&!Number.isNaN(Date.parse(e.date))?new Date(e.date).toISOString():null,
+          source_email_id:String(e.id),dedup_key:"gmail:"+String(e.id),stato:"da_verificare"
+        };
+      }));
+      let inserted=0,updated=0;
+      for(const row of rows){
+        const {data:existing,error:updateError}=await ctx.supabaseAdmin.from("annunci_candidati")
+          .update({
+            titolo:row.titolo,comune:row.comune,prezzo:row.prezzo,
+            tipo_venditore:row.tipo_venditore,portale:row.portale,url:row.url,
+            data_pubblicazione:row.data_pubblicazione,
+            tipologia_immobile:row.tipologia_immobile,
+            superficie_mq:row.superficie_mq,locali:row.locali,camere:row.camere,bagni:row.bagni,
+            notification_sender:null,email_subject:null,
+            updated_at:new Date().toISOString()
+          })
+          .eq("owner_id",owner).eq("dedup_key",row.dedup_key).eq("stato","da_verificare")
+          .select("id");
+        if(updateError)throw new Error("Aggiornamento degli annunci candidati non riuscito");
+        updated+=existing?.length||0;
+      }
       if(rows.length){
-        const {data:saved,error:saveError}=await ctx.supabaseAdmin.from("annunci_candidati").upsert(rows,{onConflict:"owner_id,dedup_key",ignoreDuplicates:true}).select("id");
-        if(saveError)throw new Error("Salvataggio candidati Gmail non riuscito");
+        const {data:saved,error:saveError}=await ctx.supabaseAdmin.from("annunci_candidati")
+          .upsert(rows,{onConflict:"owner_id,dedup_key",ignoreDuplicates:true}).select("id");
+        if(saveError)throw new Error("Salvataggio annunci candidati non riuscito");
         inserted=saved?.length||0;
       }
-      return Response.json({success:true,account:ACCOUNT,listed:messages.length,read:emails.filter(Boolean).length,propertyEmails:candidates.length,inserted,duplicatesOrExisting:Math.max(0,candidates.length-inserted),failed:emails.filter(x=>!x).length});
+      const excludedAgencies=propertyEmails.length-classified.length;
+      return Response.json({
+        success:true,account:ACCOUNT,listed:messages.length,read:emails.filter(Boolean).length,
+        propertyNotifications:propertyEmails.length,privateRecognized:rows.filter(r=>r.tipo_venditore==="Privato").length,
+        needsUserReview:rows.filter(r=>r.tipo_venditore==="Da verificare").length,
+        excludedAgencies,discardedExisting,inserted,updated,
+        duplicatesOrExisting:Math.max(0,rows.length-inserted-updated),
+        failed:emails.filter(x=>!x).length
+      });
     }catch(error){
       console.error("Errore Gmail scheduled reader:",error instanceof Error?error.message:"Errore sconosciuto");
       return Response.json({success:false,error:error instanceof Error?error.message:"Errore sincronizzazione Gmail"},{status:500});
