@@ -30,6 +30,9 @@ jobs:
       - name: Test Gmail property parser
         run: deno test supabase/functions/nmre-gmail-scheduled/parser_test.ts
 
+      - name: Test Immobiliare Insights API adapter
+        run: deno test supabase/functions/nmre-insights-sync/provider_test.ts
+
       - name: Check embedded frontend JavaScript
         run: |
           python3 - <<'PY'
