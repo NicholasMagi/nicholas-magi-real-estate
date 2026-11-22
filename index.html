@@ -104,7 +104,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 
 <section class="panel">
 <div class="topline"><h2>Annunci privati e opportunità da valutare</h2><div class="actions"><button class="secondary" id="exportCandidatesCsv">Candidati CSV</button><button class="secondary" id="exportCandidatesXlsx">Candidati Excel</button><button class="secondary" id="refreshCandidates">Aggiorna</button></div></div>
-<p class="hint">Gli annunci riconosciuti come privati sono pronti per l'inserimento. Quelli ambigui restano in questa lista come “Venditore da verificare”: dovrà premere “Accetta come privato” per inserirli nell'archivio.</p>
+<p class="hint">Titolo, comune, prezzo, tipologia, superficie, locali e link vengono estratti quando presenti. Le informazioni mancanti possono essere completate prima della conferma. Gli annunci ambigui restano in sospeso finché non li approva.</p>
 <input id="candidateSearch" type="search" placeholder="Cerca per titolo, comune o portale" aria-label="Cerca annunci">
 <div id="candidateList"><p class="hint">Nessun candidato caricato.</p></div>
 <div id="candidateMsg" class="status"></div>
@@ -135,9 +135,18 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 </select></div>
 </div>
 <div class="row">
-<div><label>Portale / fonte</label><input id="portal" maxlength="100" placeholder="Immobiliare.it"></div>
-<div><label>Link annuncio</label><input id="listingUrl" type="url" maxlength="1000" placeholder="https://..."></div>
+<div><label>Tipologia immobile</label><input id="propertyType" maxlength="80" placeholder="Es. Trilocale, villa, terreno"></div>
+<div><label>Superficie (m²)</label><input id="surface" type="number" min="1" max="100000" step="1" placeholder="Es. 95"></div>
 </div>
+<div class="row">
+<div><label>Locali</label><input id="rooms" type="number" min="0.5" max="100" step="0.5" placeholder="Es. 4"></div>
+<div><label>Camere da letto</label><input id="bedrooms" type="number" min="0" max="100" step="1"></div>
+</div>
+<div class="row">
+<div><label>Bagni</label><input id="bathrooms" type="number" min="0" max="100" step="1"></div>
+<div><label>Portale / fonte</label><input id="portal" maxlength="100" placeholder="Immobiliare.it"></div>
+</div>
+<div><label>Link annuncio</label><input id="listingUrl" type="url" maxlength="1000" placeholder="https://..."></div>
 <div class="actions"><button class="gold" type="submit">Salva annuncio</button></div>
 <div id="formMsg" class="status"></div>
 </form>
@@ -356,22 +365,27 @@ async function loadCandidates(){
     return;
   }
   const term=$("candidateSearch").value.trim().toLocaleLowerCase("it");
-  const visible=data.filter(c=>[c.titolo,c.comune,c.portale].filter(Boolean).join(" ").toLocaleLowerCase("it").includes(term));
+  const visible=data.filter(c=>[c.titolo,c.comune,c.portale,c.tipologia_immobile].filter(Boolean).join(" ").toLocaleLowerCase("it").includes(term));
   if(!visible.length){box.innerHTML='<p class="hint">Nessun annuncio corrisponde alla ricerca.</p>';msg("candidateMsg","0 risultati.");return;}
   box.innerHTML=visible.map(c=>{
     const isPrivate=c.tipo_venditore==="Privato";
     const published=c.data_pubblicazione&&!Number.isNaN(Date.parse(c.data_pubblicazione))
       ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data non indicata";
     const url=validUrl(c.url);
-    return `<article class="candidate" data-candidate="${safe(c.id)}" data-url="${safe(c.url||"")}" data-portal="${safe(c.portale||"Portale non indicato")}">
-      <div class="topline"><span class="meta">${safe(c.portale||"Portale non indicato")} · Notifica ricevuta: ${safe(published)}</span><span class="pill">${isPrivate?"Privato riconosciuto":"Venditore da verificare"}</span></div>
-      <label>Titolo / descrizione dell'annuncio</label><input data-field="titolo" value="${safe(c.titolo||"Annuncio immobiliare")}" maxlength="250">
-      <div class="row"><div><label>Comune</label><input data-field="comune" value="${safe(c.comune||"")}" placeholder="Comune da verificare"></div>
-      <div><label>Prezzo richiesto (€)</label><input data-field="prezzo" type="number" min="0" step="1" value="${c.prezzo??""}" placeholder="Non indicato"></div></div>
-      <label>Contatto del proprietario (se disponibile)</label><input data-field="contatto" value="${safe(c.contatto||"")}" placeholder="Non presente nella notifica">
+    return \`<article class="candidate" data-candidate="\${safe(c.id)}" data-url="\${safe(c.url||"")}" data-portal="\${safe(c.portale||"Portale non indicato")}">
+      <div class="topline"><span class="meta">\${safe(c.portale||"Portale non indicato")} · Notifica ricevuta: \${safe(published)}</span><span class="pill">\${isPrivate?"Privato riconosciuto":"Venditore da verificare"}</span></div>
+      <label>Titolo / descrizione dell'annuncio</label><input data-field="titolo" value="\${safe(c.titolo||"Annuncio immobiliare")}" maxlength="250">
+      <div class="row"><div><label>Comune</label><input data-field="comune" value="\${safe(c.comune||"")}" placeholder="Comune da verificare"></div>
+      <div><label>Prezzo richiesto (€)</label><input data-field="prezzo" type="number" min="0" step="1" value="\${c.prezzo??""}" placeholder="Non indicato"></div></div>
+      <div class="row"><div><label>Tipologia immobile</label><input data-field="tipologia_immobile" value="\${safe(c.tipologia_immobile||"")}" placeholder="Es. Trilocale, villa"></div>
+      <div><label>Superficie (m²)</label><input data-field="superficie_mq" type="number" min="1" max="100000" step="1" value="\${c.superficie_mq??""}" placeholder="Non indicata"></div></div>
+      <div class="row"><div><label>Locali</label><input data-field="locali" type="number" min="0.5" max="100" step="0.5" value="\${c.locali??""}"></div>
+      <div><label>Camere da letto</label><input data-field="camere" type="number" min="0" max="100" step="1" value="\${c.camere??""}"></div></div>
+      <div class="row"><div><label>Bagni</label><input data-field="bagni" type="number" min="0" max="100" step="1" value="\${c.bagni??""}"></div>
+      <div><label>Contatto del proprietario (se disponibile)</label><input data-field="contatto" value="\${safe(c.contatto||"")}" placeholder="Non presente nella notifica"></div></div>
       <input type="hidden" data-field="venditore" value="Privato">
-      <div class="candidate-actions"><button class="gold" data-confirm="${safe(c.id)}">${isPrivate?"Inserisci nell'archivio":"Accetta come privato e inserisci"}</button><button class="danger" data-discard="${safe(c.id)}">Scarta</button>${url?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>':""}</div>
-    </article>`;
+      <div class="candidate-actions"><button class="gold" data-confirm="\${safe(c.id)}">\${isPrivate?"Inserisci nell'archivio":"Accetta come privato e inserisci"}</button><button class="danger" data-discard="\${safe(c.id)}">Scarta</button>\${url?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>':""}</div>
+    </article>\`;
   }).join("");
   box.querySelectorAll("[data-confirm]").forEach(btn=>btn.addEventListener("click",()=>confirmCandidate(btn.dataset.confirm,btn)));
   box.querySelectorAll("[data-discard]").forEach(btn=>btn.addEventListener("click",()=>discardCandidate(btn.dataset.discard)));
@@ -388,13 +402,19 @@ async function confirmCandidate(id,button){
   const contact=value("contatto")||null;
   const sourceUrl=card.dataset.url||null;
   const sourcePortal=card.dataset.portal||"Portale non indicato";
+  const optionalNumber=name=>value(name)===""?null:Number(value(name));
   if(!title||!municipality){msg("candidateMsg","Titolo e comune sono necessari per confermare.","error");return;}
   button.disabled=true;
   const {error}=await supabase.rpc("nmre_confirm_annuncio_candidato",{
     p_candidate_id:id,p_titolo:title,p_comune:municipality,
     p_prezzo:price===""?null:Number(price),
     p_contatto:contact,p_tipo_venditore:seller,
-    p_portale:sourcePortal,p_url:sourceUrl
+    p_portale:sourcePortal,p_url:sourceUrl,
+    p_tipologia_immobile:value("tipologia_immobile")||null,
+    p_superficie_mq:optionalNumber("superficie_mq"),
+    p_locali:optionalNumber("locali"),
+    p_camere:optionalNumber("camere"),
+    p_bagni:optionalNumber("bagni")
   });
   if(error){msg("candidateMsg",error.message,"error");button.disabled=false;return;}
   msg("candidateMsg","Annuncio confermato e trasferito nell'archivio.","success");
@@ -462,6 +482,7 @@ async function loadListings(){
     <h3>${safe(item.titolo)}</h3>
     <div class="meta">${safe(item.comune)} · ${safe(item.contatto||"Contatto non inserito")}<br>${safe(item.portale||"Fonte non indicata")}</div>
     <div class="price">${euro(item.prezzo)}</div>
+    <div class="meta">${safe([item.tipologia_immobile,item.superficie_mq?item.superficie_mq+" m²":null,item.locali?item.locali+" locali":null,item.camere?item.camere+" camere":null,item.bagni?item.bagni+" bagni":null].filter(Boolean).join(" · ")||"Dettagli dimensionali non disponibili")}</div>
     <span class="pill">${safe(item.tipo_venditore||"Da verificare")}</span>
     <span class="pill">${safe(item.stato_contatto||"da_contattare")}</span>
     ${linkHtml}
@@ -515,7 +536,12 @@ $("listingForm").addEventListener("submit",async event=>{
     contatto:$("contact").value.trim()||null,
     tipo_venditore:$("sellerType").value,
     portale:$("portal").value.trim()||null,
-    url:cleanUrl
+    url:cleanUrl,
+    tipologia_immobile:$("propertyType").value.trim()||null,
+    superficie_mq:$("surface").value===""?null:Number($("surface").value),
+    locali:$("rooms").value===""?null:Number($("rooms").value),
+    camere:$("bedrooms").value===""?null:Number($("bedrooms").value),
+    bagni:$("bathrooms").value===""?null:Number($("bathrooms").value)
   };
 
   msg("formMsg","Salvataggio in corso...");
@@ -626,7 +652,7 @@ function exportListingsCsv(){
   const columns=[
     ["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],
     ["Contatto","contatto"],["Venditore","tipo_venditore"],
-    ["Fonte","portale"],["Link","url"],["Data notifica","data_pubblicazione"],
+    ["Fonte","portale"],["Link","url"],["Tipologia","tipologia_immobile"],["Superficie m²","superficie_mq"],["Locali","locali"],["Camere","camere"],["Bagni","bagni"],["Data notifica","data_pubblicazione"],
     ["Inserito il","created_at"],["Stato contatto","stato_contatto"],["Note personali","note_personali"],["Prossimo contatto","prossimo_contatto_il"],["Ultimo contatto","ultimo_contatto_il"]
   ];
   const cell=value=>{
@@ -655,7 +681,7 @@ function exportCandidatesCsv(){
   const columns=[
     ["Titolo / descrizione","titolo"],["Comune","comune"],["Prezzo richiesto","prezzo"],
     ["Contatto","contatto"],["Venditore","tipo_venditore"],
-    ["Portale","portale"],["Link annuncio","url"],["Data notifica","data_pubblicazione"],
+    ["Portale","portale"],["Link annuncio","url"],["Tipologia","tipologia_immobile"],["Superficie m²","superficie_mq"],["Locali","locali"],["Camere","camere"],["Bagni","bagni"],["Data notifica","data_pubblicazione"],
     ["Stato","stato"],["Ricevuto il","created_at"]
   ];
   const cell=value=>{
@@ -693,8 +719,8 @@ async function exportXlsx(rows,columns,sheetName,fileName,messageId){
   msg(messageId,"Esportazione Excel completata.","success");
  }catch(error){msg(messageId,"Esportazione Excel non riuscita: "+(error.message||"errore libreria"),"error");}
 }
-$("exportXlsx").addEventListener("click",()=>exportXlsx(listingCache,[["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],["Contatto","contatto"],["Venditore","tipo_venditore"],["Fonte","portale"],["Link","url"],["Data notifica","data_pubblicazione"],["Inserito il","created_at"],["Stato contatto","stato_contatto"],["Note","note_personali"],["Prossimo contatto","prossimo_contatto_il"],["Ultimo contatto","ultimo_contatto_il"]],"Annunci","nicholas-magi-annunci-"+new Date().toISOString().slice(0,10)+".xlsx","listMsg"));
-$("exportCandidatesXlsx").addEventListener("click",()=>exportXlsx(candidateCache,[["Titolo / descrizione","titolo"],["Comune","comune"],["Prezzo richiesto","prezzo"],["Contatto","contatto"],["Venditore","tipo_venditore"],["Portale","portale"],["Link annuncio","url"],["Data notifica","data_pubblicazione"],["Stato","stato"],["Ricevuto il","created_at"]],"Annunci da valutare","nmre-annunci-da-valutare-"+new Date().toISOString().slice(0,10)+".xlsx","candidateMsg"));
+$("exportXlsx").addEventListener("click",()=>exportXlsx(listingCache,[["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],["Contatto","contatto"],["Venditore","tipo_venditore"],["Fonte","portale"],["Link","url"],["Tipologia","tipologia_immobile"],["Superficie m²","superficie_mq"],["Locali","locali"],["Camere","camere"],["Bagni","bagni"],["Data notifica","data_pubblicazione"],["Inserito il","created_at"],["Stato contatto","stato_contatto"],["Note","note_personali"],["Prossimo contatto","prossimo_contatto_il"],["Ultimo contatto","ultimo_contatto_il"]],"Annunci","nicholas-magi-annunci-"+new Date().toISOString().slice(0,10)+".xlsx","listMsg"));
+$("exportCandidatesXlsx").addEventListener("click",()=>exportXlsx(candidateCache,[["Titolo / descrizione","titolo"],["Comune","comune"],["Prezzo richiesto","prezzo"],["Contatto","contatto"],["Venditore","tipo_venditore"],["Portale","portale"],["Link annuncio","url"],["Tipologia","tipologia_immobile"],["Superficie m²","superficie_mq"],["Locali","locali"],["Camere","camere"],["Bagni","bagni"],["Data notifica","data_pubblicazione"],["Stato","stato"],["Ricevuto il","created_at"]],"Annunci da valutare","nmre-annunci-da-valutare-"+new Date().toISOString().slice(0,10)+".xlsx","candidateMsg"));
 
 $("exportCsv").addEventListener("click",exportListingsCsv);
 $("refresh").addEventListener("click",loadListings);
