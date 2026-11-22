@@ -887,7 +887,7 @@ $("testGmail").addEventListener("click",async()=>{
     const propertyCount=lastGmailEmails.filter(isPropertyEmail).length;
     $("importAllGmail").disabled=propertyCount===0;
     $("importAllGmail").textContent="Importa email immobiliari ("+propertyCount+")";
-    msg("gmailMsg",`Gmail collegato: ${data.account||"account autorizzato"}. Email lette: ${data.total}.`,"success");
+    msg("gmailMsg",`Gmail collegato: ${data.account||"account autorizzato"}. Email lette: ${data.total} su ${data.listed??data.total}. ${data.failed?data.failed+" email non leggibili.":""}` ,data.failed?"error":"success");
     if(propertyCount>0) await importAllPropertyEmails();
 
     if(!data.emails?.length){
