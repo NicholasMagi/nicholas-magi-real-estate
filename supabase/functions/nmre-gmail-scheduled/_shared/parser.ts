@@ -45,12 +45,17 @@ export function propertyType(s:string):string|null {
 export function surface(s:string):number|null {
   const value=String(s||"");
   const patterns=[
-    /(?:superficie|metratura|sup\.?)\s*[:\-]?\s*([1-9]\d{1,3})(?:[.,]\d+)?\s*(?:m²|mq|metri quadrati)?/i,
-    /\b([1-9]\d{1,3})(?:[.,]\d+)?\s*(?:m²|mq|metri quadrati)\b/i
+    /(?:superficie|metratura|sup\.?)\s*[:\-]?\s*([1-9]\d{0,3}(?:[.,]\d{1,3})?)\s*(?:m²|mq|metri quadrati)?/i,
+    /\b([1-9]\d{0,3}(?:[.,]\d{1,3})?)\s*(?:m²|mq|metri quadrati)\b/i
   ];
   for(const pattern of patterns){
     const match=value.match(pattern);
-    if(match){const n=Number(match[1]);if(Number.isInteger(n)&&n>=15&&n<=10000)return n;}
+    if(!match)continue;
+    const raw=match[1].replace(/\s/g,"");
+    const n=/^[1-9]\d{0,2}[.,]\d{3}$/.test(raw)
+      ?Number(raw.replace(/[.,]/g,""))
+      :Math.floor(Number(raw.replace(",", ".")));
+    if(Number.isInteger(n)&&n>=15&&n<=10000)return n;
   }
   return null;
 }
