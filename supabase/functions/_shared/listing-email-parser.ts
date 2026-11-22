@@ -22,6 +22,7 @@ export type GmailMimePart = {
 
 export type ListingCandidate = {
   messageId: string;
+  emailSubject: string;
   deduplicationKey: string;
   titolo: string;
   comune: string | null;
@@ -299,6 +300,7 @@ export function parseListingEmail(message: GmailApiMessage): ListingCandidate {
 
   if (!body) warnings.push("Il messaggio non contiene testo leggibile.");
   if (isAuction) warnings.push("Asta giudiziaria: verificare avviso di vendita, prezzo base e offerta minima; non classificare come vendita privata.");
+  if (/\bda\s+€?\s*[\d. ,]+/i.test(combined)) warnings.push("Prezzo indicato come importo 'Da': verificare nella scheda il prezzo di riferimento e le condizioni dell'asta.");
   if (extractEmailAddress(from)) warnings.push("Il mittente è la casella che ha inviato la notifica: non è un contatto verificato del venditore.");
   if (!urls.length) warnings.push("Non è stato individuato un link all'annuncio.");
   if (!extractMunicipality(combined)) warnings.push("Comune non riconosciuto con certezza.");
@@ -306,6 +308,7 @@ export function parseListingEmail(message: GmailApiMessage): ListingCandidate {
 
   return {
     messageId: message.id ?? "",
+    emailSubject: subject,
     deduplicationKey: buildDeduplicationKey({ urls, sender: from, subject }),
     titolo,
     comune: extractMunicipality(combined),
