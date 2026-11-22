@@ -372,20 +372,20 @@ async function loadCandidates(){
     const published=c.data_pubblicazione&&!Number.isNaN(Date.parse(c.data_pubblicazione))
       ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data non indicata";
     const url=validUrl(c.url);
-    return \`<article class="candidate" data-candidate="\${safe(c.id)}" data-url="\${safe(c.url||"")}" data-portal="\${safe(c.portale||"Portale non indicato")}">
-      <div class="topline"><span class="meta">\${safe(c.portale||"Portale non indicato")} · Notifica ricevuta: \${safe(published)}</span><span class="pill">\${isPrivate?"Privato riconosciuto":"Venditore da verificare"}</span></div>
-      <label>Titolo / descrizione dell'annuncio</label><input data-field="titolo" value="\${safe(c.titolo||"Annuncio immobiliare")}" maxlength="250">
-      <div class="row"><div><label>Comune</label><input data-field="comune" value="\${safe(c.comune||"")}" placeholder="Comune da verificare"></div>
-      <div><label>Prezzo richiesto (€)</label><input data-field="prezzo" type="number" min="0" step="1" value="\${c.prezzo??""}" placeholder="Non indicato"></div></div>
-      <div class="row"><div><label>Tipologia immobile</label><input data-field="tipologia_immobile" value="\${safe(c.tipologia_immobile||"")}" placeholder="Es. Trilocale, villa"></div>
-      <div><label>Superficie (m²)</label><input data-field="superficie_mq" type="number" min="1" max="100000" step="1" value="\${c.superficie_mq??""}" placeholder="Non indicata"></div></div>
-      <div class="row"><div><label>Locali</label><input data-field="locali" type="number" min="0.5" max="100" step="0.5" value="\${c.locali??""}"></div>
-      <div><label>Camere da letto</label><input data-field="camere" type="number" min="0" max="100" step="1" value="\${c.camere??""}"></div></div>
-      <div class="row"><div><label>Bagni</label><input data-field="bagni" type="number" min="0" max="100" step="1" value="\${c.bagni??""}"></div>
-      <div><label>Contatto del proprietario (se disponibile)</label><input data-field="contatto" value="\${safe(c.contatto||"")}" placeholder="Non presente nella notifica"></div></div>
+    return `<article class="candidate" data-candidate="${safe(c.id)}" data-url="${safe(c.url||"")}" data-portal="${safe(c.portale||"Portale non indicato")}">
+      <div class="topline"><span class="meta">${safe(c.portale||"Portale non indicato")} · Notifica ricevuta: ${safe(published)}</span><span class="pill">${isPrivate?"Privato riconosciuto":"Venditore da verificare"}</span></div>
+      <label>Titolo / descrizione dell'annuncio</label><input data-field="titolo" value="${safe(c.titolo||"Annuncio immobiliare")}" maxlength="250">
+      <div class="row"><div><label>Comune</label><input data-field="comune" value="${safe(c.comune||"")}" placeholder="Comune da verificare"></div>
+      <div><label>Prezzo richiesto (€)</label><input data-field="prezzo" type="number" min="0" step="1" value="${c.prezzo??""}" placeholder="Non indicato"></div></div>
+      <div class="row"><div><label>Tipologia immobile</label><input data-field="tipologia_immobile" value="${safe(c.tipologia_immobile||"")}" placeholder="Es. Trilocale, villa"></div>
+      <div><label>Superficie (m²)</label><input data-field="superficie_mq" type="number" min="1" max="100000" step="1" value="${c.superficie_mq??""}" placeholder="Non indicata"></div></div>
+      <div class="row"><div><label>Locali</label><input data-field="locali" type="number" min="0.5" max="100" step="0.5" value="${c.locali??""}"></div>
+      <div><label>Camere da letto</label><input data-field="camere" type="number" min="0" max="100" step="1" value="${c.camere??""}"></div></div>
+      <div class="row"><div><label>Bagni</label><input data-field="bagni" type="number" min="0" max="100" step="1" value="${c.bagni??""}"></div>
+      <div><label>Contatto del proprietario (se disponibile)</label><input data-field="contatto" value="${safe(c.contatto||"")}" placeholder="Non presente nella notifica"></div></div>
       <input type="hidden" data-field="venditore" value="Privato">
-      <div class="candidate-actions"><button class="gold" data-confirm="\${safe(c.id)}">\${isPrivate?"Inserisci nell'archivio":"Accetta come privato e inserisci"}</button><button class="danger" data-discard="\${safe(c.id)}">Scarta</button>\${url?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>':""}</div>
-    </article>\`;
+      <div class="candidate-actions"><button class="gold" data-confirm="${safe(c.id)}">${isPrivate?"Inserisci nell'archivio":"Accetta come privato e inserisci"}</button><button class="danger" data-discard="${safe(c.id)}">Scarta</button>${url?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>':""}</div>
+    </article>`;
   }).join("");
   box.querySelectorAll("[data-confirm]").forEach(btn=>btn.addEventListener("click",()=>confirmCandidate(btn.dataset.confirm,btn)));
   box.querySelectorAll("[data-discard]").forEach(btn=>btn.addEventListener("click",()=>discardCandidate(btn.dataset.discard)));
