@@ -74,6 +74,29 @@ Deno.test("esclude email che non sembrano notifiche immobiliari", () => {
   assertEquals(candidate.likelyRealEstate, false, "email generica esclusa");
 });
 
+Deno.test("esclude la conferma di una ricerca salvata su Immobiliare.it", () => {
+  const candidate = parseListingEmail({
+    payload: {
+      headers: [
+        { name: "Subject", value: "La tua ricerca è stata salvata: Case in vendita" },
+        { name: "From", value: '"Immobiliare.it" <noreply@immobiliare.it>' },
+      ],
+      mimeType: "text/plain",
+      body: {
+        data: encodeBase64Url(
+          "Immobiliare.it Ricerca salvata. Ciao Nicholas, la tua ricerca è stata salvata e riceverai una email ogni volta che ci sono nuovi annunci."
+        ),
+      },
+    },
+  });
+  assertEquals(candidate.likelyRealEstate, false, "conferma ricerca esclusa");
+  assertEquals(
+    candidate.warnings.some((warning) => warning.includes("esclusa dalla coda")),
+    true,
+    "avviso esplicito di esclusione"
+  );
+});
+
 Deno.test("riconosce una notifica immobiliare", () => {
   const candidate = parseListingEmail({
     payload: {
