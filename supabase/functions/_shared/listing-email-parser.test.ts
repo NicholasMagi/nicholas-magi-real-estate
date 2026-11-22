@@ -142,7 +142,7 @@ Deno.test("analizza una notifica Immobiliare.it con immobile all'asta", () => {
     "AVVIA RICERCA",
   ].join("\n");
 
-  const html = '<html><body><a href="https://www.immobiliare.it/annunci/123456789/">VEDI DETTAGLI</a><a href="https://www.immobiliare.it/ricerca/">AVVIA RICERCA</a></body></html>';
+  const html = '<html><body><a href="https://www.immobiliare.it/annunci/134982491/?utm_campaign=detail&amp;utm_source=alert_istantaneo&amp;utm_medium=email&amp;utm_content=20261122">VEDI DETTAGLI</a><a href="https://www.immobiliare.it/ricerca/">AVVIA RICERCA</a></body></html>';
 
   const candidate = parseListingEmail({
     id: "auction-alert-1",
@@ -163,7 +163,8 @@ Deno.test("analizza una notifica Immobiliare.it con immobile all'asta", () => {
   assertEquals(candidate.titolo, "ASTA — appartamento all'asta via A. Bravi, 23, Recanati", "titolo specifico e categoria asta");
   assertEquals(candidate.comune, "Recanati", "comune ricavato dall'indirizzo");
   assertEquals(candidate.prezzo, 4612.5, "prezzo d'asta con decimale");
-  assertEquals(candidate.url, "https://www.immobiliare.it/annunci/123456789/", "link VEDI DETTAGLI prioritario");
+  assertEquals(candidate.url, "https://www.immobiliare.it/annunci/134982491/?utm_campaign=detail&utm_source=alert_istantaneo&utm_medium=email&utm_content=20261122", "link reale VEDI DETTAGLI prioritario");
+  assertEquals(candidate.deduplicationKey, "url:https://www.immobiliare.it/annunci/134982491", "deduplicazione indipendente dai parametri di tracciamento");
   assertEquals(candidate.tipo_venditore, "Da verificare", "asta non confusa con tipologia venditore");
   assertEquals(candidate.warnings.some((warning) => warning.includes("Asta giudiziaria")), true, "avviso specifico asta");
 });
