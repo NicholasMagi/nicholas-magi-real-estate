@@ -34,6 +34,12 @@ L'estrazione dei dati è euristica: titolo, comune, prezzo e URL possono richied
 
 La vecchia funzione di lettura diretta nmre-gmail-reader è dismessa: non restituisce più il contenuto delle email.
 
+## Dati estratti
+
+I campi strutturati disponibili su candidati e archivio sono: tipologia immobile, superficie in m², numero locali, camere e bagni. L'estrazione è euristica e i campi mancanti restano vuoti per la correzione manuale. L'approvazione del candidato trasferisce questi dati nell'archivio definitivo.
+
+Il parser è separato in `supabase/functions/nmre-gmail-scheduled/_shared/parser.ts` ed è coperto da test automatici. Il workflow `Validate application code` esegue i test Deno del parser, controlla la sintassi JavaScript incorporata in `index.html` e verifica che gli ID HTML siano univoci.
+
 ## Architettura e sicurezza
 
 - Frontend statico: GitHub Pages.
