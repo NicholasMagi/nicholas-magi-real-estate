@@ -145,7 +145,7 @@ La casella viene controllata all’apertura dell’app e poi ogni ora mentre l�
 </section>
 
 <section class="panel">
-<div class="topline"><h2>Archivio annunci</h2><button class="secondary" id="refresh">Aggiorna</button></div>
+<div class="topline"><h2>Archivio annunci</h2><div class="actions"><button class="secondary" id="exportCsv">Esporta CSV</button><button class="secondary" id="refresh">Aggiorna</button></div></div>
 <div class="toolbar">
 <input id="listingSearch" type="search" placeholder="Cerca per titolo, comune o fonte">
 <select id="sellerFilter" aria-label="Filtra per venditore"><option value="">Tutti i venditori</option><option value="Privato">Privato</option><option value="Agenzia">Agenzia</option><option value="Da verificare">Da verificare</option></select>
@@ -168,6 +168,7 @@ let currentUser = null;
 let lastGmailEmails = [];
 let gmailAutoStarted = false;
 let gmailAutoTimer = null;
+let listingCache = [];
 
 function msg(id,text,type=""){
   $(id).textContent=text;
@@ -468,6 +469,7 @@ async function loadListings(){
     return;
   }
 
+  listingCache=data;
   $("totalCount").textContent=data.length;
   $("privateCount").textContent=data.filter(x=>x.tipo_venditore==="Privato").length;
   $("verifyCount").textContent=data.filter(x=>!x.tipo_venditore||x.tipo_venditore==="Da verificare").length;
@@ -588,6 +590,35 @@ async function deleteListing(id){
   await loadListings();
 }
 
+function exportListingsCsv(){
+  if(!listingCache.length){msg("listMsg","Non ci sono annunci da esportare.");return;}
+  const columns=[
+    ["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],
+    ["Contatto","contatto"],["Venditore","tipo_venditore"],
+    ["Fonte","portale"],["Link","url"],["Data pubblicazione","data_pubblicazione"],
+    ["Inserito il","created_at"]
+  ];
+  const cell=value=>{
+    const text=String(value??"");
+    return '"'+text.replace(/"/g,'""')+'"';
+  };
+  const csv=[
+    columns.map(c=>cell(c[0])).join(";"),
+    ...listingCache.map(item=>columns.map(c=>cell(item[c[1]])).join(";"))
+  ].join("\r\n");
+  const blob=new Blob(["\uFEFF",csv],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement("a");
+  link.href=url;
+  link.download="nicholas-magi-real-estate-"+new Date().toISOString().slice(0,10)+".csv";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  msg("listMsg","Esportazione CSV completata.","success");
+}
+
+$("exportCsv").addEventListener("click",exportListingsCsv);
 $("refresh").addEventListener("click",loadListings);
 $("listingSearch").addEventListener("input",loadListings);
 $("sellerFilter").addEventListener("change",loadListings);
