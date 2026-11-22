@@ -9,7 +9,7 @@ Sistema personale per acquisire, verificare e gestire opportunità immobiliari p
 - Inserimento manuale degli annunci tramite la funzione `nmre-search-engine`.
 - Collegamento Google OAuth e lettura di metadati email tramite `nmre-gmail-oauth-start`, `nmre-gmail-oauth-callback` e `nmre-gmail-reader`.
 - Il pulsante Gmail attuale è un test di lettura: non equivale ancora all'importazione automatica degli annunci.
-- Il repository contiene attualmente il frontend (`index.html`) e questo documento. Il codice delle Edge Functions e lo schema Supabase non sono versionati qui.
+- Il branch `main` mantiene la versione online; il branch di sviluppo contiene anche parser Gmail, test, catalogo territoriale e migrazione di conferma. Le Edge Functions attive su Supabase restano una distribuzione separata e non vengono aggiornate da GitHub.
 
 ## Obiettivo del prodotto
 
