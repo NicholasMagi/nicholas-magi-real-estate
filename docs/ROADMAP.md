@@ -22,6 +22,15 @@ Un unico archivio affidabile che raccolga opportunità immobiliari nell'area rag
 - contatti, note e stato di lavorazione;
 - eventuali duplicati o variazioni dello stesso annuncio.
 
+## Copertura territoriale
+
+- Il catalogo `territorio.js` contiene 225 Comuni delle Marche, raggruppati nelle cinque province.
+- Il catalogo è usato per suggerimenti durante l'inserimento e per filtri provincia/Comune nell'archivio.
+- La dashboard mostra il numero di annunci per provincia, i Comuni coperti, i principali Comuni per volume, i venditori privati e le aste.
+- I Comuni fuori dalle Marche o non riconosciuti restano inseribili manualmente e vengono raggruppati come "Fuori repertorio".
+- La provincia è derivata dal Comune nel frontend: non è stata aggiunta una colonna al database e non è richiesta alcuna migrazione.
+- I test `territorio.test.js` controllano il totale, i conteggi provinciali, alcuni Comuni piccoli e la normalizzazione di accenti, apostrofi e sigle.
+
 ## Principi di sviluppo
 
 1. **Fonti autorizzate:** usare API ufficiali, feed, notifiche email configurate dall'utente o accordi con i portali. Non introdurre scraping che violi condizioni d'uso, autenticazione o misure anti-bot.
