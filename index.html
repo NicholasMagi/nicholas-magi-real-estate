@@ -628,7 +628,7 @@ $("connectGmail").addEventListener("click",async()=>{
 
 /* TEST LETTURA GMAIL */
 
-$("importAllGmail").addEventListener("click",async()=>{
+async function importAllPropertyEmails(){
   const button=$("importAllGmail");
   const eligible=lastGmailEmails.filter(isPropertyEmail);
   if(!eligible.length){msg("gmailMsg","Nessuna email immobiliare riconosciuta tra quelle lette.");return;}
@@ -658,7 +658,9 @@ $("importAllGmail").addEventListener("click",async()=>{
   button.textContent="Importazione completata";
   msg("gmailMsg","Email immobiliari elaborate: "+eligible.length+". Operazioni senza errori: "+imported+". Errori: "+failed+". I duplicati vengono ignorati.",failed?"error":"success");
   await loadCandidates();
-});
+}
+
+$("importAllGmail").addEventListener("click",importAllPropertyEmails);
 
 $("testGmail").addEventListener("click",async()=>{
   const button=$("testGmail");
