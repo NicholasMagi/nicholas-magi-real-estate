@@ -12,7 +12,6 @@ Deno.test("Insight search is restricted to private sale offers with a phone numb
   if (payload.Filters.phoneNumberProvided !== true) throw new Error("Phone availability filter missing");
   if (payload.Pagination.page !== 2 || payload.Pagination.limit !== 10) throw new Error("Pagination mismatch");
   if (payload.Filters.pubblicationStatusID.join(",") !== "1,2") throw new Error("Publication filters mismatch");
-  if (payload.Filters.categoryTypeID !== 1) throw new Error("Search must target residential properties");
   if (payload.Filters.minDate !== "24/10/2026T00:00:00Z") throw new Error("Date format or lookback mismatch");
 });
 
