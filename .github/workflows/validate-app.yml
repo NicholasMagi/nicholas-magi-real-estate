@@ -1,0 +1,89 @@
+name: Validate application code
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Test Gmail property parser
+        run: deno test supabase/functions/nmre-gmail-scheduled/parser_test.ts
+
+      - name: Check embedded frontend JavaScript
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+
+          class ScriptExtractor(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.in_module = False
+                  self.parts = []
+
+              def handle_starttag(self, tag, attrs):
+                  if tag == "script" and dict(attrs).get("type") == "module":
+                      self.in_module = True
+
+              def handle_endtag(self, tag):
+                  if tag == "script" and self.in_module:
+                      self.in_module = False
+
+              def handle_data(self, data):
+                  if self.in_module:
+                      self.parts.append(data)
+
+          parser = ScriptExtractor()
+          parser.feed(Path("index.html").read_text(encoding="utf-8"))
+          source = "".join(parser.parts)
+          if not source.strip():
+              raise SystemExit("No module script found in index.html")
+          Path("/tmp/nmre-frontend.mjs").write_text(source, encoding="utf-8")
+          PY
+          node --check /tmp/nmre-frontend.mjs
+
+      - name: Check duplicate HTML ids
+        run: |
+          python3 - <<'PY'
+          from collections import Counter
+          from html.parser import HTMLParser
+          from pathlib import Path
+
+          class IdCollector(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.ids = []
+
+              def handle_starttag(self, tag, attrs):
+                  value = dict(attrs).get("id")
+                  if value:
+                      self.ids.append(value)
+
+          parser = IdCollector()
+          parser.feed(Path("index.html").read_text(encoding="utf-8"))
+          duplicates = [key for key, count in Counter(parser.ids).items() if count > 1]
+          if duplicates:
+              raise SystemExit("Duplicate HTML ids: " + ", ".join(duplicates))
+          print(f"Checked {len(parser.ids)} unique element ids.")
+          PY
