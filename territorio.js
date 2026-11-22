@@ -1147,10 +1147,10 @@ const MUNICIPALITY_ALIASES = new Map([
 export function normalizeMunicipalityName(value) {
   return String(value ?? "")
     .trim()
-    .replace(/\s*\\((AN|AP|FM|MC|PU)\\)\s*$/i, "")
+    .replace(/\s*\((AN|AP|FM|MC|PU)\)\s*$/i, "")
     .replace(/\s+(AN|AP|FM|MC|PU)$/i, "")
     .normalize("NFD")
-    .replace(/[\u0300-\\u036f]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[’`]/g, "'")
     .replace(/[.]/g, "")
     .replace(/\s+/g, " ")
