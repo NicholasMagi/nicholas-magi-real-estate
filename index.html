@@ -364,7 +364,7 @@ async function loadCandidates(){
       ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data non indicata";
     const url=validUrl(c.url);
     return `<article class="candidate" data-candidate="${safe(c.id)}" data-url="${safe(c.url||"")}" data-portal="${safe(c.portale||"Portale non indicato")}">
-      <div class="topline"><span class="meta">${safe(c.portale||"Portale non indicato")} · Pubblicato: ${safe(published)}</span><span class="pill">${isPrivate?"Privato riconosciuto":"Venditore da verificare"}</span></div>
+      <div class="topline"><span class="meta">${safe(c.portale||"Portale non indicato")} · Notifica ricevuta: ${safe(published)}</span><span class="pill">${isPrivate?"Privato riconosciuto":"Venditore da verificare"}</span></div>
       <label>Titolo / descrizione dell'annuncio</label><input data-field="titolo" value="${safe(c.titolo||"Annuncio immobiliare")}" maxlength="250">
       <div class="row"><div><label>Comune</label><input data-field="comune" value="${safe(c.comune||"")}" placeholder="Comune da verificare"></div>
       <div><label>Prezzo richiesto (€)</label><input data-field="prezzo" type="number" min="0" step="1" value="${c.prezzo??""}" placeholder="Non indicato"></div></div>
@@ -624,7 +624,7 @@ function exportListingsCsv(){
   const columns=[
     ["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],
     ["Contatto","contatto"],["Venditore","tipo_venditore"],
-    ["Fonte","portale"],["Link","url"],["Data pubblicazione","data_pubblicazione"],
+    ["Fonte","portale"],["Link","url"],["Data notifica","data_pubblicazione"],
     ["Inserito il","created_at"],["Stato contatto","stato_contatto"],["Note personali","note_personali"],["Prossimo contatto","prossimo_contatto_il"],["Ultimo contatto","ultimo_contatto_il"]
   ];
   const cell=value=>{
@@ -653,7 +653,7 @@ function exportCandidatesCsv(){
   const columns=[
     ["Titolo / descrizione","titolo"],["Comune","comune"],["Prezzo richiesto","prezzo"],
     ["Contatto","contatto"],["Venditore","tipo_venditore"],
-    ["Portale","portale"],["Link annuncio","url"],["Data pubblicazione","data_pubblicazione"],
+    ["Portale","portale"],["Link annuncio","url"],["Data notifica","data_pubblicazione"],
     ["Stato","stato"],["Ricevuto il","created_at"]
   ];
   const cell=value=>{
@@ -691,8 +691,8 @@ async function exportXlsx(rows,columns,sheetName,fileName,messageId){
   msg(messageId,"Esportazione Excel completata.","success");
  }catch(error){msg(messageId,"Esportazione Excel non riuscita: "+(error.message||"errore libreria"),"error");}
 }
-$("exportXlsx").addEventListener("click",()=>exportXlsx(listingCache,[["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],["Contatto","contatto"],["Venditore","tipo_venditore"],["Fonte","portale"],["Link","url"],["Data pubblicazione","data_pubblicazione"],["Inserito il","created_at"],["Stato contatto","stato_contatto"],["Note","note_personali"],["Prossimo contatto","prossimo_contatto_il"],["Ultimo contatto","ultimo_contatto_il"]],"Annunci","nicholas-magi-annunci-"+new Date().toISOString().slice(0,10)+".xlsx","listMsg"));
-$("exportCandidatesXlsx").addEventListener("click",()=>exportXlsx(candidateCache,[["Titolo / descrizione","titolo"],["Comune","comune"],["Prezzo richiesto","prezzo"],["Contatto","contatto"],["Venditore","tipo_venditore"],["Portale","portale"],["Link annuncio","url"],["Data pubblicazione","data_pubblicazione"],["Stato","stato"],["Ricevuto il","created_at"]],"Annunci da valutare","nmre-annunci-da-valutare-"+new Date().toISOString().slice(0,10)+".xlsx","candidateMsg"));
+$("exportXlsx").addEventListener("click",()=>exportXlsx(listingCache,[["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],["Contatto","contatto"],["Venditore","tipo_venditore"],["Fonte","portale"],["Link","url"],["Data notifica","data_pubblicazione"],["Inserito il","created_at"],["Stato contatto","stato_contatto"],["Note","note_personali"],["Prossimo contatto","prossimo_contatto_il"],["Ultimo contatto","ultimo_contatto_il"]],"Annunci","nicholas-magi-annunci-"+new Date().toISOString().slice(0,10)+".xlsx","listMsg"));
+$("exportCandidatesXlsx").addEventListener("click",()=>exportXlsx(candidateCache,[["Titolo / descrizione","titolo"],["Comune","comune"],["Prezzo richiesto","prezzo"],["Contatto","contatto"],["Venditore","tipo_venditore"],["Portale","portale"],["Link annuncio","url"],["Data notifica","data_pubblicazione"],["Stato","stato"],["Ricevuto il","created_at"]],"Annunci da valutare","nmre-annunci-da-valutare-"+new Date().toISOString().slice(0,10)+".xlsx","candidateMsg"));
 
 $("exportCsv").addEventListener("click",exportListingsCsv);
 $("refresh").addEventListener("click",loadListings);
@@ -758,19 +758,5 @@ boot().catch(e=>{
 });
 </script>
 
-<script>
-(async function () {
-  try {
-    const response = await fetch(
-      "https://hhircfmrtkgaybrougku.supabase.co/functions/v1/nmre-search-engine"
-    );
-
-    const data = await response.json();
-    console.log("Nicholas Magi Real Estate:", data);
-  } catch (error) {
-    console.error("Errore di collegamento Supabase:", error);
-  }
-})();
-</script>
 </body>
 </html>
