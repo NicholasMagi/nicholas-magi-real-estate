@@ -11,7 +11,9 @@ function assertEquals(actual: unknown, expected: unknown, message: string) {
 }
 
 function encodeBase64Url(value: string): string {
-  return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  const bytes = new TextEncoder().encode(value);
+  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 Deno.test("estrae testo da una parte Gmail text/plain", () => {
