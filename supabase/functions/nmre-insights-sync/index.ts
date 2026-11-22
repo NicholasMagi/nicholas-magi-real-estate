@@ -7,6 +7,9 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
 };
 
+let cachedToken: string | null = null;
+let cachedTokenExpiresAt = 0;
+
 function reply(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -19,10 +22,21 @@ function requiredSettings() {
   const clientSecret = Deno.env.get("INSIGHTS_CLIENT_SECRET");
   const username = Deno.env.get("INSIGHTS_USERNAME");
   const password = Deno.env.get("INSIGHTS_PASSWORD");
-  return { clientId, clientSecret, username, password, configured: !!(clientId && clientSecret && username && password) };
+  return {
+    clientId, clientSecret, username, password,
+    configured: !!(clientId && clientSecret && username && password)
+  };
 }
 
-async function getInsightsToken(baseUrl: string, settings: ReturnType<typeof requiredSettings>): Promise<string> {
+async function getInsightsToken(
+  baseUrl: string,
+  settings: ReturnType<typeof requiredSettings>
+): Promise<string> {
+  if (cachedToken && Date.now() < cachedTokenExpiresAt - 60_000) return cachedToken;
+  if (!settings.clientId || !settings.clientSecret || !settings.username || !settings.password) {
+    throw new Error("Credenziali API non configurate.");
+  }
+
   const credentials = btoa(settings.clientId + ":" + settings.clientSecret);
   const response = await fetch(baseUrl + "/oauth/token", {
     method: "POST",
@@ -37,20 +51,24 @@ async function getInsightsToken(baseUrl: string, settings: ReturnType<typeof req
     }),
     signal: AbortSignal.timeout(20000)
   });
+
   if (!response.ok) {
     console.error("Immobiliare Insights token request failed:", response.status);
-    throw new Error("Autenticazione Immobiliare.it Insights non riuscita. Verificare credenziali e abilitazione API.");
+    throw new Error("Autenticazione Immobiliare.it Insights non riuscita. Verificare credenziali e abilitazione Comps Finder.");
   }
+
   const tokenData = await response.json();
   if (typeof tokenData.access_token !== "string" || !tokenData.access_token) {
     throw new Error("La risposta di autenticazione Insights non contiene un access token.");
   }
-  return tokenData.access_token;
+
+  cachedToken = tokenData.access_token;
+  cachedTokenExpiresAt = Date.now() + Math.max(60, Number(tokenData.expires_in || 14400)) * 1000;
+  return cachedToken;
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-
   if (req.method !== "GET" && req.method !== "POST") {
     return reply({ success: false, error: "Metodo non consentito." }, 405);
   }
@@ -77,12 +95,21 @@ Deno.serve(async (req: Request) => {
   }
 
   const settings = requiredSettings();
+  const environment = Deno.env.get("NMRE_INSIGHTS_ENV") === "production" ? "production" : "sandbox";
+
   if (req.method === "GET") {
     return reply({
       success: true,
       provider: "Immobiliare.it Insights",
       configured: settings.configured,
-      environment: Deno.env.get("NMRE_INSIGHTS_ENV") === "production" ? "production" : "sandbox"
+      environment,
+      capabilities: ["annunci in vendita", "venditore privato", "disponibilità numero telefonico"],
+      missingSecrets: [
+        ["INSIGHTS_CLIENT_ID", settings.clientId],
+        ["INSIGHTS_CLIENT_SECRET", settings.clientSecret],
+        ["INSIGHTS_USERNAME", settings.username],
+        ["INSIGHTS_PASSWORD", settings.password]
+      ].filter((entry) => !entry[1]).map((entry) => entry[0])
     });
   }
 
@@ -106,17 +133,17 @@ Deno.serve(async (req: Request) => {
       lookbackDays = value;
     }
   } catch {
-    // Empty JSON body uses the default 30-day window.
+    // Empty body uses the default 30-day window.
   }
 
-  const baseUrl = Deno.env.get("NMRE_INSIGHTS_ENV") === "production"
+  const baseUrl = environment === "production"
     ? "https://comparables.realitycs.it"
     : "https://sandbox-comparables.realitycs.it";
 
   try {
     const token = await getInsightsToken(baseUrl, settings);
-    const importedCandidates: Record<string, any>[] = [];
-    let totalResults = 0;
+    const candidates = new Map<string, Record<string, any>>();
+    let resultsRead = 0;
     let pagesRead = 0;
 
     for (let page = 1; page <= 3; page++) {
@@ -132,27 +159,24 @@ Deno.serve(async (req: Request) => {
 
       if (!response.ok) {
         console.error("Immobiliare Insights search failed:", response.status);
-        throw new Error("Ricerca annunci Insights non riuscita. Verificare che il piano abiliti Comps Finder e il filtro privati.");
+        throw new Error("Ricerca Insights non riuscita. Verificare che l'account abiliti Comps Finder e la ricerca per privato.");
       }
 
       const result = await response.json();
       const items = Array.isArray(result.items) ? result.items : [];
       pagesRead++;
-      totalResults += items.length;
+      resultsRead += items.length;
 
       for (const item of items) {
         const candidate = toCandidate(item, userData.user.id);
-        if (candidate) importedCandidates.push(candidate);
+        if (candidate) candidates.set(candidate.dedup_key, candidate);
       }
 
       const nextPage = result?._metadata?.pages?.next;
       if (!nextPage || page >= 3) break;
     }
 
-    const unique = new Map<string, Record<string, any>>();
-    for (const candidate of importedCandidates) unique.set(candidate.dedup_key, candidate);
-    const rows = [...unique.values()];
-
+    const rows = [...candidates.values()];
     let inserted = 0;
     if (rows.length) {
       const { data, error } = await supabase
@@ -161,7 +185,7 @@ Deno.serve(async (req: Request) => {
         .select("id");
       if (error) {
         console.error("Immobiliare Insights candidate save failed:", error.message);
-        throw new Error("I risultati API sono arrivati, ma non è stato possibile salvarli nella coda candidati.");
+        throw new Error("Risultati ricevuti, ma non è stato possibile salvarli nella coda candidati.");
       }
       inserted = data?.length ?? 0;
     }
@@ -169,15 +193,16 @@ Deno.serve(async (req: Request) => {
     return reply({
       success: true,
       provider: "Immobiliare.it Insights",
-      environment: Deno.env.get("NMRE_INSIGHTS_ENV") === "production" ? "production" : "sandbox",
+      environment,
       lookbackDays,
       pagesRead,
-      resultsRead: totalResults,
-      privateCandidatesMatched: rows.filter(row => row.tipo_venditore === "Privato").length,
-      candidatesNeedingReview: rows.filter(row => row.tipo_venditore === "Da verificare").length,
+      resultsRead,
+      candidatesMatched: rows.length,
+      privateCandidatesMatched: rows.filter((row) => row.tipo_venditore === "Privato").length,
+      candidatesNeedingReview: rows.filter((row) => row.tipo_venditore === "Da verificare").length,
       inserted,
       alreadyPresent: Math.max(0, rows.length - inserted),
-      note: "Il numero telefonico non viene restituito dal mapping API documentato: il link del portale resta la via di contatto."
+      note: "La ricerca filtra i privati con numero disponibile. L'API non restituisce il numero stesso nel mapping documentato: il link del portale resta la via di contatto."
     });
   } catch (error) {
     console.error("Immobiliare Insights sync error:", error instanceof Error ? error.message : "unknown error");
