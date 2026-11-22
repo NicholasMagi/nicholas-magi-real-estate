@@ -435,32 +435,36 @@ function guessPrice(text){
 }
 
 function guessListingUrl(text){
-  const matches=text.match(/https?:\/\/[^\s<>"']+/gi)||[];
-  const preferred=["idealista.it","immobiliare.it","casa.it","subito.it","green-acres.it","green-acres.com","gate-away.com"];
+  const preferred=["idealista.it","immobiliare.it","casa.it","subito.it","green-acres.it","green-acres.com","gate-away.com","trovacasa.it","wikicasa.it"];
   const ignored=["unsubscribe","unsub","privacy","terms","cookie","tracking","track.","pixel","open.","click.","newsletter","preferences","account","login","register"];
+  const matches=String(text||"").match(/https?:\/\/[^\s<>"']+/gi)||[];
   const candidates=[];
+  const allowedHost=host=>preferred.some(domain=>host===domain||host.endsWith("."+domain));
   for(const raw of matches){
     const cleaned=raw.replace(/[),.;\]]+$/,"");
     try{
-      const url=new URL(cleaned);
-      if(url.hostname.includes("google.")&&url.pathname==="/url"){
-        const target=url.searchParams.get("q")||url.searchParams.get("url");
-        if(target&&validUrl(target))candidates.push(target);
-        continue;
+      let url=new URL(cleaned);
+      for(let depth=0;depth<3;depth++){
+        const host=url.hostname.toLowerCase().replace(/^www\./,"");
+        if(allowedHost(host)){
+          const nested=["url","target","dest","destination","redirect","redirect_url","adurl","u"].map(k=>url.searchParams.get(k)).find(Boolean);
+          if(nested){
+            try{const decoded=new URL(nested,url);if(allowedHost(decoded.hostname.toLowerCase().replace(/^www\./,""))){url=decoded;continue;}}catch{}
+          }
+          if(ignored.some(word=>(host+" "+url.pathname+" "+url.search).toLowerCase().includes(word)))break;
+          if(/\.(png|jpe?g|gif|webp|svg|css|js)(\?|$)/i.test(url.pathname))break;
+          candidates.push({url:url.toString(),score:100+(url.pathname.length>1?5:0)});
+          break;
+        }
+        const nested=["url","target","dest","destination","redirect","redirect_url","adurl","u","q"].map(k=>url.searchParams.get(k)).find(Boolean);
+        if(!nested)break;
+        try{url=new URL(nested,url);}catch{break;}
       }
-      const host=url.hostname.toLowerCase().replace(/^www\./,"");
-      if(host==="google.com"||host==="google.it"||host.endsWith(".google.com"))continue;
-      if(ignored.some(word=>(host+" "+url.pathname+" "+url.search).toLowerCase().includes(word)))continue;
-      if(/\.(png|jpe?g|gif|webp|svg|css|js)(\?|$)/i.test(url.pathname))continue;
-      const score=preferred.some(domain=>host===domain||host.endsWith("."+domain))?100:10;
-      candidates.push({url:cleaned,score});
     }catch{}
   }
-  const ranked=candidates.map(item=>typeof item==="string"?{url:item,score:preferred.some(d=>item.includes(d))?100:10}:item);
-  ranked.sort((a,b)=>b.score-a.score);
-  return ranked[0]?.url||null;
+  candidates.sort((a,b)=>b.score-a.score);
+  return candidates[0]?.url||null;
 }
-
 function isPropertyEmail(email){
   const text=[email.subject,email.snippet,email.bodyText,email.from].filter(Boolean).join(" ").toLocaleLowerCase("it");
   const signals=["immobile","immobili","appartamento","villa","vendita","case in","annuncio","nuovo annuncio","proprietà","prezzo","mq","m²","idealista","immobiliare.it","casa.it","subito.it","green-acres","gate-away"];
