@@ -309,5 +309,19 @@ boot().catch(e=>{
   msg("setupMsg",e.message,"error");
 });
 </script>
+  <script>
+(async function () {
+  try {
+    const response = await fetch(
+      "https://hhircfmrtkgaybrougku.supabase.co/functions/v1/nmre-search-engine"
+    );
+
+    const data = await response.json();
+    console.log("Nicholas Magi Real Estate:", data);
+  } catch (error) {
+    console.error("Errore di collegamento Supabase:", error);
+  }
+})();
+</script>
 </body>
 </html>
