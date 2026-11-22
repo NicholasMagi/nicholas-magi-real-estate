@@ -1138,22 +1138,22 @@ export const MARCHE_MUNICIPALITIES = Object.freeze([
 ]);
 
 const MUNICIPALITY_ALIASES = new Map([
-  ["camporotondo di f.", "Camporotondo di Fiastrone"],
+  ["camporotondo di f", "Camporotondo di Fiastrone"],
   ["castelsantangelo sn", "Castelsantangelo sul Nera"],
-  ["san benedetto del t.", "San Benedetto del Tronto"],
-  ["santa vittoria in m.", "Santa Vittoria in Matenano"],
+  ["san benedetto del t", "San Benedetto del Tronto"],
+  ["santa vittoria in m", "Santa Vittoria in Matenano"],
 ]);
 
 export function normalizeMunicipalityName(value) {
   return String(value ?? "")
     .trim()
-    .replace(/\\s*\\((AN|AP|FM|MC|PU)\\)\\s*$/i, "")
-    .replace(/\\s+(AN|AP|FM|MC|PU)$/i, "")
+    .replace(/\s*\\((AN|AP|FM|MC|PU)\\)\s*$/i, "")
+    .replace(/\s+(AN|AP|FM|MC|PU)$/i, "")
     .normalize("NFD")
-    .replace(/[\\u0300-\\u036f]/g, "")
+    .replace(/[\u0300-\\u036f]/g, "")
     .replace(/[’`]/g, "'")
     .replace(/[.]/g, "")
-    .replace(/\\s+/g, " ")
+    .replace(/\s+/g, " ")
     .toLocaleLowerCase("it");
 }
 
