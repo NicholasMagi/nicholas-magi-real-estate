@@ -93,7 +93,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 <section class="panel">
 <h2>Collegamento Gmail</h2>
 <p class="hint">
-Colleghi la casella dedicata per leggere le notifiche immobiliari. Il test legge le ultime 10 email della posta in arrivo; potrà importare quelle pertinenti tra i candidati da verificare.
+La casella viene controllata all’apertura dell’app e poi ogni ora mentre l’app resta aperta. Le notifiche immobiliari riconosciute vengono inserite automaticamente tra i candidati, senza duplicati; potrà verificarle prima di inserirle nell’archivio.
 </p>
 <div class="actions">
 <button class="gold" id="connectGmail">Collega Gmail</button>
@@ -166,6 +166,8 @@ const API_KEY = "nmre-supabase-publishable-key";
 let supabase = null;
 let currentUser = null;
 let lastGmailEmails = [];
+let gmailAutoStarted = false;
+let gmailAutoTimer = null;
 
 function msg(id,text,type=""){
   $(id).textContent=text;
@@ -230,6 +232,15 @@ async function showApp(session){
   $("appArea").hidden=false;
   await loadListings();
   await loadCandidates();
+  if(!gmailAutoStarted){
+    gmailAutoStarted=true;
+    $("testGmail").click();
+    gmailAutoTimer=setInterval(()=>{
+      if(currentUser && document.visibilityState==="visible" && !$("testGmail").disabled){
+        $("testGmail").click();
+      }
+    },60*60*1000);
+  }
 }
 
 async function boot(){
