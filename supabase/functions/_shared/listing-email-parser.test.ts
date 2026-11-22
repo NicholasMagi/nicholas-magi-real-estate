@@ -126,8 +126,46 @@ Deno.test("riconosce prezzi italiani con separatori diversi", () => {
   assertEquals(makeCandidate("145.000 €").prezzo, 145000, "migliaia con punto");
   assertEquals(makeCandidate("145000 €").prezzo, 145000, "senza separatore");
   assertEquals(makeCandidate("145.000,00 €").prezzo, 145000, "migliaia e decimali");
-  assertEquals(makeCandidate("145.500,50 €").prezzo, 145501, "arrotondamento al singolo euro");
+  assertEquals(makeCandidate("145.500,50 €").prezzo, 145500.5, "precisione dei centesimi");
   assertEquals(makeCandidate("145,000 €").prezzo, 145000, "virgola come separatore migliaia");
+});
+
+Deno.test("analizza una notifica Immobiliare.it con immobile all'asta", () => {
+  const plain = [
+    "Ciao Nicholas,",
+    "1 nuovo annuncio per la tua ricerca Case in vendita",
+    "appartamento all'asta via A. Bravi, 23, Recanati",
+    "Centro",
+    "Da € 4.612,5",
+    "20 m² | 1 locale | 1 bagno",
+    "VEDI DETTAGLI",
+    "AVVIA RICERCA",
+  ].join("\n");
+
+  const html = '<html><body><a href="https://www.immobiliare.it/annunci/123456789/">VEDI DETTAGLI</a><a href="https://www.immobiliare.it/ricerca/">AVVIA RICERCA</a></body></html>';
+
+  const candidate = parseListingEmail({
+    id: "auction-alert-1",
+    payload: {
+      headers: [
+        { name: "Subject", value: "1 nuovo annuncio per la tua ricerca Case in vendita" },
+        { name: "From", value: '"Immobiliare.it" <noreply@immobiliare.it>' },
+      ],
+      mimeType: "multipart/alternative",
+      parts: [
+        { mimeType: "text/plain", body: { data: encodeBase64Url(plain) } },
+        { mimeType: "text/html", body: { data: encodeBase64Url(html) } },
+      ],
+    },
+  });
+
+  assertEquals(candidate.likelyRealEstate, true, "notifica nuova riconosciuta");
+  assertEquals(candidate.titolo, "ASTA — appartamento all'asta via A. Bravi, 23, Recanati", "titolo specifico e categoria asta");
+  assertEquals(candidate.comune, "Recanati", "comune ricavato dall'indirizzo");
+  assertEquals(candidate.prezzo, 4612.5, "prezzo d'asta con decimale");
+  assertEquals(candidate.url, "https://www.immobiliare.it/annunci/123456789/", "link VEDI DETTAGLI prioritario");
+  assertEquals(candidate.tipo_venditore, "Da verificare", "asta non confusa con tipologia venditore");
+  assertEquals(candidate.warnings.some((warning) => warning.includes("Asta giudiziaria")), true, "avviso specifico asta");
 });
 
 Deno.test("la deduplicazione ignora i parametri di tracciamento", () => {
