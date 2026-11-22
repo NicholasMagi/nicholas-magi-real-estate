@@ -154,6 +154,31 @@ function canonicalUrl(value: string): string {
   }
 }
 
+function parseItalianPrice(raw: string): number | null {
+  const value = raw.trim().replace(/\s+/g, "");
+  if (!value) return null;
+
+  let normalized = value;
+  if (value.includes(",") && value.includes(".")) {
+    // Formato italiano con migliaia e decimali: 145.000,00
+    normalized = value.replace(/\./g, "").replace(",", ".");
+  } else if (value.includes(",")) {
+    // La virgola è decimale solo se seguita da una o due cifre.
+    normalized = /,\d{1,2}$/.test(value)
+      ? value.replace(",", ".")
+      : value.replace(/,/g, "");
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(value)) {
+    // In assenza di virgola, i punti in gruppi di tre sono migliaia.
+    normalized = value.replace(/\./g, "");
+  }
+
+  const number = Number(normalized);
+  if (!Number.isFinite(number) || number < 10000 || number > 100000000) {
+    return null;
+  }
+  return Math.round(number);
+}
+
 function extractPrice(text: string): number | null {
   const patterns = [
     /(?:prezzo|richiesta|prezzo richiesto)\s*[:\-]?\s*(?:€\s*)?([\d][\d.\s,]{3,})\s*€?/i,
@@ -164,11 +189,8 @@ function extractPrice(text: string): number | null {
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (!match?.[1]) continue;
-    const digits = match[1].replace(/\D/g, "");
-    const value = Number(digits);
-    if (Number.isSafeInteger(value) && value >= 10000 && value <= 100000000) {
-      return value;
-    }
+    const price = parseItalianPrice(match[1]);
+    if (price !== null) return price;
   }
   return null;
 }
