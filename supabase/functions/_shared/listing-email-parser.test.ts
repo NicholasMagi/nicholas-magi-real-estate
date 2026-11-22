@@ -1,0 +1,69 @@
+import {
+  buildDeduplicationKey,
+  extractGmailMessageText,
+  parseListingEmail,
+} from "./listing-email-parser.ts";
+
+function assertEquals(actual: unknown, expected: unknown, message: string) {
+  if (actual !== expected) {
+    throw new Error(message + ": expected " + String(expected) + ", got " + String(actual));
+  }
+}
+
+function encodeBase64Url(value: string): string {
+  return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+Deno.test("estrae testo da una parte Gmail text/plain", () => {
+  const body = "Appartamento in vendita. Prezzo: 145.000 €";
+  const text = extractGmailMessageText({
+    payload: { mimeType: "text/plain", body: { data: encodeBase64Url(body) } },
+  });
+  assertEquals(text, body, "testo MIME");
+});
+
+Deno.test("usa HTML solo quando manca text/plain", () => {
+  const html = "<html><body><h1>Casa in vendita</h1><p>Osimo</p></body></html>";
+  const text = extractGmailMessageText({
+    payload: { mimeType: "text/html", body: { data: encodeBase64Url(html) } },
+  });
+  assertEquals(text.includes("Casa in vendita"), true, "titolo HTML");
+  assertEquals(text.includes("Osimo"), true, "comune HTML");
+});
+
+Deno.test("estrae campi prudentemente e lascia il venditore da verificare", () => {
+  const body = "Comune: Osimo\nPrezzo: 145.000 €\nhttps://example.com/annuncio/123";
+  const candidate = parseListingEmail({
+    id: "message-1",
+    internalDate: "1790000000000",
+    payload: {
+      headers: [
+        { name: "Subject", value: "Appartamento con terrazzo" },
+        { name: "From", value: "Portale <avvisi@example.com>" },
+      ],
+      mimeType: "text/plain",
+      body: { data: encodeBase64Url(body) },
+    },
+  });
+
+  assertEquals(candidate.titolo, "Appartamento con terrazzo", "titolo");
+  assertEquals(candidate.comune, "Osimo", "comune");
+  assertEquals(candidate.prezzo, 145000, "prezzo");
+  assertEquals(candidate.url, "https://example.com/annuncio/123", "URL");
+  assertEquals(candidate.tipo_venditore, "Da verificare", "venditore prudente");
+  assertEquals(candidate.reviewStatus, "da_verificare", "stato revisione");
+});
+
+Deno.test("la deduplicazione ignora i parametri di tracciamento", () => {
+  const first = buildDeduplicationKey({
+    urls: ["https://example.com/casa/1?utm_source=mail"],
+    sender: "alerts@example.com",
+    subject: "Casa",
+  });
+  const second = buildDeduplicationKey({
+    urls: ["https://example.com/casa/1"],
+    sender: "alerts@example.com",
+    subject: "Casa",
+  });
+  assertEquals(first, second, "chiave duplicati");
+});
