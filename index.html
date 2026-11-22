@@ -194,9 +194,18 @@ function connect(url,key){
   supabase=createClient(url.replace(/\/$/,""),key);
 }
 
+const DEFAULT_SUPABASE_URL = "https://hhircfmrtkgaybrougku.supabase.co";
+const DEFAULT_PUBLISHABLE_KEY = "sb_publishable_qc33hhZz6qfftoQzG-Vyiw_p2cNYsuO";
+
 function loadConfig(){
-  $("projectUrl").value=localStorage.getItem(URL_KEY)||"";
-  $("publishableKey").value=localStorage.getItem(API_KEY)||"";
+  const savedUrl=localStorage.getItem(URL_KEY);
+  const savedKey=localStorage.getItem(API_KEY);
+  const url=savedUrl||DEFAULT_SUPABASE_URL;
+  const key=savedKey||DEFAULT_PUBLISHABLE_KEY;
+  $("projectUrl").value=url;
+  $("publishableKey").value=key;
+  if(!savedUrl)localStorage.setItem(URL_KEY,url);
+  if(!savedKey)localStorage.setItem(API_KEY,key);
 }
 
 function showSetup(){
