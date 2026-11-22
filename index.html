@@ -40,6 +40,9 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .error{color:#a12b27}.success{color:#267447}
 .topline{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
 .small{font-size:12px;color:var(--muted)}
+.gmail-email{padding:12px 0;border-top:1px solid var(--line);font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.gmail-email b{display:block;margin-bottom:5px}
+.gmail-email .gmail-meta{color:var(--muted);font-size:12px}
 @media(max-width:650px){.grid{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}.heading{font-size:24px}}
 </style>
 </head>
@@ -94,8 +97,10 @@ l'acquisizione automatica delle notifiche immobiliari.
 </p>
 <div class="actions">
 <button class="gold" id="connectGmail">Collega Gmail</button>
+<button class="secondary" id="testGmail">Test lettura Gmail</button>
 </div>
 <div id="gmailMsg" class="status"></div>
+<div id="gmailResults"></div>
 </section>
 
 <div class="grid panel">
@@ -457,6 +462,82 @@ $("connectGmail").addEventListener("click",async()=>{
       "error"
     );
 
+    button.disabled=false;
+  }
+});
+
+/* TEST LETTURA GMAIL */
+
+$("testGmail").addEventListener("click",async()=>{
+  const button=$("testGmail");
+  const results=$("gmailResults");
+
+  button.disabled=true;
+  results.replaceChildren();
+  msg("gmailMsg","Lettura delle ultime email in corso...");
+
+  try{
+    const {data,error}=await supabase.functions.invoke(
+      "nmre-gmail-reader",
+      {
+        body:{}
+      }
+    );
+
+    if(error){
+      throw new Error(
+        error.message||"Errore durante la lettura Gmail."
+      );
+    }
+
+    if(!data?.success){
+      throw new Error(
+        data?.error||"Risposta non valida dal lettore Gmail."
+      );
+    }
+
+    msg(
+      "gmailMsg",
+      `Collegamento riuscito! Email lette: ${data.total}.`,
+      "success"
+    );
+
+    if(!data.emails?.length){
+      results.textContent=
+        "Non sono state trovate email negli ultimi 30 giorni.";
+      return;
+    }
+
+    data.emails.forEach(email=>{
+      const item=document.createElement("div");
+      item.className="gmail-email";
+
+      const subject=document.createElement("b");
+      subject.textContent=email.subject||"Senza oggetto";
+
+      const sender=document.createElement("div");
+      sender.className="gmail-meta";
+      sender.textContent=
+        "Da: "+(email.from||"Mittente sconosciuto");
+
+      const date=document.createElement("div");
+      date.className="gmail-meta";
+      date.textContent=email.date||"";
+
+      const snippet=document.createElement("div");
+      snippet.textContent=email.snippet||"";
+
+      item.append(subject,sender,date,snippet);
+      results.appendChild(item);
+    });
+
+  }catch(error){
+    msg(
+      "gmailMsg",
+      error.message||"Errore durante il test Gmail.",
+      "error"
+    );
+  }finally{
     button.disabled=false;
   }
 });
