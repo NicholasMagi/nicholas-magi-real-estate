@@ -73,7 +73,7 @@ export function buildInsightsSearchPayload(now: Date, lookbackDays = 30, page = 
 function parseApiDate(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
   const text = value.trim();
-  const italian = text.match(/^(\\d{2})\\/(\\d{2})\\/(\\d{4})(?:T(\\d{2}):(\\d{2}):(\\d{2})Z?)?$/);
+  const italian = text.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:T(\d{2}):(\d{2}):(\d{2})Z?)?$/);
   const parsed = italian
     ? new Date(Date.UTC(
         Number(italian[3]),
