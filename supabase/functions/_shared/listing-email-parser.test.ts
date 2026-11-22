@@ -23,12 +23,13 @@ Deno.test("estrae testo da una parte Gmail text/plain", () => {
 });
 
 Deno.test("usa HTML solo quando manca text/plain", () => {
-  const html = "<html><body><h1>Casa in vendita</h1><p>Osimo</p></body></html>";
+  const html = '<html><body><h1>Casa in vendita</h1><p>Osimo</p><a href="https://example.com/immobile/55">Guarda immobile</a></body></html>';
   const text = extractGmailMessageText({
     payload: { mimeType: "text/html", body: { data: encodeBase64Url(html) } },
   });
   assertEquals(text.includes("Casa in vendita"), true, "titolo HTML");
   assertEquals(text.includes("Osimo"), true, "comune HTML");
+  assertEquals(text.includes("https://example.com/immobile/55"), true, "href HTML");
 });
 
 Deno.test("estrae campi prudentemente e lascia il venditore da verificare", () => {
@@ -50,6 +51,8 @@ Deno.test("estrae campi prudentemente e lascia il venditore da verificare", () =
   assertEquals(candidate.comune, "Osimo", "comune");
   assertEquals(candidate.prezzo, 145000, "prezzo");
   assertEquals(candidate.url, "https://example.com/annuncio/123", "URL");
+  assertEquals(candidate.contatto, null, "il mittente della notifica non è un contatto venditore");
+  assertEquals(candidate.notificationSender, "avvisi@example.com", "mittente della notifica");
   assertEquals(candidate.tipo_venditore, "Da verificare", "venditore prudente");
   assertEquals(candidate.reviewStatus, "da_verificare", "stato revisione");
 });
