@@ -231,11 +231,11 @@ export function parseListingEmail(message: GmailApiMessage): ListingCandidate {
   // possono contenere il nome del portale o parole immobiliari, ma non
   // rappresentano notifiche di nuovi annunci.
   const nonListingNotification =
-    /\\b(?:la tua )?ricerca\\s+(?:è stata\\s+)?salvat[ao]\\b/i.test(subject) ||
-    /\\bbenvenut[oa]\\b/i.test(subject) ||
-    /\\bhai condiviso alcuni dati dell['’]account google\\b/i.test(subject) ||
-    /\\bverifica il tuo indirizzo email\\b/i.test(subject) ||
-    /\\bavviso di sicurezza\\b/i.test(subject);
+    /\b(?:la tua )?ricerca\s+(?:è stata\s+)?salvat[ao]\b/i.test(subject) ||
+    /\bbenvenut[oa]\b/i.test(subject) ||
+    /\bhai condiviso alcuni dati dell['’]account google\b/i.test(subject) ||
+    /\bverifica il tuo indirizzo email\b/i.test(subject) ||
+    /\bavviso di sicurezza\b/i.test(subject);
   const keywordMatch = /immobil|annunci?o|casa|appartament|villetta|villa|terreno|vendita|vendesi|affitto|bilocale|trilocale|quadrilocale|monolocale|attico|rustico|commerciale|nuova costruzione|prezzo/i.test(combined);
   const likelyRealEstate = !nonListingNotification && keywordMatch;
   const warnings: string[] = [];
