@@ -27,6 +27,7 @@ export type ListingCandidate = {
   comune: string | null;
   prezzo: number | null;
   contatto: string | null;
+  notificationSender: string | null;
   tipo_venditore: "Da verificare";
   portale: string | null;
   url: string | null;
@@ -64,14 +65,16 @@ function decodeHtmlEntities(value: string): string {
 function htmlToText(html: string): string {
   return decodeHtmlEntities(
     html
-      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-      .replace(/<(br|\/p|\/div|\/li|\/tr|\/h[1-6])\b[^>]*>/gi, "\n")
+      // Nelle notifiche dei portali il link all'immobile spesso è solo nell'href.
+      .replace(/<a\\b[^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>/gi, (_match, href, label) => `${label} ${href}`)
+      .replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/gi, " ")
+      .replace(/<style\\b[^>]*>[\\s\\S]*?<\\/style>/gi, " ")
+      .replace(/<(br|\\/p|\\/div|\\/li|\\/tr|\\/h[1-6])\\b[^>]*>/gi, "\\n")
       .replace(/<[^>]+>/g, " ")
   )
-    .replace(/[\t\u00a0 ]+/g, " ")
-    .replace(/ *\n */g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[\\t\\u00a0 ]+/g, " ")
+    .replace(/ *\\n */g, "\\n")
+    .replace(/\\n{3,}/g, "\\n\\n")
     .trim();
 }
 
@@ -204,6 +207,7 @@ export function parseListingEmail(message: GmailApiMessage): ListingCandidate {
   const warnings: string[] = [];
 
   if (!body) warnings.push("Il messaggio non contiene testo leggibile.");
+  if (extractEmailAddress(from)) warnings.push("Il mittente è la casella che ha inviato la notifica: non è un contatto verificato del venditore.");
   if (!urls.length) warnings.push("Non è stato individuato un link all'annuncio.");
   if (!extractMunicipality(combined)) warnings.push("Comune non riconosciuto con certezza.");
   if (extractPrice(combined) === null) warnings.push("Prezzo non riconosciuto con certezza.");
@@ -214,7 +218,9 @@ export function parseListingEmail(message: GmailApiMessage): ListingCandidate {
     titolo: subject,
     comune: extractMunicipality(combined),
     prezzo: extractPrice(combined),
-    contatto: extractEmailAddress(from),
+    // Il mittente è il portale/notificatore, non necessariamente il venditore.
+    contatto: null,
+    notificationSender: extractEmailAddress(from),
     tipo_venditore: "Da verificare",
     portale: getSenderDomain(from),
     url: urls[0] ?? null,
