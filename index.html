@@ -73,7 +73,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 <label>Email</label>
 <input id="email" type="email" placeholder="nome@email.it">
 <label>Password</label>
-<input id="password" type="password" placeholder="Almeno 6 caratteri">
+<input id="password" type="password" placeholder="Almeno 12 caratteri" minlength="12" autocomplete="current-password">
 <div class="actions">
 <button id="signIn">Accedi</button>
 <button class="gold" id="signUp">Crea account</button>
@@ -319,8 +319,8 @@ $("signUp").addEventListener("click",async()=>{
   const email=$("email").value.trim();
   const password=$("password").value;
 
-  if(!email||password.length<6){
-    msg("authMsg","Inserisca un'email valida e una password di almeno 6 caratteri.","error");
+  if(!email||password.length<12){
+    msg("authMsg","Inserisca un'email valida e una password di almeno 12 caratteri.","error");
     return;
   }
 
