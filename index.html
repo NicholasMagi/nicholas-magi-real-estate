@@ -146,6 +146,12 @@ La casella viene controllata all’apertura dell’app e poi ogni ora mentre l�
 </section>
 
 <section class="panel">
+<h2>Agenda richiami</h2>
+<p class="hint">Proprietari da ricontattare: scadenze passate, oggi e nei prossimi sette giorni.</p>
+<div id="followupList"><p class="hint">Caricamento agenda...</p></div>
+</section>
+
+<section class="panel">
 <div class="topline"><h2>Archivio annunci</h2><div class="actions"><button class="secondary" id="exportCsv">Esporta CSV</button><button class="secondary" id="exportXlsx">Esporta Excel</button><button class="secondary" id="refresh">Aggiorna</button></div></div>
 <div class="toolbar">
 <input id="listingSearch" type="search" placeholder="Cerca per titolo, comune o fonte">
@@ -513,6 +519,7 @@ async function loadListings(){
   $("totalCount").textContent=data.length;
   $("privateCount").textContent=data.filter(x=>x.tipo_venditore==="Privato").length;
   $("verifyCount").textContent=data.filter(x=>!x.tipo_venditore||x.tipo_venditore==="Da verificare").length;
+  renderFollowups(data);
   const query=$("listingSearch").value.trim().toLocaleLowerCase("it");
   const seller=$("sellerFilter").value;
   const contactStatus=$("contactFilter").value;
@@ -672,6 +679,34 @@ async function deleteListing(id){
   }
 
   await loadListings();
+}
+
+function renderFollowups(data){
+  const today=new Date();
+  today.setHours(0,0,0,0);
+  const end=new Date(today);
+  end.setDate(end.getDate()+7);
+  const due=data.filter(item=>{
+    if(!item.prossimo_contatto_il||["incarico_acquisito","non_interessato"].includes(item.stato_contatto))return false;
+    const date=new Date(item.prossimo_contatto_il+"T00:00:00");
+    return date<=end;
+  }).sort((a,b)=>a.prossimo_contatto_il.localeCompare(b.prossimo_contatto_il));
+  const box=$("followupList");
+  if(!due.length){box.innerHTML='<p class="hint">Nessun richiamo in scadenza nei prossimi sette giorni.</p>';return;}
+  box.innerHTML=due.slice(0,12).map(item=>{
+    const date=new Date(item.prossimo_contatto_il+"T00:00:00");
+    const days=Math.round((date-today)/86400000);
+    const label=days<0?"In ritardo di "+Math.abs(days)+" giorni":days===0?"Da fare oggi":"Tra "+days+" giorni";
+    return `<div class="crm-entry"><strong>${safe(item.titolo)}</strong><span>${safe(item.comune)} · ${safe(item.prossimo_contatto_il)} · <span class="due">${label}</span></span><div><button class="secondary" data-open-followup="${safe(item.id)}">Apri scheda</button></div></div>`;
+  }).join("");
+  box.querySelectorAll("[data-open-followup]").forEach(button=>button.addEventListener("click",async()=>{
+    $("listingSearch").value="";
+    $("sellerFilter").value="";
+    $("contactFilter").value="";
+    await loadListings();
+    const details=$('listingList').querySelector('[data-crm-id="'+button.dataset.openFollowup+'"]');
+    if(details){details.open=true;details.scrollIntoView({behavior:"smooth",block:"center"});}
+  }));
 }
 
 function exportListingsCsv(){
