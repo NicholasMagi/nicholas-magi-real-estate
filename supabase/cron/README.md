@@ -1,24 +1,39 @@
 # Sincronizzazione Gmail programmata
 
-La Edge Function `nmre-gmail-scheduled` è già distribuita su Supabase. È autenticata con `withSupabase({ auth: "secret" })` e il gateway ha `verify_jwt=false`: la chiamata deve quindi includere la **Supabase Secret API key** nell'header `apikey`. Non usa una chiave nel browser.
+## Stato attuale
 
-## Attivazione manuale necessaria
+- Edge Function `nmre-gmail-scheduled`: attiva (versione 10).
+- Edge Function `nmre-gmail-reader`: dismessa; restituisce HTTP 410 e non espone più il contenuto dei messaggi.
+- Job `nmre-gmail-hourly-sync`: attivo, ogni ora al minuto 15 UTC.
+- Supabase Vault contiene i segreti `project_url` e `secret_key`; non leggere né condividere i relativi valori.
+- Chiamata HTTP server-to-server autenticata con la Secret API Key predefinita, tramite `withSupabase({ auth: "secret" })` e `verify_jwt=false`.
 
-1. In Supabase Dashboard apra **Project Settings → API Keys** e copi la **Secret API key predefinita** (nome della chiave: `default`, formato `sb_secret_...`). Non usi la Publishable key né una secret key con un nome diverso: la funzione accetta la chiave `default`.
-2. Apra **Database → Vault → Create new secret**.
-3. Crei un segreto con:
-   - **Name:** `secret_key`
-   - **Secret:** la Secret API key copiata al punto 1.
-4. Verifichi che il segreto sia salvato in Vault. Non invii la chiave in chat e non la inserisca in GitHub.
-5. Apra **SQL Editor**, copi il contenuto di `supabase/cron/gmail-hourly-sync.sql` e lo esegua.
-6. In **Integrations → Cron** verifichi il job `nmre-gmail-hourly-sync`. Il job viene eseguito ogni ora al minuto 15 (UTC). La richiesta HTTP ha un timeout di 30 secondi per tollerare variazioni nei tempi di risposta di Gmail.
+## Come funziona
 
-Lo script salva l'URL del progetto in Vault con il nome `project_url` se manca, poi crea il job. Nota tecnica: pg_net concede per impostazione predefinita `USAGE` sullo schema `net` anche a `anon` e `authenticated`; Supabase documenta che lo schema non è esposto tramite Data API e questi ruoli non possono aprire connessioni SQL dirette. Non esporre comunque `net` tra gli schemi Data API. Il segreto `secret_key` deve esistere prima di eseguire lo SQL.
+La funzione cerca fino a 100 messaggi degli ultimi 30 giorni nell'intera casella Gmail, inclusi quelli archiviati. Legge ed elabora il testo soltanto sul server, riconosce gli avvisi di nuovi annunci e conserva soltanto i dati estratti necessari alla gestione del candidato. Non memorizza il corpo dell'email, il mittente o l'oggetto.
+
+- I venditori esplicitamente indicati come privati vengono classificati `Privato`.
+- Gli annunci per cui non è chiaro il tipo di venditore restano `Da verificare` e richiedono approvazione manuale.
+- Le notifiche chiaramente di agenzia, le email di verifica account, i messaggi di benvenuto, le ricerche salvate, le promozioni e gli annunci d'asta vengono escluse.
+- La deduplicazione utilizza `owner_id,dedup_key` con la chiave derivata dall'ID Gmail.
+- Il processo non effettua scraping dei portali immobiliari.
+
+Il sito mostra la coda di candidati e non le email. Quando la pagina è aperta, la coda viene aggiornata ogni cinque minuti. Il processo server-side continua anche a pagina chiusa.
+
+## SQL di configurazione
+
+Il file `supabase/cron/gmail-hourly-sync.sql` è idempotente: crea il job se manca oppure aggiorna quello esistente. Prima di eseguirlo su un nuovo progetto, creare in Supabase Vault:
+
+- `project_url`: URL HTTPS del progetto Supabase.
+- `secret_key`: Secret API Key predefinita (nome API key: `default`).
+
+Non inserire mai la chiave nel file SQL, nel frontend, in GitHub o in chat. Il file imposta un timeout HTTP di 30 secondi.
 
 ## Verifica
 
-Dopo la prima esecuzione, controlli `cron.job_run_details` per il job `nmre-gmail-hourly-sync`. La funzione restituisce conteggi aggregati (email elencate, lette, candidate, inserite, duplicati, errori) e non registra il contenuto delle email.
+Controllare il job:
 
-La sincronizzazione cerca fino a 100 email degli ultimi 30 giorni in tutta la casella (non soltanto nella Posta in arrivo), quindi intercetta anche gli avvisi archiviati. Riconosce le email immobiliari con segnali testuali e link verso una allowlist di portali; deduplica tramite `owner_id,dedup_key`. Non effettua scraping dei portali.
+`select jobid, jobname, schedule, active from cron.job where jobname = 'nmre-gmail-hourly-sync';`
 
-**Sicurezza:** Vault conserva la chiave; non inserirla nel frontend, in file del repository o in messaggi. Supabase documenta che pg_net può mantenere temporaneamente gli header della richiesta in coda fino all'invio: mantenere l'accesso al database e agli schemi di rete strettamente controllato.
+Dopo una sua esecuzione automatica, controllare `cron.job_run_details`. Per verificare la risposta della funzione, controllare `net._http_response` usando il `request_id` restituito da `net.http_post`. Le prove manuali effettuate hanno restituito HTTP 200; la prima esecuzione automatica registrata va verificata separatamente.
+
