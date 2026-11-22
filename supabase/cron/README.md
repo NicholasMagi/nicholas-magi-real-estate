@@ -4,7 +4,7 @@ La Edge Function `nmre-gmail-scheduled` è già distribuita su Supabase. È aute
 
 ## Attivazione manuale necessaria
 
-1. In Supabase Dashboard apra **Project Settings → API Keys** e copi la **Secret API key** che inizia con `sb_secret_`. Non usi la Publishable key.
+1. In Supabase Dashboard apra **Project Settings → API Keys** e copi la **Secret API key predefinita** (nome della chiave: `default`, formato `sb_secret_...`). Non usi la Publishable key né una secret key con un nome diverso: la funzione accetta la chiave `default`.
 2. Apra **Database → Vault → Create new secret**.
 3. Crei un segreto con:
    - **Name:** `secret_key`
@@ -13,7 +13,7 @@ La Edge Function `nmre-gmail-scheduled` è già distribuita su Supabase. È aute
 5. Apra **SQL Editor**, copi il contenuto di `supabase/cron/gmail-hourly-sync.sql` e lo esegua.
 6. In **Integrations → Cron** verifichi il job `nmre-gmail-hourly-sync`. Il job viene eseguito ogni ora al minuto 15.
 
-Il file SQL salva anche l'URL pubblico del progetto in Vault con il nome `project_url`, poi crea o aggiorna il job. Il segreto `secret_key` deve esistere prima di eseguire lo SQL.
+Lo script restringe inoltre i privilegi dello schema interno `net` a ruoli non pubblici, salva l'URL del progetto in Vault con il nome `project_url` se manca, poi crea il job. Il segreto `secret_key` deve esistere prima di eseguire lo SQL.
 
 ## Verifica
 
