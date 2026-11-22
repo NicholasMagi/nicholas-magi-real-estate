@@ -39,7 +39,6 @@ export function buildInsightsSearchPayload(now: Date, lookbackDays = 30, page = 
   const minDate = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
   return {
     Filters: {
-      comparableTypeID: 1,
       contractTypeID: 1,
       categoryTypeID: null,
       propertyTypeID: null,
@@ -73,7 +72,18 @@ export function buildInsightsSearchPayload(now: Date, lookbackDays = 30, page = 
 
 function parseApiDate(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
-  const parsed = new Date(value);
+  const text = value.trim();
+  const italian = text.match(/^(\\d{2})\\/(\\d{2})\\/(\\d{4})(?:T(\\d{2}):(\\d{2}):(\\d{2})Z?)?$/);
+  const parsed = italian
+    ? new Date(Date.UTC(
+        Number(italian[3]),
+        Number(italian[2]) - 1,
+        Number(italian[1]),
+        Number(italian[4] || 0),
+        Number(italian[5] || 0),
+        Number(italian[6] || 0)
+      ))
+    : new Date(text);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
