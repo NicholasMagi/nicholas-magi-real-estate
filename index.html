@@ -266,6 +266,8 @@ async function boot(){
         showApp(session).catch(e=>msg("listMsg",e.message,"error"));
       }else{
         currentUser=null;
+        gmailAutoStarted=false;
+        if(gmailAutoTimer){clearInterval(gmailAutoTimer);gmailAutoTimer=null;}
         $("appArea").hidden=true;
         showAuth();
       }
