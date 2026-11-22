@@ -973,6 +973,12 @@ $("testGmail").addEventListener("click",async()=>{
   }
 });
 
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="visible" && currentUser && !$("testGmail").disabled){
+    $("testGmail").click();
+  }
+});
+
 boot().catch(e=>{
   showSetup();
   msg("setupMsg",e.message,"error");
