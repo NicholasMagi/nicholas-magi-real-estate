@@ -1,11 +1,8 @@
--- Eseguire solo DOPO aver creato in Supabase Vault il segreto:
--- name: secret_key
--- value: la Supabase Secret API key (sb_secret_...), mai la publishable key.
--- Non inserire la chiave direttamente in questo file o nel repository.
---
--- La funzione Edge nmre-gmail-scheduled accetta esclusivamente la Secret API key
--- predefinita (nome API key: default) tramite withSupabase({ auth: "secret" }).
-do $$
+-- Gmail hourly sync for Nicholas Magi Real Estate.
+-- The secret_key value must already exist in Supabase Vault.
+-- Never put secret values in this file or in the repository.
+
+do $project_url$
 begin
   if not exists (select 1 from vault.secrets where name = 'project_url') then
     perform vault.create_secret(
@@ -14,28 +11,68 @@ begin
     );
   end if;
 end
-$$;
+$project_url$;
 
-select cron.schedule(
-  'nmre-gmail-hourly-sync',
-  '15 * * * *',
-  $job$
-    select net.http_post(
-      url := (
-        select decrypted_secret
-        from vault.decrypted_secrets
-        where name = 'project_url'
-      ) || '/functions/v1/nmre-gmail-scheduled',
-      headers := jsonb_build_object(
-        'Content-Type', 'application/json',
-        'apikey', (
-          select decrypted_secret
-          from vault.decrypted_secrets
-          where name = 'secret_key'
-        )
-      ),
-      body := '{}'::jsonb,
-      timeout_milliseconds := 30000
-    ) as request_id;
-  $job$
-);
+-- Idempotent: create the named job once, then update it on subsequent runs.
+do $gmail_job$
+declare
+  v_job_id bigint;
+begin
+  select jobid
+    into v_job_id
+    from cron.job
+   where jobname = 'nmre-gmail-hourly-sync'
+   limit 1;
+
+  if v_job_id is null then
+    perform cron.schedule(
+      'nmre-gmail-hourly-sync',
+      '15 * * * *',
+      $job$
+        select net.http_post(
+          url := (
+            select decrypted_secret
+              from vault.decrypted_secrets
+             where name = 'project_url'
+          ) || '/functions/v1/nmre-gmail-scheduled',
+          headers := jsonb_build_object(
+            'Content-Type', 'application/json',
+            'apikey', (
+              select decrypted_secret
+                from vault.decrypted_secrets
+               where name = 'secret_key'
+            )
+          ),
+          body := '{}'::jsonb,
+          timeout_milliseconds := 30000
+        ) as request_id;
+      $job$
+    );
+  else
+    perform cron.alter_job(
+      v_job_id,
+      schedule := '15 * * * *',
+      command := $job$
+        select net.http_post(
+          url := (
+            select decrypted_secret
+              from vault.decrypted_secrets
+             where name = 'project_url'
+          ) || '/functions/v1/nmre-gmail-scheduled',
+          headers := jsonb_build_object(
+            'Content-Type', 'application/json',
+            'apikey', (
+              select decrypted_secret
+                from vault.decrypted_secrets
+               where name = 'secret_key'
+            )
+          ),
+          body := '{}'::jsonb,
+          timeout_milliseconds := 30000
+        ) as request_id;
+      $job$,
+      active := true
+    );
+  end if;
+end
+$gmail_job$;
