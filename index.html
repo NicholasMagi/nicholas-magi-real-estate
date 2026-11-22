@@ -53,7 +53,19 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .archive-tools{display:grid;grid-template-columns:minmax(220px,2fr) minmax(170px,1fr);gap:10px;margin:14px 0}
 .archive-tools input,.archive-tools select{margin:0}
 .archive-summary{font-size:12px;color:var(--muted);margin:8px 0}
-@media(max-width:650px){.archive-tools{grid-template-columns:1fr}}
+.territory-tools{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}
+.territory-tools input,.territory-tools select{margin:0;min-width:0}
+.territory-dashboard{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:12px 0}
+.territory-card{background:#f7f8fa;border:1px solid var(--line);padding:11px;border-radius:10px;min-width:0}
+.territory-card strong{display:block;font-size:20px;overflow-wrap:anywhere}
+.territory-card span{font-size:11px;color:var(--muted)}
+.territory-breakdown{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.territory-list{display:grid;gap:7px}
+.territory-row{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:7px 0;border-bottom:1px solid var(--line)}
+.territory-row strong{font-variant-numeric:tabular-nums}
+.territory-note{font-size:12px;color:var(--muted);line-height:1.5}
+@media(max-width:850px){.territory-tools{grid-template-columns:repeat(2,minmax(0,1fr))}.territory-dashboard{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){.archive-tools{grid-template-columns:1fr}.territory-tools{grid-template-columns:1fr}.territory-dashboard{grid-template-columns:repeat(2,minmax(0,1fr))}.territory-breakdown{grid-template-columns:1fr}}
 @media(max-width:650px){.grid{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}.heading{font-size:24px}}
 </style>
 </head>
@@ -122,14 +134,35 @@ l'acquisizione automatica delle notifiche immobiliari.
 </div>
 
 <section class="panel">
+  <div class="topline">
+    <h2>Territorio e copertura</h2>
+    <span class="small">225 Comuni · 5 province</span>
+  </div>
+  <p class="territory-note">La provincia viene riconosciuta dal Comune. I dati restano nell'archivio esistente: non è necessaria una modifica al database.</p>
+  <div id="territoryDashboard" class="territory-dashboard"></div>
+  <div class="territory-breakdown">
+    <div>
+      <b>Annunci per provincia</b>
+      <div id="provinceBreakdown" class="territory-list"></div>
+    </div>
+    <div>
+      <b>Comuni con più annunci</b>
+      <div id="municipalityBreakdown" class="territory-list"></div>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
 <h2>Registra un nuovo immobile</h2>
 <form id="listingForm">
 <label>Titolo / descrizione</label>
 <input id="title" required maxlength="180" placeholder="Es. Appartamento con terrazzo">
 <div class="row">
-<div><label>Comune</label><input id="municipality" required maxlength="100" placeholder="Es. Osimo"></div>
+<div><label>Comune</label><input id="municipality" required maxlength="100" list="municipalityOptions" placeholder="Scriva o selezioni un Comune"></div>
 <div><label>Prezzo richiesto (€)</label><input id="price" type="number" min="0" step="0.01" placeholder="180000"></div>
 </div>
+<datalist id="municipalityOptions"></datalist>
+<div id="municipalityHint" class="small" aria-live="polite">Suggerimenti: tutti i Comuni delle Marche. È possibile inserire anche un Comune fuori regione.</div>
 <div class="row">
 <div><label>Contatto</label><input id="contact" maxlength="180" placeholder="Telefono o email"></div>
 <div><label>Tipologia venditore</label>
@@ -156,13 +189,24 @@ l'acquisizione automatica delle notifiche immobiliari.
     <button class="secondary" id="refresh">Aggiorna</button>
   </div>
 </div>
-<div class="archive-tools">
-  <input id="listingSearch" type="search" placeholder="Cerca per immobile, comune, fonte o contatto" aria-label="Cerca annunci">
+<div class="territory-tools">
+  <input id="listingSearch" type="search" placeholder="Cerca immobile, comune, fonte o contatto" aria-label="Cerca annunci">
+  <select id="provinceFilter" aria-label="Filtra per provincia">
+    <option value="">Tutte le province</option>
+  </select>
+  <select id="municipalityFilter" aria-label="Filtra per Comune">
+    <option value="">Tutti i Comuni</option>
+  </select>
   <select id="sellerFilter" aria-label="Filtra per tipologia venditore">
     <option value="">Tutti i venditori</option>
     <option value="Privato">Privati</option>
     <option value="Agenzia">Agenzie</option>
     <option value="Da verificare">Da verificare</option>
+  </select>
+  <select id="listingKindFilter" aria-label="Filtra per categoria annuncio">
+    <option value="">Tutte le categorie</option>
+    <option value="asta">Aste giudiziarie</option>
+    <option value="normale">Vendite non classificate come aste</option>
   </select>
 </div>
 <div id="archiveSummary" class="archive-summary" aria-live="polite"></div>
@@ -175,6 +219,7 @@ l'acquisizione automatica delle notifiche immobiliari.
 
 <script type="module">
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+import { MARCHE_MUNICIPALITIES, PROVINCES, canonicalMunicipalityName, getMunicipalityInfo, normalizeMunicipalityName } from "./territorio.js";
 
 const $ = id => document.getElementById(id);
 const URL_KEY = "nmre-supabase-url";
@@ -203,6 +248,128 @@ function validUrl(value){
 function euro(value){
   if(value===null||value==="")return "Prezzo non indicato";
   return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:2}).format(Number(value));
+}
+
+function isAuction(item){
+  return /^ASTA\\s*[—-]/i.test(String(item?.titolo||"")) ||
+    /\\ball'asta\\b|\\basta giudiziaria\\b/i.test(String(item?.titolo||""));
+}
+
+function getProvinceName(item){
+  return getMunicipalityInfo(item?.comune)?.provinceName || "Fuori repertorio";
+}
+
+function updateMunicipalitySuggestions(provinceCode=""){
+  const list=$("municipalityOptions");
+  list.replaceChildren();
+  MARCHE_MUNICIPALITIES
+    .filter(item=>!provinceCode||item.provinceCode===provinceCode)
+    .forEach(item=>{
+      const option=document.createElement("option");
+      option.value=item.name;
+      option.label=item.provinceName;
+      list.appendChild(option);
+    });
+}
+
+function updateTerritoryFilters(){
+  const province=$("provinceFilter");
+  const municipality=$("municipalityFilter");
+  const oldProvince=province.value;
+  const oldMunicipality=municipality.value;
+  province.replaceChildren(new Option("Tutte le province",""));
+  PROVINCES.forEach(item=>province.add(new Option(item.name,item.code)));
+  province.add(new Option("Fuori repertorio","__outside__"));
+  province.value=oldProvince;
+
+  const matches=cachedListings
+    .map(item=>String(item.comune||"").trim())
+    .filter(Boolean);
+  const unique=new Map();
+  matches.forEach(name=>{
+    const canonical=canonicalMunicipalityName(name);
+    const key=normalizeMunicipalityName(canonical);
+    if(key&&!unique.has(key))unique.set(key,canonical);
+  });
+  municipality.replaceChildren(new Option("Tutti i Comuni",""));
+  [...unique.values()].sort((a,b)=>a.localeCompare(b,"it")).forEach(name=>{
+    const info=getMunicipalityInfo(name);
+    if(province.value==="__outside__"&&info)return;
+    if(province.value&&province.value!=="__outside__"&&info?.provinceCode!==province.value)return;
+    municipality.add(new Option(name,name));
+  });
+  if([...municipality.options].some(option=>option.value===oldMunicipality)){
+    municipality.value=oldMunicipality;
+  }else municipality.value="";
+}
+
+function renderTerritoryDashboard(){
+  const total=cachedListings.length;
+  const counts=new Map(PROVINCES.map(item=>[item.code,0]));
+  let outside=0;
+  const municipalities=new Map();
+  cachedListings.forEach(item=>{
+    const info=getMunicipalityInfo(item.comune);
+    if(info)counts.set(info.provinceCode,(counts.get(info.provinceCode)||0)+1);
+    else if(String(item.comune||"").trim())outside++;
+    const name=canonicalMunicipalityName(item.comune||"");
+    if(name)municipalities.set(name,(municipalities.get(name)||0)+1);
+  });
+  const dashboard=$("territoryDashboard");
+  dashboard.replaceChildren();
+  const cards=[
+    ["Annunci",total],
+    ["Comuni coperti",municipalities.size],
+    ["Province presenti",[...counts.values()].filter(value=>value>0).length],
+    ["Privati",cachedListings.filter(item=>item.tipo_venditore==="Privato").length],
+    ["Aste",cachedListings.filter(isAuction).length]
+  ];
+  cards.forEach(([label,value])=>{
+    const card=document.createElement("div");
+    card.className="territory-card";
+    const strong=document.createElement("strong");
+    strong.textContent=String(value);
+    const span=document.createElement("span");
+    span.textContent=label;
+    card.append(strong,span);
+    dashboard.appendChild(card);
+  });
+  const provinceList=$("provinceBreakdown");
+  provinceList.replaceChildren();
+  PROVINCES.forEach(province=>{
+    const row=document.createElement("div");
+    row.className="territory-row";
+    const label=document.createElement("span");
+    label.textContent=province.name;
+    const value=document.createElement("strong");
+    value.textContent=String(counts.get(province.code)||0);
+    row.append(label,value);
+    provinceList.appendChild(row);
+  });
+  if(outside){
+    const row=document.createElement("div");
+    row.className="territory-row";
+    row.textContent="Fuori repertorio: "+outside;
+    provinceList.appendChild(row);
+  }
+  const municipalityList=$("municipalityBreakdown");
+  municipalityList.replaceChildren();
+  const top=[...municipalities.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"it")).slice(0,8);
+  if(!top.length){
+    const empty=document.createElement("p");
+    empty.className="territory-note";
+    empty.textContent="I Comuni compariranno qui quando saranno presenti annunci in archivio.";
+    municipalityList.appendChild(empty);
+  }else top.forEach(([name,count])=>{
+    const row=document.createElement("div");
+    row.className="territory-row";
+    const label=document.createElement("span");
+    label.textContent=name;
+    const value=document.createElement("strong");
+    value.textContent=String(count);
+    row.append(label,value);
+    municipalityList.appendChild(row);
+  });
 }
 
 function connect(url,key){
@@ -333,14 +500,23 @@ $("signOut").addEventListener("click",async()=>{
 function getFilteredListings(){
   const query=$("listingSearch").value.trim().toLocaleLowerCase("it");
   const seller=$("sellerFilter").value;
+  const province=$("provinceFilter").value;
+  const municipality=$("municipalityFilter").value;
+  const kind=$("listingKindFilter").value;
 
   return cachedListings.filter(item=>{
     const type=item.tipo_venditore||"Da verificare";
+    const info=getMunicipalityInfo(item.comune);
     if(seller&&type!==seller)return false;
+    if(province==="__outside__"&&info)return false;
+    if(province&&province!=="__outside__"&&info?.provinceCode!==province)return false;
+    if(municipality&&normalizeMunicipalityName(canonicalMunicipalityName(item.comune))!==normalizeMunicipalityName(municipality))return false;
+    if(kind==="asta"&&!isAuction(item))return false;
+    if(kind==="normale"&&isAuction(item))return false;
 
     const searchable=[
       item.titolo,item.comune,item.contatto,item.portale,
-      item.tipo_venditore,item.prezzo,item.url
+      item.tipo_venditore,item.prezzo,item.url,getProvinceName(item)
     ].join(" ").toLocaleLowerCase("it");
 
     return !query||searchable.includes(query);
@@ -350,6 +526,7 @@ function getFilteredListings(){
 function renderListings(){
   const visible=getFilteredListings();
   const total=cachedListings.length;
+  renderTerritoryDashboard();
 
   $("archiveSummary").textContent=
     total===visible.length
@@ -404,6 +581,7 @@ async function loadListings(){
   }
 
   cachedListings=data||[];
+  updateTerritoryFilters();
   $("totalCount").textContent=cachedListings.length;
   $("privateCount").textContent=cachedListings.filter(x=>x.tipo_venditore==="Privato").length;
   $("verifyCount").textContent=cachedListings.filter(x=>!x.tipo_venditore||x.tipo_venditore==="Da verificare").length;
@@ -447,6 +625,25 @@ $("exportCsv").addEventListener("click",()=>{
 
 $("listingSearch").addEventListener("input",renderListings);
 $("sellerFilter").addEventListener("change",renderListings);
+$("listingKindFilter").addEventListener("change",renderListings);
+$("provinceFilter").addEventListener("change",()=>{
+  updateTerritoryFilters();
+  renderListings();
+});
+$("municipalityFilter").addEventListener("change",renderListings);
+$("municipality").addEventListener("input",()=>{
+  const info=getMunicipalityInfo($("municipality").value);
+  $("municipalityHint").textContent=info
+    ? "Comune riconosciuto: "+info.name+" · Provincia di "+info.provinceName
+    : $("municipality").value.trim()
+      ? "Comune non presente nel repertorio: sarà salvato come scritto."
+      : "Suggerimenti: tutti i Comuni delle Marche. È possibile inserire anche un Comune fuori regione.";
+});
+$("municipality").addEventListener("change",()=>{
+  const info=getMunicipalityInfo($("municipality").value);
+  if(info)$("municipality").value=info.name;
+});
+updateMunicipalitySuggestions();
 
 $("listingForm").addEventListener("submit",async event=>{
   event.preventDefault();
@@ -465,7 +662,7 @@ $("listingForm").addEventListener("submit",async event=>{
 
   const record={
     titolo:$("title").value.trim(),
-    comune:$("municipality").value.trim(),
+    comune:canonicalMunicipalityName($("municipality").value),
     prezzo:price===""?null:Number(price),
     contatto:$("contact").value.trim()||null,
     tipo_venditore:$("sellerType").value,
@@ -634,6 +831,7 @@ function renderCandidateQueue(candidates){
 
     const titleInput=makeField("Titolo",candidate.titolo);
     const municipalityInput=makeField("Comune",candidate.comune);
+    municipalityInput.setAttribute("list","municipalityOptions");
     const priceInput=makeField("Prezzo (€)",candidate.prezzo,"number");
     priceInput.min="0";
     priceInput.step="0.01";
@@ -730,7 +928,7 @@ function renderCandidateQueue(candidates){
           {
             p_candidate_id:candidate.id,
             p_titolo:titleInput.value.trim(),
-            p_comune:municipalityInput.value.trim(),
+            p_comune:canonicalMunicipalityName(municipalityInput.value),
             p_prezzo:rawPrice===""?null:Number(rawPrice),
             p_contatto:contactInput.value.trim()||null,
             p_tipo_venditore:sellerSelect.value,
