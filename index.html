@@ -112,6 +112,7 @@ l'acquisizione automatica delle notifiche immobiliari.
 </div>
 <div id="gmailMsg" class="status"></div>
 <div id="gmailResults"></div>
+<div id="candidateQueue"></div>
 </section>
 
 <div class="grid panel">
@@ -235,6 +236,9 @@ async function showApp(session){
   $("auth").hidden=true;
   $("appArea").hidden=false;
   await loadListings();
+  await loadPendingCandidates().catch(error=>{
+    msg("gmailMsg","Impossibile caricare la coda dei candidati: "+error.message,"error");
+  });
 }
 
 async function boot(){
@@ -570,6 +574,202 @@ $("connectGmail").addEventListener("click",async()=>{
 
 /* TEST LETTURA GMAIL */
 
+
+async function loadPendingCandidates(){
+  if(!currentUser)return;
+  const {data,error}=await supabase
+    .from("annunci_candidati")
+    .select("*")
+    .eq("stato","da_verificare")
+    .order("created_at",{ascending:false});
+  if(error)throw error;
+  renderCandidateQueue(data||[]);
+}
+
+function renderCandidateQueue(candidates){
+  const container=$("candidateQueue");
+  container.replaceChildren();
+
+  const heading=document.createElement("h3");
+  heading.textContent="Candidati da verificare";
+  container.appendChild(heading);
+
+  const intro=document.createElement("p");
+  intro.className="hint";
+  intro.textContent="I candidati vengono conservati su Supabase. Solo dopo la Sua conferma entreranno nell'archivio annunci.";
+  container.appendChild(intro);
+
+  if(!candidates.length){
+    const empty=document.createElement("p");
+    empty.className="hint";
+    empty.textContent="Nessun candidato in attesa di verifica.";
+    container.appendChild(empty);
+    return;
+  }
+
+  candidates.forEach(candidate=>{
+    const card=document.createElement("article");
+    card.className="candidate-review";
+    card.dataset.candidateId=candidate.id;
+
+    const heading=document.createElement("h3");
+    heading.textContent=candidate.titolo||"Annuncio senza titolo";
+    card.appendChild(heading);
+
+    const grid=document.createElement("div");
+    grid.className="candidate-grid";
+
+    const makeField=(labelText,value,type="text")=>{
+      const wrapper=document.createElement("div");
+      const label=document.createElement("label");
+      label.textContent=labelText;
+      const input=document.createElement("input");
+      input.type=type;
+      input.value=value==null?"":String(value);
+      input.maxLength=type==="url"?1000:180;
+      wrapper.append(label,input);
+      grid.appendChild(wrapper);
+      return input;
+    };
+
+    const titleInput=makeField("Titolo",candidate.titolo);
+    const municipalityInput=makeField("Comune",candidate.comune);
+    const priceInput=makeField("Prezzo (€)",candidate.prezzo,"number");
+    priceInput.min="0";
+    priceInput.step="1";
+    const contactInput=makeField("Contatto venditore",candidate.contatto);
+    const sourceInput=makeField("Fonte / portale",candidate.portale);
+    const urlInput=makeField("Link annuncio",candidate.url,"url");
+
+    const sellerWrap=document.createElement("div");
+    const sellerLabel=document.createElement("label");
+    sellerLabel.textContent="Tipologia venditore";
+    const sellerSelect=document.createElement("select");
+    ["Da verificare","Privato","Agenzia"].forEach(value=>{
+      const option=document.createElement("option");
+      option.value=value;
+      option.textContent=value;
+      sellerSelect.appendChild(option);
+    });
+    sellerSelect.value=candidate.tipo_venditore||"Da verificare";
+    sellerWrap.append(sellerLabel,sellerSelect);
+    grid.appendChild(sellerWrap);
+
+    const details=document.createElement("p");
+    details.className="candidate-warnings";
+    const sender=candidate.notification_sender
+      ?"Mittente notifica: "+candidate.notification_sender+". "
+      :"";
+    const received=candidate.data_pubblicazione
+      ?"Ricevuta: "+new Date(candidate.data_pubblicazione).toLocaleString("it-IT")+". "
+      :"";
+    details.textContent=sender+received+"Il mittente della notifica non viene considerato automaticamente il contatto del venditore.";
+    const actions=document.createElement("div");
+    actions.className="actions";
+
+    const saveButton=document.createElement("button");
+    saveButton.className="gold";
+    saveButton.type="button";
+    saveButton.textContent="Conferma e salva annuncio";
+
+    const discardButton=document.createElement("button");
+    discardButton.className="secondary";
+    discardButton.type="button";
+    discardButton.textContent="Scarta candidato";
+
+    const status=document.createElement("p");
+    status.className="status";
+
+    actions.append(saveButton,discardButton);
+    card.append(grid,details,actions,status);
+    container.appendChild(card);
+
+    discardButton.addEventListener("click",async()=>{
+      discardButton.disabled=true;
+      saveButton.disabled=true;
+      status.textContent="Scarto in corso...";
+      try{
+        const {error}=await supabase
+          .from("annunci_candidati")
+          .update({stato:"scartato",updated_at:new Date().toISOString()})
+          .eq("id",candidate.id)
+          .eq("stato","da_verificare");
+        if(error)throw error;
+        await loadPendingCandidates();
+        msg("gmailMsg","Candidato scartato.", "success");
+      }catch(error){
+        status.textContent="Non è stato possibile scartare il candidato: "+error.message;
+        discardButton.disabled=false;
+        saveButton.disabled=false;
+      }
+    });
+
+    saveButton.addEventListener("click",async()=>{
+      const rawUrl=urlInput.value.trim();
+      const cleanUrl=validUrl(rawUrl);
+      if(rawUrl&&!cleanUrl){
+        status.textContent="Il link deve iniziare con http:// o https://.";
+        return;
+      }
+      if(!titleInput.value.trim()||!municipalityInput.value.trim()){
+        status.textContent="Titolo e comune sono obbligatori.";
+        return;
+      }
+      const rawPrice=priceInput.value.trim();
+      if(rawPrice&&(Number(rawPrice)<0||!Number.isFinite(Number(rawPrice)))){
+        status.textContent="Inserisca un prezzo valido.";
+        return;
+      }
+
+      saveButton.disabled=true;
+      discardButton.disabled=true;
+      status.textContent="Salvataggio nell'archivio in corso...";
+      try{
+        const record={
+          owner_id:currentUser.id,
+          titolo:titleInput.value.trim(),
+          comune:municipalityInput.value.trim(),
+          prezzo:rawPrice===""?null:Number(rawPrice),
+          contatto:contactInput.value.trim()||null,
+          tipo_venditore:sellerSelect.value,
+          portale:sourceInput.value.trim()||null,
+          url:cleanUrl
+        };
+        const {data:listing,error:insertError}=await supabase
+          .from("annunci")
+          .insert(record)
+          .select("id")
+          .single();
+        if(insertError)throw insertError;
+
+        const {error:updateError}=await supabase
+          .from("annunci_candidati")
+          .update({
+            stato:"confermato",
+            annuncio_id:listing.id,
+            updated_at:new Date().toISOString()
+          })
+          .eq("id",candidate.id)
+          .eq("stato","da_verificare");
+
+        if(updateError){
+          status.textContent="ATTENZIONE: l'annuncio è stato creato, ma il candidato non è stato aggiornato. Non prema di nuovo 'Conferma': occorre verificare il collegamento in archivio.";
+          msg("gmailMsg","Annuncio creato; aggiornamento della coda da verificare manualmente.","error");
+          return;
+        }
+
+        await loadListings();
+        await loadPendingCandidates();
+        msg("gmailMsg","Annuncio confermato e trasferito nell'archivio.","success");
+      }catch(error){
+        status.textContent="Salvataggio non riuscito: "+error.message;
+        saveButton.disabled=false;
+        discardButton.disabled=false;
+      }
+    });
+  });
+}
+
 $("testGmail").addEventListener("click",async()=>{
   const button=$("testGmail");
   const results=$("gmailResults");
@@ -633,130 +833,41 @@ $("testGmail").addEventListener("click",async()=>{
       results.appendChild(item);
     });
 
-    const candidateTitle=document.createElement("h3");
-    candidateTitle.textContent="Candidati da verificare";
-    results.appendChild(candidateTitle);
+    const candidates=data.candidates||[];
+    if(candidates.length){
+      const rows=candidates
+        .filter(candidate=>candidate.deduplicationKey)
+        .map(candidate=>({
+          titolo:candidate.titolo||null,
+          comune:candidate.comune||null,
+          prezzo:candidate.prezzo??null,
+          contatto:candidate.contatto||null,
+          tipo_venditore:candidate.tipo_venditore||"Da verificare",
+          portale:candidate.portale||null,
+          url:validUrl(candidate.url),
+          data_pubblicazione:candidate.receivedAt||null,
+          notification_sender:candidate.notificationSender||null,
+          email_subject:candidate.titolo||null,
+          source_email_id:candidate.messageId||null,
+          dedup_key:candidate.deduplicationKey,
+          stato:"da_verificare"
+        }));
 
-    const note=document.createElement("p");
-    note.className="hint";
-    note.textContent="Questi dati sono suggerimenti estratti dalle email. Controlli ogni campo e salvi solo gli annunci pertinenti. I candidati non ancora salvati non sono archiviati in modo permanente.";
-    results.appendChild(note);
-
-    (data.candidates||[]).forEach(candidate=>{
-      const card=document.createElement("article");
-      card.className="candidate-review";
-
-      const heading=document.createElement("h3");
-      heading.textContent=candidate.titolo||"Annuncio senza titolo";
-      card.appendChild(heading);
-
-      const grid=document.createElement("div");
-      grid.className="candidate-grid";
-
-      const makeField=(labelText,value,type="text")=>{
-        const wrapper=document.createElement("div");
-        const label=document.createElement("label");
-        label.textContent=labelText;
-        const input=document.createElement("input");
-        input.type=type;
-        input.value=value==null?"":String(value);
-        input.maxLength=type==="url"?1000:180;
-        wrapper.append(label,input);
-        grid.appendChild(wrapper);
-        return input;
-      };
-
-      const titleInput=makeField("Titolo",candidate.titolo);
-      const municipalityInput=makeField("Comune",candidate.comune);
-      const priceInput=makeField("Prezzo (€)",candidate.prezzo,"number");
-      priceInput.min="0";
-      priceInput.step="1";
-      const contactInput=makeField("Contatto",candidate.contatto);
-      const sourceInput=makeField("Fonte",candidate.portale);
-      const urlInput=makeField("Link annuncio",candidate.url,"url");
-
-      const sellerWrap=document.createElement("div");
-      const sellerLabel=document.createElement("label");
-      sellerLabel.textContent="Tipologia venditore";
-      const sellerSelect=document.createElement("select");
-      ["Da verificare","Privato","Agenzia"].forEach(value=>{
-        const option=document.createElement("option");
-        option.value=value;
-        option.textContent=value;
-        sellerSelect.appendChild(option);
-      });
-      sellerWrap.append(sellerLabel,sellerSelect);
-      grid.appendChild(sellerWrap);
-
-      const warnings=document.createElement("p");
-      warnings.className="candidate-warnings";
-      warnings.textContent=(candidate.warnings||[]).join(" · ")||"Controlli i dati prima di salvare.";
-      const actions=document.createElement("div");
-      actions.className="actions";
-      const saveButton=document.createElement("button");
-      saveButton.className="gold";
-      saveButton.type="button";
-      saveButton.textContent="Conferma e salva annuncio";
-      const discardButton=document.createElement("button");
-      discardButton.className="secondary";
-      discardButton.type="button";
-      discardButton.textContent="Scarta";
-      actions.append(saveButton,discardButton);
-      card.append(grid,warnings,actions);
-      results.appendChild(card);
-
-      discardButton.addEventListener("click",()=>card.remove());
-
-      saveButton.addEventListener("click",async()=>{
-        const rawUrl=urlInput.value.trim();
-        const cleanUrl=validUrl(rawUrl);
-        if(rawUrl&&!cleanUrl){
-          warnings.textContent="Il link deve iniziare con http:// o https://.";
-          return;
+      if(rows.length){
+        const {error:queueError}=await supabase
+          .from("annunci_candidati")
+          .upsert(rows,{onConflict:"owner_id,dedup_key",ignoreDuplicates:true});
+        if(queueError){
+          throw new Error("Email lette, ma non è stato possibile archiviare i candidati: "+queueError.message);
         }
-        if(!titleInput.value.trim()||!municipalityInput.value.trim()){
-          warnings.textContent="Titolo e comune sono obbligatori.";
-          return;
-        }
-        const price=priceInput.value.trim();
-        if(price&&(Number(price)<0||!Number.isFinite(Number(price)))){
-          warnings.textContent="Inserisca un prezzo valido.";
-          return;
-        }
+      }
+    }
 
-        saveButton.disabled=true;
-        warnings.textContent="Salvataggio in corso...";
-        try{
-          const {data:sessionData,error:sessionError}=await supabase.auth.getSession();
-          if(sessionError)throw sessionError;
-          const token=sessionData.session?.access_token;
-          if(!token)throw new Error("Sessione scaduta. Effettui nuovamente l'accesso.");
-
-          const record={
-            titolo:titleInput.value.trim(),
-            comune:municipalityInput.value.trim(),
-            prezzo:price===""?null:Number(price),
-            contatto:contactInput.value.trim()||null,
-            tipo_venditore:sellerSelect.value,
-            portale:sourceInput.value.trim()||null,
-            url:cleanUrl
-          };
-          const {data,error}=await supabase.functions.invoke("nmre-search-engine",{
-            body:record,
-            headers:{Authorization:"Bearer "+token}
-          });
-          if(error||!data?.success){
-            throw new Error(data?.error||error?.message||"Salvataggio non riuscito.");
-          }
-          card.remove();
-          msg("gmailMsg","Annuncio salvato nell'archivio.","success");
-          await loadListings();
-        }catch(error){
-          warnings.textContent=error.message||"Errore durante il salvataggio.";
-          saveButton.disabled=false;
-        }
-      });
-    });
+    await loadPendingCandidates();
+    msg("gmailMsg",
+      `Email analizzate: ${data.total}. Candidati in revisione: ${(data.candidates||[]).length}.`,
+      "success"
+    );
 
   }catch(error){
     msg(
