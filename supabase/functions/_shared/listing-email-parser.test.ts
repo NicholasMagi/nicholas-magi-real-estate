@@ -59,6 +59,26 @@ Deno.test("estrae campi prudentemente e lascia il venditore da verificare", () =
   assertEquals(candidate.reviewStatus, "da_verificare", "stato revisione");
 });
 
+
+Deno.test("riconosce prezzi italiani con separatori diversi", () => {
+  const makeCandidate = (price: string) => parseListingEmail({
+    payload: {
+      headers: [
+        { name: "Subject", value: "Immobile in vendita" },
+        { name: "From", value: "Avvisi <mail@example.com>" },
+      ],
+      mimeType: "text/plain",
+      body: { data: encodeBase64Url("Prezzo: " + price) },
+    },
+  });
+
+  assertEquals(makeCandidate("145.000 €").prezzo, 145000, "migliaia con punto");
+  assertEquals(makeCandidate("145000 €").prezzo, 145000, "senza separatore");
+  assertEquals(makeCandidate("145.000,00 €").prezzo, 145000, "migliaia e decimali");
+  assertEquals(makeCandidate("145.500,50 €").prezzo, 145501, "arrotondamento al singolo euro");
+  assertEquals(makeCandidate("145,000 €").prezzo, 145000, "virgola come separatore migliaia");
+});
+
 Deno.test("la deduplicazione ignora i parametri di tracciamento", () => {
   const first = buildDeduplicationKey({
     urls: ["https://example.com/casa/1?utm_source=mail"],
