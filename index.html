@@ -693,6 +693,7 @@ $("testGmail").addEventListener("click",async()=>{
     $("importAllGmail").disabled=propertyCount===0;
     $("importAllGmail").textContent="Importa email immobiliari ("+propertyCount+")";
     msg("gmailMsg",`Gmail collegato: ${data.account||"account autorizzato"}. Email lette: ${data.total}.`,"success");
+    if(propertyCount>0) await importAllPropertyEmails();
 
     if(!data.emails?.length){
       results.textContent=
