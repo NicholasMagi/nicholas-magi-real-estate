@@ -282,20 +282,23 @@ function updateTerritoryFilters(){
   province.add(new Option("Fuori repertorio","__outside__"));
   province.value=oldProvince;
 
-  const matches=cachedListings
-    .map(item=>String(item.comune||"").trim())
-    .filter(Boolean);
-  const unique=new Map();
-  matches.forEach(name=>{
-    const canonical=canonicalMunicipalityName(name);
-    const key=normalizeMunicipalityName(canonical);
-    if(key&&!unique.has(key))unique.set(key,canonical);
-  });
+  const names=new Map();
+  if(province.value!=="__outside__"){
+    MARCHE_MUNICIPALITIES
+      .filter(item=>!province.value||item.provinceCode===province.value)
+      .forEach(item=>names.set(normalizeMunicipalityName(item.name),item.name));
+  }
+  if(!province.value||province.value==="__outside__"){
+    cachedListings.forEach(item=>{
+      const raw=String(item.comune||"").trim();
+      const info=getMunicipalityInfo(raw);
+      if(!raw||info)return;
+      const key=normalizeMunicipalityName(raw);
+      if(key&&!names.has(key))names.set(key,raw);
+    });
+  }
   municipality.replaceChildren(new Option("Tutti i Comuni",""));
-  [...unique.values()].sort((a,b)=>a.localeCompare(b,"it")).forEach(name=>{
-    const info=getMunicipalityInfo(name);
-    if(province.value==="__outside__"&&info)return;
-    if(province.value&&province.value!=="__outside__"&&info?.provinceCode!==province.value)return;
+  [...names.values()].sort((a,b)=>a.localeCompare(b,"it")).forEach(name=>{
     municipality.add(new Option(name,name));
   });
   if([...municipality.options].some(option=>option.value===oldMunicipality)){
