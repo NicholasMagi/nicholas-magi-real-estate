@@ -103,6 +103,25 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 </section>
 
 <section class="panel">
+<div class="topline"><h2>Collegamenti API dei portali</h2><span class="pill">Fonti ufficiali</span></div>
+<p class="hint">Oltre agli avvisi Gmail, NMRE può interrogare le API dei portali che rilasciano accessi professionali. Le credenziali restano sul server Supabase e non vengono salvate nel browser.</p>
+<div class="topline">
+<div>
+<strong>Immobiliare.it Insights</strong>
+<div id="insightsApiStatus" class="small">Stato API non ancora verificato</div>
+<div class="small">Ricerca di offerte in vendita pubblicate da privati, con disponibilità del numero telefonico.</div>
+</div>
+<div class="actions">
+<button class="secondary" id="checkInsightsApi">Verifica accesso</button>
+<button class="gold" id="syncInsightsApi">Importa annunci privati</button>
+</div>
+</div>
+<div class="small">Idealista Search API: accesso da richiedere al portale. <a href="https://developers.idealista.com/access-request" target="_blank" rel="noopener noreferrer">Richiedi le credenziali API</a>.</div>
+<p class="hint">Avvisi Gmail già riconosciuti: Idealista, Immobiliare.it, Casa.it, Subito, Green-Acres, Gate-away, Trovacasa e Wikicasa. Per gli altri portali useremo solo API, feed o notifiche autorizzate. Il numero telefonico non viene inventato né estratto automaticamente se il portale non lo restituisce.</p>
+<div id="portalApiMsg" class="status"></div>
+</section>
+
+<section class="panel">
 <div class="topline"><h2>Annunci privati e opportunità da valutare</h2><div class="actions"><button class="secondary" id="exportCandidatesCsv">Candidati CSV</button><button class="secondary" id="exportCandidatesXlsx">Candidati Excel</button><button class="secondary" id="refreshCandidates">Aggiorna</button></div></div>
 <p class="hint">Titolo, comune, prezzo, tipologia, superficie, locali e link vengono estratti quando presenti. Le informazioni mancanti possono essere completate prima della conferma. Gli annunci ambigui restano in sospeso finché non li approva.</p>
 <input id="candidateSearch" type="search" placeholder="Cerca per titolo, comune o portale" aria-label="Cerca annunci">
@@ -246,6 +265,7 @@ async function showApp(session){
   $("appArea").hidden=false;
   await loadListings();
   await loadCandidates();
+  checkInsightsApi();
   if(!candidateRefreshTimer){
     candidateRefreshTimer=setInterval(()=>{
       if(currentUser && document.visibilityState==="visible") loadCandidates();
@@ -342,6 +362,57 @@ $("signOut").addEventListener("click",async()=>{
   const {error}=await supabase.auth.signOut();
   if(error)msg("listMsg",error.message,"error");
 });
+
+async function checkInsightsApi(){
+  if(!currentUser||!supabase)return;
+  $("checkInsightsApi").disabled=true;
+  msg("portalApiMsg","Verifica delle credenziali di Immobiliare.it Insights...");
+  try{
+    const {data,error}=await supabase.functions.invoke("nmre-insights-sync",{method:"GET"});
+    if(error)throw error;
+    if(!data?.success)throw new Error(data?.error||"Stato API non disponibile.");
+    const status=data.configured
+      ?"Credenziali presenti · ambiente "+data.environment
+      :"In attesa di accesso API · "+(data.missingSecrets||[]).length+" credenziali server mancanti";
+    $("insightsApiStatus").textContent=status;
+    msg("portalApiMsg",data.configured
+      ?"Collegamento configurato. Può avviare la ricerca degli ultimi 30 giorni."
+      :"Connettore pronto, ma l'accesso professionale non è ancora configurato su Supabase.","");
+  }catch(error){
+    $("insightsApiStatus").textContent="Servizio non raggiungibile";
+    msg("portalApiMsg",error.message||"Impossibile verificare il connettore.","error");
+  }finally{
+    $("checkInsightsApi").disabled=false;
+  }
+}
+
+async function syncInsightsApi(){
+  if(!currentUser||!supabase)return;
+  $("syncInsightsApi").disabled=true;
+  $("checkInsightsApi").disabled=true;
+  msg("portalApiMsg","Ricerca degli annunci privati su Immobiliare.it Insights...");
+  try{
+    const {data,error}=await supabase.functions.invoke("nmre-insights-sync",{body:{lookbackDays:30}});
+    if(error)throw error;
+    if(data?.code==="INSIGHTS_CREDENTIALS_MISSING"){
+      $("insightsApiStatus").textContent="In attesa di credenziali API";
+      msg("portalApiMsg",data.error,"error");
+      return;
+    }
+    if(!data?.success)throw new Error(data?.error||"Importazione non riuscita.");
+    $("insightsApiStatus").textContent="Ultima ricerca completata · "+data.resultsRead+" risultati analizzati";
+    msg("portalApiMsg",data.inserted+" nuovi candidati importati · "+data.alreadyPresent+" già presenti · "+data.privateCandidatesMatched+" privati riconosciuti. "+data.note,"success");
+    await loadCandidates();
+  }catch(error){
+    msg("portalApiMsg",error.message||"Errore durante l'importazione.","error");
+  }finally{
+    $("syncInsightsApi").disabled=false;
+    $("checkInsightsApi").disabled=false;
+  }
+}
+
+$("checkInsightsApi").addEventListener("click",checkInsightsApi);
+$("syncInsightsApi").addEventListener("click",syncInsightsApi);
 
 async function loadCandidates(){
   if(!currentUser)return;
