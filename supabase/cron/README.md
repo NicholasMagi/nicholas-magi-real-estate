@@ -19,6 +19,6 @@ Lo script salva l'URL del progetto in Vault con il nome `project_url` se manca, 
 
 Dopo la prima esecuzione, controlli `cron.job_run_details` per il job `nmre-gmail-hourly-sync`. La funzione restituisce conteggi aggregati (email elencate, lette, candidate, inserite, duplicati, errori) e non registra il contenuto delle email.
 
-La sincronizzazione legge fino a 25 email della Posta in arrivo degli ultimi 30 giorni. Riconosce le email immobiliari con segnali testuali e link verso una allowlist di portali; deduplica tramite `owner_id,dedup_key`. Non effettua scraping dei portali.
+La sincronizzazione cerca fino a 100 email degli ultimi 30 giorni in tutta la casella (non soltanto nella Posta in arrivo), quindi intercetta anche gli avvisi archiviati. Riconosce le email immobiliari con segnali testuali e link verso una allowlist di portali; deduplica tramite `owner_id,dedup_key`. Non effettua scraping dei portali.
 
 **Sicurezza:** Vault conserva la chiave; non inserirla nel frontend, in file del repository o in messaggi. Supabase documenta che pg_net può mantenere temporaneamente gli header della richiesta in coda fino all'invio: mantenere l'accesso al database e agli schemi di rete strettamente controllato.
