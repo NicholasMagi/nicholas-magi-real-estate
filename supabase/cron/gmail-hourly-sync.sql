@@ -3,8 +3,14 @@
 -- value: la Supabase Secret API key (sb_secret_...), mai la publishable key.
 -- Non inserire la chiave direttamente in questo file o nel repository.
 --
--- La funzione Edge nmre-gmail-scheduled accetta esclusivamente chiamate
--- autenticate con la Secret API key tramite withSupabase({ auth: "secret" }).
+-- La funzione Edge nmre-gmail-scheduled accetta esclusivamente la Secret API key
+-- predefinita (nome API key: default) tramite withSupabase({ auth: "secret" }).
+-- Riduce anche i privilegi sullo schema interno net: i client anon/authenticated
+-- non devono poter accedere alle code HTTP di pg_net.
+
+revoke all on schema net from public, anon, authenticated;
+revoke all on all tables in schema net from public, anon, authenticated;
+revoke all on all sequences in schema net from public, anon, authenticated;
 
 do $$
 begin
