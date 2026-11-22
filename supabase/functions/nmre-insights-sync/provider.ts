@@ -41,7 +41,7 @@ export function buildInsightsSearchPayload(now: Date, lookbackDays = 30, page = 
     Filters: {
       comparableTypeID: 1,
       contractTypeID: 1,
-      categoryTypeID: 1,
+      categoryTypeID: null,
       propertyTypeID: null,
       propertyQualityID: null,
       boundingBox: NMRE_BOUNDING_BOX,
