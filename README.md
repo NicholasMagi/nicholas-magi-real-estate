@@ -6,12 +6,14 @@ Applicazione web per la raccolta, la verifica e la gestione di opportunità immo
 
 - Accesso personale con Supabase Auth.
 - Archivio annunci con ricerca, filtri per venditore e stato del contatto.
+- Dettagli strutturati: tipologia immobile, superficie, locali, camere e bagni.
 - Inserimento manuale e gestione dei contatti dei proprietari.
 - Agenda dei richiami con scadenze passate, odierne e dei prossimi sette giorni.
 - Storico di telefonate, WhatsApp, email, appuntamenti e note.
 - Collegamento Gmail OAuth, con token conservati cifrati lato server.
 - Acquisizione automatica di notifiche immobiliari in background.
 - Coda di annunci privati riconosciuti e opportunità ambigue da approvare manualmente.
+- Estrazione euristica di comune, prezzo, tipologia, superficie, locali, camere e bagni quando presenti nella notifica.
 - Deduplicazione tramite ID Gmail.
 - Esportazione CSV ed Excel dell'archivio e della coda candidati.
 
