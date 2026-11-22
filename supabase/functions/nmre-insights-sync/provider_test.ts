@@ -8,7 +8,8 @@ import {
 Deno.test("Insight search is restricted to private sale offers with a phone number available", () => {
   const payload = buildInsightsSearchPayload(new Date("2026-11-23T12:00:00Z"), 30, 2);
   if (payload.Filters.clientTypeID !== 1) throw new Error("Client type must be private");
-  if (payload.Filters.comparableTypeID !== 1 || payload.Filters.contractTypeID !== 1) throw new Error("Search must target sale offers");
+  if (payload.Filters.contractTypeID !== 1) throw new Error("Search must target sale offers");
+  if ("comparableTypeID" in payload.Filters) throw new Error("Full Search endpoint defines Asking type implicitly");
   if (payload.Filters.phoneNumberProvided !== true) throw new Error("Phone availability filter missing");
   if (payload.Pagination.page !== 2 || payload.Pagination.limit !== 10) throw new Error("Pagination mismatch");
   if (payload.Filters.pubblicationStatusID.join(",") !== "1,2") throw new Error("Publication filters mismatch");
@@ -18,6 +19,19 @@ Deno.test("Insight search is restricted to private sale offers with a phone numb
 Deno.test("Italian date is formatted in the documented ISO suffix format", () => {
   const value = formatInsightsDate(new Date("2026-11-23T12:00:00Z"));
   if (value !== "23/11/2026T00:00:00Z") throw new Error("Unexpected date: " + value);
+});
+
+Deno.test("Documented Italian date format is parsed correctly", () => {
+  const candidate = toCandidate({
+    uuid: "date-1",
+    listingUrl: "https://www.immobiliare.it/annunci/111111111/",
+    location: { municipality: "Castelfidardo" },
+    collectionDate: "23/11/2026T00:00:00Z"
+  }, "user-id");
+  if (!candidate) throw new Error("Expected candidate");
+  if (candidate.data_pubblicazione !== "2026-11-23T00:00:00.000Z") {
+    throw new Error("Unexpected parsed date: " + candidate.data_pubblicazione);
+  }
 });
 
 Deno.test("Only allowed Marche municipalities and official listing URLs are imported", () => {
