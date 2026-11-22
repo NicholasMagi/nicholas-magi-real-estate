@@ -99,13 +99,33 @@ function collectMimeParts(part: GmailMimePart | undefined, out: {
   for (const child of part.parts ?? []) collectMimeParts(child, out);
 }
 
+function extractPrimaryDetailLinks(html: string): string[] {
+  const links: string[] = [];
+  const anchors = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = anchors.exec(html)) !== null) {
+    const label = htmlToText(match[2]).replace(/\s+/g, " ").trim();
+    if (/vedi dettagli|scopri i dettagli|visualizza annuncio|apri annuncio/i.test(label)) {
+      links.push(decodeHtmlEntities(match[1]));
+    }
+  }
+  return links;
+}
+
 export function extractGmailMessageText(message: GmailApiMessage): string {
   const parts = { plain: [] as string[], html: [] as string[] };
   collectMimeParts(message.payload, parts);
 
-  if (parts.plain.length) return parts.plain.join("\n\n").trim();
-  if (parts.html.length) return parts.html.map(htmlToText).join("\n\n");
-  return "";
+  const htmlText = parts.html.map(htmlToText).filter(Boolean);
+  const mainText = parts.plain.length
+    ? parts.plain.join("\n\n").trim()
+    : htmlText.join("\n\n");
+
+  // Il link dell'annuncio può esistere solo nell'href del pulsante HTML.
+  // Lo mettiamo prima degli altri URL promozionali o di gestione ricerca.
+  const detailLinks = parts.html.flatMap(extractPrimaryDetailLinks);
+  return [...detailLinks, mainText].filter(Boolean).join("\n\n");
 }
 
 function getHeader(message: GmailApiMessage, name: string): string {
@@ -174,10 +194,10 @@ function parseItalianPrice(raw: string): number | null {
   }
 
   const number = Number(normalized);
-  if (!Number.isFinite(number) || number < 10000 || number > 100000000) {
+  if (!Number.isFinite(number) || number <= 0 || number > 100000000) {
     return null;
   }
-  return Math.round(number);
+  return Math.round(number * 100) / 100;
 }
 
 function extractPrice(text: string): number | null {
@@ -197,11 +217,38 @@ function extractPrice(text: string): number | null {
 }
 
 function extractMunicipality(text: string): string | null {
-  const match = text.match(
+  const labeled = text.match(
     /(?:comune|località|localita|ubicazione)\s*[:\-]\s*([^\n,;|]{2,70})/i
   );
-  const value = match?.[1]?.trim().replace(/[.]+$/, "");
-  return value || null;
+  const labeledValue = labeled?.[1]?.trim().replace(/[.]+$/, "");
+  if (labeledValue) return labeledValue;
+
+  // Es.: "via A. Bravi, 23, Recanati".
+  const address = text.match(
+    /(?:^|\n)[^\n]*(?:via|viale|piazza|corso|vicolo|strada|contrada)\s+[^,\n]+,\s*\d+[a-z]?\s*,\s*([\p{L}'’ -]{2,50})\s*(?=\n|$)/imu
+  );
+  return address?.[1]?.trim().replace(/[.]+$/, "") || null;
+}
+
+function extractListingTitle(subject: string, body: string): string {
+  const normalizedSubject = subject.trim();
+  const genericSubject =
+    /^(?:\d+\s+)?nuov[oi]\s+annunci?o(?:\s+per la tua ricerca(?:\s+.*)?)?$/i.test(normalizedSubject) ||
+    /^notifica immobiliare senza oggetto$/i.test(normalizedSubject);
+
+  if (!genericSubject) return subject;
+
+  const lines = body
+    .split(/\r?\n/)
+    .map((line) => line.replace(/[\u200B-\u200D\uFEFF]/g, "").trim())
+    .filter(Boolean);
+
+  const listingLine = lines.find((line) =>
+    /\b(appartament[oi]|villa|villetta|attico|rustico|casale|terreno|monolocale|bilocale|trilocale|quadrilocale|negozio|ufficio)\b/i.test(line) &&
+    !/nuov[oi]\s+annunci?o\s+per la tua ricerca|case in vendita|la tua ricerca|gestisci ricerca|avvia ricerca/i.test(line)
+  );
+
+  return (listingLine || subject).slice(0, 180);
 }
 
 function getSenderDomain(from: string): string | null {
@@ -226,6 +273,11 @@ export function parseListingEmail(message: GmailApiMessage): ListingCandidate {
   const from = getHeader(message, "from");
   const body = extractGmailMessageText(message);
   const combined = [subject, body].filter(Boolean).join("\n");
+  const extractedTitle = extractListingTitle(subject, body);
+  const isAuction = /\ball['’]asta\b|\basta giudiziaria\b/i.test(extractedTitle + " " + body);
+  const titolo = isAuction && !/^ASTA\s*[—-]/i.test(extractedTitle)
+    ? "ASTA — " + extractedTitle
+    : extractedTitle;
   const urls = extractUrls(combined);
   // Le conferme di ricerche salvate e le email di onboarding/sicurezza
   // possono contenere il nome del portale o parole immobiliari, ma non
@@ -246,6 +298,7 @@ export function parseListingEmail(message: GmailApiMessage): ListingCandidate {
   }
 
   if (!body) warnings.push("Il messaggio non contiene testo leggibile.");
+  if (isAuction) warnings.push("Asta giudiziaria: verificare avviso di vendita, prezzo base e offerta minima; non classificare come vendita privata.");
   if (extractEmailAddress(from)) warnings.push("Il mittente è la casella che ha inviato la notifica: non è un contatto verificato del venditore.");
   if (!urls.length) warnings.push("Non è stato individuato un link all'annuncio.");
   if (!extractMunicipality(combined)) warnings.push("Comune non riconosciuto con certezza.");
@@ -254,7 +307,7 @@ export function parseListingEmail(message: GmailApiMessage): ListingCandidate {
   return {
     messageId: message.id ?? "",
     deduplicationKey: buildDeduplicationKey({ urls, sender: from, subject }),
-    titolo: subject,
+    titolo,
     comune: extractMunicipality(combined),
     prezzo: extractPrice(combined),
     // Il mittente è il portale/notificatore, non necessariamente il venditore.
