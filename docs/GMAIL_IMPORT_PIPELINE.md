@@ -13,6 +13,7 @@ Il codice della Edge Function `nmre-gmail-reader` nel branch di sviluppo:
 
 Nel branch è stata aggiunta una coda persistente basata su `public.annunci_candidati`:
 - importa solo messaggi il cui contenuto presenta indicatori testuali di una notifica immobiliare;
+- esclude le conferme di ricerche salvate, le email di benvenuto e le notifiche di configurazione/sicurezza, evitando che il nome del portale venga scambiato per un annuncio;
 - usa `upsert` con vincolo `owner_id,dedup_key` e ignora i duplicati già presenti;
 - ricarica dalla tabella i candidati con stato `da_verificare`;
 - permette di modificare i campi, scartare il candidato o confermarlo;
