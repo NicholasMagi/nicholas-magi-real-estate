@@ -291,7 +291,36 @@ $("listingForm").addEventListener("submit",async event=>{
     url:cleanUrl
   };
   msg("formMsg","Salvataggio in corso...");
-  const {error}=await supabase.from("annunci").insert(record);
+  const { data: sessionData } = await supabase.auth.getSession();
+const token = sessionData.session?.access_token;
+
+if (!token) {
+  msg("formMsg", "Sessione scaduta. Effettui nuovamente l'accesso.", "error");
+  return;
+}
+
+const { data, error } = await supabase.functions.invoke(
+  "nmre-search-engine",
+  {
+    body: {
+      titolo: record.titolo,
+      comune: record.comune,
+      prezzo: record.prezzo,
+      contatto: record.contatto,
+      tipo_venditore: record.tipo_venditore,
+      portale: record.portale,
+      url: record.url
+    },
+    headers: {
+      Authorization: Bearer ${token}
+    }
+  }
+);
+
+if (error || !data?.success) {
+  msg("formMsg", data?.error || error?.message || "Errore durante il salvataggio.", "error");
+  return;
+}
   if(error){msg("formMsg",error.message,"error");return;}
   $("listingForm").reset();
   msg("formMsg","Annuncio salvato correttamente.","success");
