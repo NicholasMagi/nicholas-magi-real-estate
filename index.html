@@ -128,7 +128,7 @@ l'acquisizione automatica delle notifiche immobiliari.
 <input id="title" required maxlength="180" placeholder="Es. Appartamento con terrazzo">
 <div class="row">
 <div><label>Comune</label><input id="municipality" required maxlength="100" placeholder="Es. Osimo"></div>
-<div><label>Prezzo richiesto (€)</label><input id="price" type="number" min="0" step="1" placeholder="180000"></div>
+<div><label>Prezzo richiesto (€)</label><input id="price" type="number" min="0" step="0.01" placeholder="180000"></div>
 </div>
 <div class="row">
 <div><label>Contatto</label><input id="contact" maxlength="180" placeholder="Telefono o email"></div>
@@ -202,7 +202,7 @@ function validUrl(value){
 
 function euro(value){
   if(value===null||value==="")return "Prezzo non indicato";
-  return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(Number(value));
+  return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:2}).format(Number(value));
 }
 
 function connect(url,key){
@@ -636,7 +636,7 @@ function renderCandidateQueue(candidates){
     const municipalityInput=makeField("Comune",candidate.comune);
     const priceInput=makeField("Prezzo (€)",candidate.prezzo,"number");
     priceInput.min="0";
-    priceInput.step="1";
+    priceInput.step="0.01";
     const contactInput=makeField("Contatto venditore",candidate.contatto);
     const sourceInput=makeField("Fonte / portale",candidate.portale);
     const urlInput=makeField("Link annuncio",candidate.url,"url");
@@ -832,7 +832,7 @@ $("testGmail").addEventListener("click",async()=>{
           url:validUrl(candidate.url),
           data_pubblicazione:candidate.receivedAt||null,
           notification_sender:candidate.notificationSender||null,
-          email_subject:candidate.titolo||null,
+          email_subject:candidate.emailSubject||null,
           source_email_id:candidate.messageId||null,
           dedup_key:candidate.deduplicationKey,
           stato:"da_verificare"
