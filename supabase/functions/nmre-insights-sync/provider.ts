@@ -21,10 +21,18 @@ export const NMRE_BOUNDING_BOX = {
   ]]
 };
 
+function normalize(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase("it");
+}
+
 export function formatInsightsDate(date: Date): string {
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  return day + "/" + month + "/" + date.getFullYear();
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  return day + "/" + month + "/" + date.getUTCFullYear() + "T00:00:00Z";
 }
 
 export function buildInsightsSearchPayload(now: Date, lookbackDays = 30, page = 1) {
@@ -33,7 +41,7 @@ export function buildInsightsSearchPayload(now: Date, lookbackDays = 30, page = 
     Filters: {
       comparableTypeID: 1,
       contractTypeID: 1,
-      categoryTypeID: null,
+      categoryTypeID: 1,
       propertyTypeID: null,
       propertyQualityID: null,
       boundingBox: NMRE_BOUNDING_BOX,
@@ -63,21 +71,9 @@ export function buildInsightsSearchPayload(now: Date, lookbackDays = 30, page = 
   };
 }
 
-function normalized(value: unknown): string {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLocaleLowerCase("it");
-}
-
 function parseApiDate(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
-  const text = value.trim();
-  const italian = text.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:T.*)?$/);
-  const parsed = italian
-    ? new Date(Number(italian[3]), Number(italian[2]) - 1, Number(italian[1]))
-    : new Date(text);
+  const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
@@ -101,22 +97,28 @@ function safeNumber(value: unknown): number | null {
 }
 
 export function toCandidate(item: Record<string, any>, ownerId: string) {
+  // Full Search by Attribute returns expanded "Offerta" details. The search payload
+  // explicitly filters clientTypeID=1 (Privato) and phoneNumberProvided=true.
   const location = item?.location ?? {};
   const comune = typeof location.municipality === "string" ? location.municipality.trim() : "";
-  if (!ALLOWED_MUNICIPALITIES.has(normalized(comune))) return null;
+  if (!ALLOWED_MUNICIPALITIES.has(normalize(comune))) return null;
 
   const url = validListingUrl(item.listingUrl);
   const uuid = typeof item.uuid === "string" ? item.uuid.trim() : "";
   if (!url || !uuid) return null;
 
-  const rawTitle = typeof item.extra?.title === "string" ? item.extra.title.trim() : "";
+  // Respect a future explicit classification field should the provider expose one.
+  if (normalize(item.clientType) === "professionista") return null;
+
   const propertyType = typeof item.propertyType === "string" ? item.propertyType.trim() : "";
+  const rawTitle = typeof item.extra?.title === "string" ? item.extra.title.trim() : "";
   const title = (rawTitle || (propertyType ? propertyType + " a " + comune : "Immobile a " + comune)).slice(0, 250);
-  const rawPrice = safeNumber(item.value?.askingPrice);
+  const rawPrice = safeNumber(item.value?.askingPrice ?? item.askingPrice);
   const rawSurface = safeNumber(item.grossSquareFootage);
   const rawRooms = safeNumber(item.rooms);
-  const rawBathrooms = safeNumber(item.features?.numberOfBathrooms);
-  const seller = normalized(item.clientType) === "privato" ? "Privato" : "Da verificare";
+  const rawBathrooms = safeNumber(item.features?.numberOfBathrooms ?? item.numberOfBathrooms);
+  const rawClientType = normalize(item.clientType);
+  const seller = rawClientType === "privato" || !rawClientType ? "Privato" : "Da verificare";
 
   return {
     owner_id: ownerId,
