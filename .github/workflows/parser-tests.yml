@@ -23,3 +23,7 @@ jobs:
         run: deno test supabase/functions/_shared/listing-email-parser.test.ts
       - name: Type-check Gmail parser
         run: deno check supabase/functions/_shared/listing-email-parser.ts
+      - name: Run territorial catalog tests
+        run: deno test territorio.test.js
+      - name: Type-check territorial catalog
+        run: deno check territorio.js
