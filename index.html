@@ -316,12 +316,13 @@ async function loadCandidates(){
   const {data,error}=await supabase.from("annunci_candidati").select("*").eq("stato","da_verificare").order("created_at",{ascending:false}).limit(100);
   if(error){box.innerHTML="";msg("candidateMsg",error.message,"error");return;}
   if(!data.length){box.innerHTML='<p class="hint">Nessun nuovo candidato da verificare.</p>';msg("candidateMsg","");return;}
-  box.innerHTML=data.map(c=>`<article class="candidate" data-candidate="${safe(c.id)}">
+  box.innerHTML=data.map(c=>`<article class="candidate" data-candidate="${safe(c.id)}" data-url="${safe(c.url||"")}">
     <div class="meta">${safe(c.portale||"Fonte email")} · ${safe(c.notification_sender||"Mittente non disponibile")}</div>
     <label>Titolo / oggetto</label><input data-field="titolo" value="${safe(c.titolo||"")}" maxlength="250">
     <div class="row"><div><label>Comune</label><input data-field="comune" value="${safe(c.comune||"")}" placeholder="Inserire il comune"></div>
     <div><label>Prezzo (€)</label><input data-field="prezzo" type="number" min="0" step="1" value="${c.prezzo??""}"></div></div>
     <div class="meta">Email: ${safe(c.email_subject||"")} · ${safe(c.data_pubblicazione||"")}</div>
+    <label>Tipologia venditore</label><select data-field="venditore"><option value="Da verificare">Da verificare</option><option value="Privato">Privato</option><option value="Agenzia">Agenzia</option></select>
     <div class="meta">${safe(c.contatto||"Contatto da verificare")}</div>
     <div class="candidate-actions"><button class="gold" data-confirm="${safe(c.id)}">Conferma nell'archivio</button><button class="danger" data-discard="${safe(c.id)}">Scarta</button>${validUrl(c.url)?'<a href="'+safe(validUrl(c.url))+'" target="_blank" rel="noopener noreferrer">Apri fonte</a>':""}</div>
   </article>`).join("");
@@ -334,13 +335,15 @@ async function confirmCandidate(id,button){
   const card=button.closest("[data-candidate]");
   const value=name=>card.querySelector('[data-field="'+name+'"]').value.trim();
   const title=value("titolo"), municipality=value("comune"), price=value("prezzo");
+  const seller=value("venditore");
+  const sourceUrl=card.dataset.url||null;
   if(!title||!municipality){msg("candidateMsg","Titolo e comune sono necessari per confermare.","error");return;}
   button.disabled=true;
   const {error}=await supabase.rpc("nmre_confirm_annuncio_candidato",{
     p_candidate_id:id,p_titolo:title,p_comune:municipality,
     p_prezzo:price===""?null:Number(price),
-    p_contatto:null,p_tipo_venditore:"Da verificare",
-    p_portale:"Email alert",p_url:null
+    p_contatto:null,p_tipo_venditore:seller,
+    p_portale:"Email alert",p_url:sourceUrl
   });
   if(error){msg("candidateMsg",error.message,"error");button.disabled=false;return;}
   msg("candidateMsg","Annuncio confermato e trasferito nell'archivio.","success");
@@ -369,13 +372,14 @@ function guessPrice(text){
 
 async function importEmailCandidate(email,button){
   button.disabled=true;
-  const text=(email.subject||"")+" "+(email.snippet||"");
+  const text=(email.subject||"")+" "+(email.snippet||"")+" "+(email.bodyText||"");
   const urlMatch=text.match(/https?:\/\/[^\s<>"']+/i);
   const row={
     owner_id:currentUser.id,titolo:(email.subject||"Notifica immobiliare").slice(0,250),
     comune:guessMunicipality(text)||null,prezzo:guessPrice(text),
     tipo_venditore:"Da verificare",portale:"Email alert",
     url:urlMatch?urlMatch[0].replace(/[),.;]+$/,""):null,
+    data_pubblicazione:email.date&&!Number.isNaN(Date.parse(email.date))?new Date(email.date).toISOString():null,
     notification_sender:email.from||null,email_subject:email.subject||null,
     source_email_id:email.id,dedup_key:"gmail:"+email.id,
     stato:"da_verificare"
@@ -629,7 +633,7 @@ $("testGmail").addEventListener("click",async()=>{
       date.textContent=email.date||"";
 
       const snippet=document.createElement("div");
-      snippet.textContent=email.snippet||"";
+      snippet.textContent=email.bodyText||email.snippet||"";
 
       const importButton=document.createElement("button");
       importButton.className="secondary";
