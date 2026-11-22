@@ -34,6 +34,7 @@ export type ListingCandidate = {
   allUrls: string[];
   receivedAt: string | null;
   reviewStatus: "da_verificare";
+  likelyRealEstate: boolean;
   warnings: string[];
 };
 
@@ -226,7 +227,9 @@ export function parseListingEmail(message: GmailApiMessage): ListingCandidate {
   const body = extractGmailMessageText(message);
   const combined = [subject, body].filter(Boolean).join("\n");
   const urls = extractUrls(combined);
+  const likelyRealEstate = /immobil|annunci?o|casa|appartament|villetta|villa|terreno|vendita|vendesi|affitto|bilocale|trilocale|quadrilocale|monolocale|attico|rustico|commerciale|nuova costruzione|prezzo/i.test(combined);
   const warnings: string[] = [];
+  if (!likelyRealEstate) warnings.push("Email non chiaramente riconducibile a una notifica immobiliare: non importata automaticamente nella coda.");
 
   if (!body) warnings.push("Il messaggio non contiene testo leggibile.");
   if (extractEmailAddress(from)) warnings.push("Il mittente è la casella che ha inviato la notifica: non è un contatto verificato del venditore.");
@@ -251,6 +254,7 @@ export function parseListingEmail(message: GmailApiMessage): ListingCandidate {
       ? new Date(Number(message.internalDate)).toISOString()
       : null,
     reviewStatus: "da_verificare",
+    likelyRealEstate,
     warnings,
   };
 }
