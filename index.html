@@ -430,18 +430,29 @@ function guessPrice(text){
 
 function guessListingUrl(text){
   const matches=text.match(/https?:\/\/[^\s<>"']+/gi)||[];
+  const preferred=["idealista.it","immobiliare.it","casa.it","subito.it","green-acres.it","green-acres.com","gate-away.com"];
+  const ignored=["unsubscribe","unsub","privacy","terms","cookie","tracking","track.","pixel","open.","click.","newsletter","preferences","account","login","register"];
+  const candidates=[];
   for(const raw of matches){
     const cleaned=raw.replace(/[),.;\]]+$/,"");
     try{
       const url=new URL(cleaned);
       if(url.hostname.includes("google.")&&url.pathname==="/url"){
         const target=url.searchParams.get("q")||url.searchParams.get("url");
-        if(target&&validUrl(target))return target;
+        if(target&&validUrl(target))candidates.push(target);
+        continue;
       }
-      if(!/google\.(com|it)$/.test(url.hostname))return cleaned;
+      const host=url.hostname.toLowerCase().replace(/^www\./,"");
+      if(host==="google.com"||host==="google.it"||host.endsWith(".google.com"))continue;
+      if(ignored.some(word=>(host+" "+url.pathname+" "+url.search).toLowerCase().includes(word)))continue;
+      if(/\.(png|jpe?g|gif|webp|svg|css|js)(\?|$)/i.test(url.pathname))continue;
+      const score=preferred.some(domain=>host===domain||host.endsWith("."+domain))?100:10;
+      candidates.push({url:cleaned,score});
     }catch{}
   }
-  return null;
+  const ranked=candidates.map(item=>typeof item==="string"?{url:item,score:preferred.some(d=>item.includes(d))?100:10}:item);
+  ranked.sort((a,b)=>b.score-a.score);
+  return ranked[0]?.url||null;
 }
 
 function isPropertyEmail(email){
