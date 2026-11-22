@@ -60,6 +60,34 @@ Deno.test("estrae campi prudentemente e lascia il venditore da verificare", () =
 });
 
 
+Deno.test("esclude email che non sembrano notifiche immobiliari", () => {
+  const candidate = parseListingEmail({
+    payload: {
+      headers: [
+        { name: "Subject", value: "Promemoria appuntamento" },
+        { name: "From", value: "Mail <mail@example.com>" },
+      ],
+      mimeType: "text/plain",
+      body: { data: encodeBase64Url("Ci vediamo domani alle 10.") },
+    },
+  });
+  assertEquals(candidate.likelyRealEstate, false, "email generica esclusa");
+});
+
+Deno.test("riconosce una notifica immobiliare", () => {
+  const candidate = parseListingEmail({
+    payload: {
+      headers: [
+        { name: "Subject", value: "Nuovo appartamento in vendita" },
+        { name: "From", value: "Portale <mail@example.com>" },
+      ],
+      mimeType: "text/plain",
+      body: { data: encodeBase64Url("Scopri il nuovo immobile.") },
+    },
+  });
+  assertEquals(candidate.likelyRealEstate, true, "notifica immobiliare riconosciuta");
+});
+
 Deno.test("riconosce prezzi italiani con separatori diversi", () => {
   const makeCandidate = (price: string) => parseListingEmail({
     payload: {
