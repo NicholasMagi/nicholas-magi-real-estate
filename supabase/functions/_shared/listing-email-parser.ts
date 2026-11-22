@@ -66,15 +66,15 @@ function htmlToText(html: string): string {
   return decodeHtmlEntities(
     html
       // Nelle notifiche dei portali il link all'immobile spesso è solo nell'href.
-      .replace(/<a\\b[^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>/gi, (_match, href, label) => `${label} ${href}`)
-      .replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/gi, " ")
-      .replace(/<style\\b[^>]*>[\\s\\S]*?<\\/style>/gi, " ")
-      .replace(/<(br|\\/p|\\/div|\\/li|\\/tr|\\/h[1-6])\\b[^>]*>/gi, "\\n")
+      .replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_match, href, label) => label + " " + href)
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+      .replace(/<(br|\/p|\/div|\/li|\/tr|\/h[1-6])\b[^>]*>/gi, "\n")
       .replace(/<[^>]+>/g, " ")
   )
-    .replace(/[\\t\\u00a0 ]+/g, " ")
-    .replace(/ *\\n */g, "\\n")
-    .replace(/\\n{3,}/g, "\\n\\n")
+    .replace(/[\t\u00a0 ]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
