@@ -93,8 +93,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 <section class="panel">
 <h2>Collegamento Gmail</h2>
 <p class="hint">
-Colleghi la casella dedicata per predisporre
-l'acquisizione automatica delle notifiche immobiliari.
+Colleghi la casella dedicata per leggere le notifiche immobiliari. Il test legge le ultime 10 email della posta in arrivo; potrà importare quelle pertinenti tra i candidati da verificare.
 </p>
 <div class="actions">
 <button class="gold" id="connectGmail">Collega Gmail</button>
@@ -146,6 +145,10 @@ l'acquisizione automatica delle notifiche immobiliari.
 
 <section class="panel">
 <div class="topline"><h2>Archivio annunci</h2><button class="secondary" id="refresh">Aggiorna</button></div>
+<div class="toolbar">
+<input id="listingSearch" type="search" placeholder="Cerca per titolo, comune o fonte">
+<select id="sellerFilter" aria-label="Filtra per venditore"><option value="">Tutti i venditori</option><option value="Privato">Privato</option><option value="Agenzia">Agenzia</option><option value="Da verificare">Da verificare</option></select>
+</div>
 <div id="listingList"><p class="hint">Caricamento annunci...</p></div>
 <div id="listMsg" class="status"></div>
 </section>
@@ -399,6 +402,12 @@ async function loadListings(){
   $("totalCount").textContent=data.length;
   $("privateCount").textContent=data.filter(x=>x.tipo_venditore==="Privato").length;
   $("verifyCount").textContent=data.filter(x=>!x.tipo_venditore||x.tipo_venditore==="Da verificare").length;
+  const query=$("listingSearch").value.trim().toLocaleLowerCase("it");
+  const seller=$("sellerFilter").value;
+  const filtered=data.filter(x=>{
+    const haystack=[x.titolo,x.comune,x.portale,x.contatto].filter(Boolean).join(" ").toLocaleLowerCase("it");
+    return (!query||haystack.includes(query))&&(!seller||((x.tipo_venditore||"Da verificare")===seller));
+  });
 
   if(!data.length){
     $("listingList").innerHTML='<p class="hint">Non ci sono ancora annunci. Inserisca il primo.</p>';
@@ -406,7 +415,13 @@ async function loadListings(){
     return;
   }
 
-  $("listingList").innerHTML=data.map(item=>{
+  if(!filtered.length){
+    $("listingList").innerHTML='<p class="hint">Nessun annuncio corrisponde ai filtri.</p>';
+    msg("listMsg","Nessun risultato.");
+    return;
+  }
+
+  $("listingList").innerHTML=filtered.map(item=>{
     const url=validUrl(item.url);
     const linkHtml=url
       ? '<a href="' + safe(url) + '" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
@@ -425,7 +440,7 @@ async function loadListings(){
     btn.addEventListener("click",()=>deleteListing(btn.dataset.delete));
   });
 
-  msg("listMsg",data.length+" annunci caricati.","success");
+  msg("listMsg",filtered.length+" annunci visualizzati su "+data.length+".","success");
 }
 
 $("listingForm").addEventListener("submit",async event=>{
@@ -505,6 +520,8 @@ async function deleteListing(id){
 }
 
 $("refresh").addEventListener("click",loadListings);
+$("listingSearch").addEventListener("input",loadListings);
+$("sellerFilter").addEventListener("change",loadListings);
 $("refreshCandidates").addEventListener("click",loadCandidates);
 
 /* COLLEGAMENTO GMAIL */
