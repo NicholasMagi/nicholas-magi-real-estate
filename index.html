@@ -20,6 +20,7 @@ h2{font-size:16px;margin:0 0 14px}
 label{display:block;font-size:12px;font-weight:bold;color:#526075;margin:12px 0 6px}
 input,select{width:100%;border:1px solid #d9dfe8;border-radius:9px;padding:12px;font:inherit;font-size:14px;background:white}
 button{border:0;border-radius:9px;background:var(--navy);color:white;padding:12px 16px;font-weight:bold;cursor:pointer}
+button:disabled{opacity:.55;cursor:not-allowed}
 .gold{background:var(--gold);color:#172033}
 .secondary{background:#edf0f5;color:var(--ink)}
 .danger{background:#fff0ef;color:#a12b27}
@@ -84,6 +85,18 @@ button{border:0;border-radius:9px;background:var(--navy);color:white;padding:12p
 <button class="secondary" id="signOut">Esci</button>
 </div>
 </div>
+
+<section class="panel">
+<h2>Collegamento Gmail</h2>
+<p class="hint">
+Colleghi la casella dedicata per predisporre
+l'acquisizione automatica delle notifiche immobiliari.
+</p>
+<div class="actions">
+<button class="gold" id="connectGmail">Collega Gmail</button>
+</div>
+<div id="gmailMsg" class="status"></div>
+</section>
 
 <div class="grid panel">
 <div class="stat"><strong id="totalCount">0</strong><span>Annunci totali</span></div>
@@ -160,7 +173,7 @@ function euro(value){
 
 function connect(url,key){
   if(!/^https:\/\/[a-zA-Z0-9.-]+\.supabase\.co\/?$/.test(url)||!key.startsWith("sb_publishable_")){
-    throw new Error("Controlli il Project URL e la Publishable Key.");
+    throw new Error("Controlli il Project URL e la Publishable Key di Supabase.");
   }
   supabase=createClient(url.replace(/\/$/,""),key);
 }
@@ -401,6 +414,52 @@ async function deleteListing(id){
 }
 
 $("refresh").addEventListener("click",loadListings);
+
+/* COLLEGAMENTO GMAIL */
+
+$("connectGmail").addEventListener("click",async()=>{
+  const button=$("connectGmail");
+
+  button.disabled=true;
+  msg("gmailMsg","Preparazione del collegamento Google...");
+
+  try{
+    const {data,error}=await supabase.functions.invoke(
+      "nmre-gmail-oauth-start",
+      {
+        body:{}
+      }
+    );
+
+    if(error){
+      throw new Error(error.message||"Errore di collegamento a Supabase.");
+    }
+
+    if(!data?.authorization_url){
+      throw new Error("Indirizzo di autorizzazione Google mancante.");
+    }
+
+    const destination=new URL(data.authorization_url);
+
+    if(
+      destination.origin!=="https://accounts.google.com"||
+      destination.pathname!=="/o/oauth2/v2/auth"
+    ){
+      throw new Error("Indirizzo Google non valido.");
+    }
+
+    window.location.assign(destination.href);
+
+  }catch(error){
+    msg(
+      "gmailMsg",
+      error.message||"Impossibile avviare il collegamento Gmail.",
+      "error"
+    );
+
+    button.disabled=false;
+  }
+});
 
 boot().catch(e=>{
   showSetup();
