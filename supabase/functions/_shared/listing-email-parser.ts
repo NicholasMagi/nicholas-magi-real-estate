@@ -202,9 +202,9 @@ function parseItalianPrice(raw: string): number | null {
 
 function extractPrice(text: string): number | null {
   const patterns = [
-    /(?:prezzo|richiesta|prezzo richiesto)\s*[:\-]?\s*(?:€\s*)?([\d][\d.\s,]{3,})\s*€?/i,
-    /€\s*([\d][\d.\s,]{3,})/i,
-    /([\d][\d.\s,]{3,})\s*€/i,
+    /(?:prezzo|richiesta|prezzo richiesto)\s*[:\-]?\s*(?:€\s*)?([\d][\d. ,]{3,})\s*€?/i,
+    /€\s*([\d][\d. ,]{3,})/i,
+    /([\d][\d. ,]{3,})\s*€/i,
   ];
 
   for (const pattern of patterns) {
