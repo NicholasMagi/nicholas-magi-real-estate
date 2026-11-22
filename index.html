@@ -401,17 +401,9 @@ function guessMunicipality(text){
     "Agugliano","Offagna","Chiaravalle","Ostra","Tolentino","Staffolo",
     "Cupramontana","Monsano","Trecastelli","Corridonia","Montegranaro"
   ];
-  const normalized=String(text||"").toLocaleLowerCase("it");
-  return towns.find(t=>{
-    const escaped=t.toLocaleLowerCase("it").replace(/[.*+?^${}()|[\]\\]/g,"\\function guessMunicipality(text){
-  const towns=["Ancona","Osimo","Castelfidardo","Loreto","Recanati","Camerano","Numana","Sirolo","Jesi","Falconara Marittima","Porto Recanati","Civitanova Marche","Macerata","Monte Urano","Porto Sant'Elpidio","Fermo","Senigallia","Filottrano","Polverigi","Agugliano","Offagna"];
-  const normalized=text.toLocaleLowerCase("it");
-  return towns.find(t=>normalized.includes(t.toLocaleLowerCase("it")))||"";
-}");
-    return new RegExp("(^|[^\\p{L}])"+escaped+"($|[^\\p{L}])","u").test(normalized);
-  })||"";
+  const normalized=" "+String(text||"").toLocaleLowerCase("it").replace(/[^\p{L}\p{N}]+/gu," ")+" ";
+  return towns.find(t=>normalized.includes(" "+t.toLocaleLowerCase("it")+" "))||"";
 }
-
 function guessPrice(text){
   const patterns=[
     /(?:€|eur\s*)\s?([0-9][0-9. ]{3,})/i,
