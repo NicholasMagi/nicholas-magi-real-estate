@@ -403,7 +403,7 @@ async function loadListings(){
 
 function csvCell(value){
   let text=String(value??"");
-  if(/^[=+@\\-\\t\\r]/.test(text))text="'"+text;
+  if(/^[=+\-@\t\r]/.test(text))text="'"+text;
   return '"' + text.replace(/"/g,'""') + '"';
 }
 
@@ -422,7 +422,7 @@ $("exportCsv").addEventListener("click",()=>{
     ...rows.map(item=>columns.map(([,key])=>csvCell(item[key])).join(";"))
   ];
 
-  const blob=new Blob(["\\uFEFF"+lines.join("\\r\\n")],{type:"text/csv;charset=utf-8;"});
+  const blob=new Blob(["\uFEFF"+lines.join("\r\n")],{type:"text/csv;charset=utf-8;"});
   const objectUrl=URL.createObjectURL(blob);
   const link=document.createElement("a");
   link.href=objectUrl;
