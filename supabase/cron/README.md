@@ -2,7 +2,7 @@
 
 ## Stato attuale
 
-- Edge Function `nmre-gmail-scheduled`: attiva (versione 12).
+- Edge Function `nmre-gmail-scheduled`: attiva (versione 13).
 - Edge Function `nmre-gmail-reader`: dismessa; restituisce HTTP 410 e non espone più il contenuto dei messaggi.
 - Job `nmre-gmail-hourly-sync`: attivo, ogni ora al minuto 15 UTC.
 - Supabase Vault contiene i segreti `project_url` e `secret_key`; non leggere né condividere i relativi valori.
@@ -35,5 +35,5 @@ Controllare il job:
 
 `select jobid, jobname, schedule, active from cron.job where jobname = 'nmre-gmail-hourly-sync';`
 
-Dopo una sua esecuzione automatica, controllare `cron.job_run_details`. Per verificare la risposta della funzione, controllare `net._http_response` usando il `request_id` restituito da `net.http_post`. Le prove manuali effettuate hanno restituito HTTP 200; la prima esecuzione automatica registrata va verificata separatamente.
+Dopo una sua esecuzione automatica, controllare `cron.job_run_details`. Per verificare la risposta della funzione, controllare `net._http_response` usando il `request_id` restituito da `net.http_post`. È stata verificata una prima esecuzione automatica con esito `succeeded`; le sincronizzazioni manuali Gmail hanno restituito HTTP 200.
 
