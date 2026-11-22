@@ -43,6 +43,29 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .gmail-email{padding:12px 0;border-top:1px solid var(--line);font-size:13px;line-height:1.5;overflow-wrap:anywhere}
 .gmail-email b{display:block;margin-bottom:5px}
 .gmail-email .gmail-meta{color:var(--muted);font-size:12px}
+.candidate-review{border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0;background:var(--panel)}
+.candidate-review h3{margin:0 0 8px;font-size:15px}
+.candidate-review .candidate-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.candidate-review label{display:block;font-size:12px;color:var(--muted);margin:0 0 4px}
+.candidate-review input,.candidate-review select{margin:0}
+.candidate-review .candidate-warnings{font-size:12px;color:var(--muted);margin:9px 0}
+@media(max-width:650px){.candidate-review .candidate-grid{grid-template-columns:1fr}}
+.archive-tools{display:grid;grid-template-columns:minmax(220px,2fr) minmax(170px,1fr);gap:10px;margin:14px 0}
+.archive-tools input,.archive-tools select{margin:0}
+.archive-summary{font-size:12px;color:var(--muted);margin:8px 0}
+.territory-tools{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}
+.territory-tools input,.territory-tools select{margin:0;min-width:0}
+.territory-dashboard{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:12px 0}
+.territory-card{background:#f7f8fa;border:1px solid var(--line);padding:11px;border-radius:10px;min-width:0}
+.territory-card strong{display:block;font-size:20px;overflow-wrap:anywhere}
+.territory-card span{font-size:11px;color:var(--muted)}
+.territory-breakdown{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.territory-list{display:grid;gap:7px}
+.territory-row{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:7px 0;border-bottom:1px solid var(--line)}
+.territory-row strong{font-variant-numeric:tabular-nums}
+.territory-note{font-size:12px;color:var(--muted);line-height:1.5}
+@media(max-width:850px){.territory-tools{grid-template-columns:repeat(2,minmax(0,1fr))}.territory-dashboard{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){.archive-tools{grid-template-columns:1fr}.territory-tools{grid-template-columns:1fr}.territory-dashboard{grid-template-columns:repeat(2,minmax(0,1fr))}.territory-breakdown{grid-template-columns:1fr}}
 @media(max-width:650px){.grid{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}.heading{font-size:24px}}
 </style>
 </head>
@@ -101,6 +124,7 @@ l'acquisizione automatica delle notifiche immobiliari.
 </div>
 <div id="gmailMsg" class="status"></div>
 <div id="gmailResults"></div>
+<div id="candidateQueue"></div>
 </section>
 
 <div class="grid panel">
@@ -110,14 +134,35 @@ l'acquisizione automatica delle notifiche immobiliari.
 </div>
 
 <section class="panel">
+  <div class="topline">
+    <h2>Territorio e copertura</h2>
+    <span class="small">225 Comuni · 5 province</span>
+  </div>
+  <p class="territory-note">La provincia viene riconosciuta dal Comune. I dati restano nell'archivio esistente: non è necessaria una modifica al database.</p>
+  <div id="territoryDashboard" class="territory-dashboard"></div>
+  <div class="territory-breakdown">
+    <div>
+      <b>Annunci per provincia</b>
+      <div id="provinceBreakdown" class="territory-list"></div>
+    </div>
+    <div>
+      <b>Comuni con più annunci</b>
+      <div id="municipalityBreakdown" class="territory-list"></div>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
 <h2>Registra un nuovo immobile</h2>
 <form id="listingForm">
 <label>Titolo / descrizione</label>
 <input id="title" required maxlength="180" placeholder="Es. Appartamento con terrazzo">
 <div class="row">
-<div><label>Comune</label><input id="municipality" required maxlength="100" placeholder="Es. Osimo"></div>
-<div><label>Prezzo richiesto (€)</label><input id="price" type="number" min="0" step="1" placeholder="180000"></div>
+<div><label>Comune</label><input id="municipality" required maxlength="100" list="municipalityOptions" placeholder="Scriva o selezioni un Comune"></div>
+<div><label>Prezzo richiesto (€)</label><input id="price" type="number" min="0" step="0.01" placeholder="180000"></div>
 </div>
+<datalist id="municipalityOptions"></datalist>
+<div id="municipalityHint" class="small" aria-live="polite">Suggerimenti: tutti i Comuni delle Marche. È possibile inserire anche un Comune fuori regione.</div>
 <div class="row">
 <div><label>Contatto</label><input id="contact" maxlength="180" placeholder="Telefono o email"></div>
 <div><label>Tipologia venditore</label>
@@ -137,7 +182,34 @@ l'acquisizione automatica delle notifiche immobiliari.
 </section>
 
 <section class="panel">
-<div class="topline"><h2>Archivio annunci</h2><button class="secondary" id="refresh">Aggiorna</button></div>
+<div class="topline">
+  <h2>Archivio annunci</h2>
+  <div class="actions">
+    <button class="secondary" id="exportCsv">Esporta CSV</button>
+    <button class="secondary" id="refresh">Aggiorna</button>
+  </div>
+</div>
+<div class="territory-tools">
+  <input id="listingSearch" type="search" placeholder="Cerca immobile, comune, fonte o contatto" aria-label="Cerca annunci">
+  <select id="provinceFilter" aria-label="Filtra per provincia">
+    <option value="">Tutte le province</option>
+  </select>
+  <select id="municipalityFilter" aria-label="Filtra per Comune">
+    <option value="">Tutti i Comuni</option>
+  </select>
+  <select id="sellerFilter" aria-label="Filtra per tipologia venditore">
+    <option value="">Tutti i venditori</option>
+    <option value="Privato">Privati</option>
+    <option value="Agenzia">Agenzie</option>
+    <option value="Da verificare">Da verificare</option>
+  </select>
+  <select id="listingKindFilter" aria-label="Filtra per categoria annuncio">
+    <option value="">Tutte le categorie</option>
+    <option value="asta">Aste giudiziarie</option>
+    <option value="normale">Vendite non classificate come aste</option>
+  </select>
+</div>
+<div id="archiveSummary" class="archive-summary" aria-live="polite"></div>
 <div id="listingList"><p class="hint">Caricamento annunci...</p></div>
 <div id="listMsg" class="status"></div>
 </section>
@@ -147,12 +219,14 @@ l'acquisizione automatica delle notifiche immobiliari.
 
 <script type="module">
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+import { MARCHE_MUNICIPALITIES, PROVINCES, canonicalMunicipalityName, getMunicipalityInfo, normalizeMunicipalityName } from "./territorio.js";
 
 const $ = id => document.getElementById(id);
 const URL_KEY = "nmre-supabase-url";
 const API_KEY = "nmre-supabase-publishable-key";
 let supabase = null;
 let currentUser = null;
+let cachedListings = [];
 
 function msg(id,text,type=""){
   $(id).textContent=text;
@@ -173,7 +247,132 @@ function validUrl(value){
 
 function euro(value){
   if(value===null||value==="")return "Prezzo non indicato";
-  return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(Number(value));
+  return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:2}).format(Number(value));
+}
+
+function isAuction(item){
+  return /^ASTA\s*[—-]/i.test(String(item?.titolo||"")) ||
+    /\ball'asta\b|\basta giudiziaria\b/i.test(String(item?.titolo||""));
+}
+
+function getProvinceName(item){
+  return getMunicipalityInfo(item?.comune)?.provinceName || "Fuori repertorio";
+}
+
+function updateMunicipalitySuggestions(provinceCode=""){
+  const list=$("municipalityOptions");
+  list.replaceChildren();
+  MARCHE_MUNICIPALITIES
+    .filter(item=>!provinceCode||item.provinceCode===provinceCode)
+    .forEach(item=>{
+      const option=document.createElement("option");
+      option.value=item.name;
+      option.label=item.provinceName;
+      list.appendChild(option);
+    });
+}
+
+function updateTerritoryFilters(){
+  const province=$("provinceFilter");
+  const municipality=$("municipalityFilter");
+  const oldProvince=province.value;
+  const oldMunicipality=municipality.value;
+  province.replaceChildren(new Option("Tutte le province",""));
+  PROVINCES.forEach(item=>province.add(new Option(item.name,item.code)));
+  province.add(new Option("Fuori repertorio","__outside__"));
+  province.value=oldProvince;
+
+  const names=new Map();
+  if(province.value!=="__outside__"){
+    MARCHE_MUNICIPALITIES
+      .filter(item=>!province.value||item.provinceCode===province.value)
+      .forEach(item=>names.set(normalizeMunicipalityName(item.name),item.name));
+  }
+  if(!province.value||province.value==="__outside__"){
+    cachedListings.forEach(item=>{
+      const raw=String(item.comune||"").trim();
+      const info=getMunicipalityInfo(raw);
+      if(!raw||info)return;
+      const key=normalizeMunicipalityName(raw);
+      if(key&&!names.has(key))names.set(key,raw);
+    });
+  }
+  municipality.replaceChildren(new Option("Tutti i Comuni",""));
+  [...names.values()].sort((a,b)=>a.localeCompare(b,"it")).forEach(name=>{
+    municipality.add(new Option(name,name));
+  });
+  if([...municipality.options].some(option=>option.value===oldMunicipality)){
+    municipality.value=oldMunicipality;
+  }else municipality.value="";
+}
+
+function renderTerritoryDashboard(){
+  const total=cachedListings.length;
+  const counts=new Map(PROVINCES.map(item=>[item.code,0]));
+  let outside=0;
+  const municipalities=new Map();
+  cachedListings.forEach(item=>{
+    const info=getMunicipalityInfo(item.comune);
+    if(info)counts.set(info.provinceCode,(counts.get(info.provinceCode)||0)+1);
+    else if(String(item.comune||"").trim())outside++;
+    const name=canonicalMunicipalityName(item.comune||"");
+    if(name)municipalities.set(name,(municipalities.get(name)||0)+1);
+  });
+  const dashboard=$("territoryDashboard");
+  dashboard.replaceChildren();
+  const cards=[
+    ["Annunci",total],
+    ["Comuni coperti",municipalities.size],
+    ["Province presenti",[...counts.values()].filter(value=>value>0).length],
+    ["Privati",cachedListings.filter(item=>item.tipo_venditore==="Privato").length],
+    ["Aste",cachedListings.filter(isAuction).length]
+  ];
+  cards.forEach(([label,value])=>{
+    const card=document.createElement("div");
+    card.className="territory-card";
+    const strong=document.createElement("strong");
+    strong.textContent=String(value);
+    const span=document.createElement("span");
+    span.textContent=label;
+    card.append(strong,span);
+    dashboard.appendChild(card);
+  });
+  const provinceList=$("provinceBreakdown");
+  provinceList.replaceChildren();
+  PROVINCES.forEach(province=>{
+    const row=document.createElement("div");
+    row.className="territory-row";
+    const label=document.createElement("span");
+    label.textContent=province.name;
+    const value=document.createElement("strong");
+    value.textContent=String(counts.get(province.code)||0);
+    row.append(label,value);
+    provinceList.appendChild(row);
+  });
+  if(outside){
+    const row=document.createElement("div");
+    row.className="territory-row";
+    row.textContent="Fuori repertorio: "+outside;
+    provinceList.appendChild(row);
+  }
+  const municipalityList=$("municipalityBreakdown");
+  municipalityList.replaceChildren();
+  const top=[...municipalities.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"it")).slice(0,8);
+  if(!top.length){
+    const empty=document.createElement("p");
+    empty.className="territory-note";
+    empty.textContent="I Comuni compariranno qui quando saranno presenti annunci in archivio.";
+    municipalityList.appendChild(empty);
+  }else top.forEach(([name,count])=>{
+    const row=document.createElement("div");
+    row.className="territory-row";
+    const label=document.createElement("span");
+    label.textContent=name;
+    const value=document.createElement("strong");
+    value.textContent=String(count);
+    row.append(label,value);
+    municipalityList.appendChild(row);
+  });
 }
 
 function connect(url,key){
@@ -207,6 +406,9 @@ async function showApp(session){
   $("auth").hidden=true;
   $("appArea").hidden=false;
   await loadListings();
+  await loadPendingCandidates().catch(error=>{
+    msg("gmailMsg","Impossibile caricare la coda dei candidati: "+error.message,"error");
+  });
 }
 
 async function boot(){
@@ -298,29 +500,53 @@ $("signOut").addEventListener("click",async()=>{
   if(error)msg("listMsg",error.message,"error");
 });
 
-async function loadListings(){
-  if(!currentUser)return;
+function getFilteredListings(){
+  const query=$("listingSearch").value.trim().toLocaleLowerCase("it");
+  const seller=$("sellerFilter").value;
+  const province=$("provinceFilter").value;
+  const municipality=$("municipalityFilter").value;
+  const kind=$("listingKindFilter").value;
 
-  msg("listMsg","Caricamento...");
-  const {data,error}=await supabase.from("annunci").select("*").order("created_at",{ascending:false});
+  return cachedListings.filter(item=>{
+    const type=item.tipo_venditore||"Da verificare";
+    const info=getMunicipalityInfo(item.comune);
+    if(seller&&type!==seller)return false;
+    if(province==="__outside__"&&info)return false;
+    if(province&&province!=="__outside__"&&info?.provinceCode!==province)return false;
+    if(municipality&&normalizeMunicipalityName(canonicalMunicipalityName(item.comune))!==normalizeMunicipalityName(municipality))return false;
+    if(kind==="asta"&&!isAuction(item))return false;
+    if(kind==="normale"&&isAuction(item))return false;
 
-  if(error){
-    $("listingList").innerHTML="";
-    msg("listMsg",error.message,"error");
+    const searchable=[
+      item.titolo,item.comune,item.contatto,item.portale,
+      item.tipo_venditore,item.prezzo,item.url,getProvinceName(item)
+    ].join(" ").toLocaleLowerCase("it");
+
+    return !query||searchable.includes(query);
+  });
+}
+
+function renderListings(){
+  const visible=getFilteredListings();
+  const total=cachedListings.length;
+  renderTerritoryDashboard();
+
+  $("archiveSummary").textContent=
+    total===visible.length
+      ? `${visible.length} annunci in archivio`
+      : `${visible.length} annunci mostrati su ${total}`;
+
+  $("exportCsv").disabled=visible.length===0;
+
+  if(!visible.length){
+    $("listingList").innerHTML=
+      total
+        ? '<p class="hint">Nessun annuncio corrisponde ai filtri selezionati.</p>'
+        : '<p class="hint">Non ci sono ancora annunci. Inserisca il primo.</p>';
     return;
   }
 
-  $("totalCount").textContent=data.length;
-  $("privateCount").textContent=data.filter(x=>x.tipo_venditore==="Privato").length;
-  $("verifyCount").textContent=data.filter(x=>!x.tipo_venditore||x.tipo_venditore==="Da verificare").length;
-
-  if(!data.length){
-    $("listingList").innerHTML='<p class="hint">Non ci sono ancora annunci. Inserisca il primo.</p>';
-    msg("listMsg","");
-    return;
-  }
-
-  $("listingList").innerHTML=data.map(item=>{
+  $("listingList").innerHTML=visible.map(item=>{
     const url=validUrl(item.url);
     const linkHtml=url
       ? '<a href="' + safe(url) + '" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
@@ -328,7 +554,7 @@ async function loadListings(){
 
     return `<article class="listing"><div>
     <h3>${safe(item.titolo)}</h3>
-    <div class="meta">${safe(item.comune)} · ${safe(item.contatto||"Contatto non inserito")}<br>${safe(item.portale||"Fonte non indicata")}</div>
+    <div class="meta">${safe(item.comune)} · Provincia di ${safe(getProvinceName(item))}<br>${safe(item.contatto||"Contatto non inserito")} · ${safe(item.portale||"Fonte non indicata")}</div>
     <div class="price">${euro(item.prezzo)}</div>
     <span class="pill">${safe(item.tipo_venditore||"Da verificare")}</span>
     ${linkHtml}
@@ -338,9 +564,89 @@ async function loadListings(){
   $("listingList").querySelectorAll("[data-delete]").forEach(btn=>{
     btn.addEventListener("click",()=>deleteListing(btn.dataset.delete));
   });
-
-  msg("listMsg",data.length+" annunci caricati.","success");
 }
+
+async function loadListings(){
+  if(!currentUser)return;
+
+  msg("listMsg","Caricamento...");
+  const {data,error}=await supabase.from("annunci").select("*").order("created_at",{ascending:false});
+
+  if(error){
+    cachedListings=[];
+    $("listingList").innerHTML="";
+    $("archiveSummary").textContent="";
+    $("totalCount").textContent="—";
+    $("privateCount").textContent="—";
+    $("verifyCount").textContent="—";
+    msg("listMsg",error.message,"error");
+    return;
+  }
+
+  cachedListings=data||[];
+  updateTerritoryFilters();
+  $("totalCount").textContent=cachedListings.length;
+  $("privateCount").textContent=cachedListings.filter(x=>x.tipo_venditore==="Privato").length;
+  $("verifyCount").textContent=cachedListings.filter(x=>!x.tipo_venditore||x.tipo_venditore==="Da verificare").length;
+
+  renderListings();
+  msg("listMsg",cachedListings.length+" annunci caricati.","success");
+}
+
+function csvCell(value){
+  let text=String(value??"");
+  if(/^[=+\-@\t\r]/.test(text))text="'"+text;
+  return '"' + text.replace(/"/g,'""') + '"';
+}
+
+$("exportCsv").addEventListener("click",()=>{
+  const rows=getFilteredListings();
+  if(!rows.length)return;
+
+  const columns=[
+    ["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],
+    ["Contatto","contatto"],["Venditore","tipo_venditore"],
+    ["Fonte","portale"],["URL","url"],["Data inserimento","created_at"]
+  ];
+
+  const lines=[
+    columns.map(([label])=>csvCell(label)).join(";"),
+    ...rows.map(item=>columns.map(([,key])=>csvCell(item[key])).join(";"))
+  ];
+
+  const blob=new Blob(["\uFEFF"+lines.join("\r\n")],{type:"text/csv;charset=utf-8;"});
+  const objectUrl=URL.createObjectURL(blob);
+  const link=document.createElement("a");
+  link.href=objectUrl;
+  link.download="nicholas-magi-annunci-"+new Date().toISOString().slice(0,10)+".csv";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+  msg("listMsg",rows.length+" annunci esportati in CSV.","success");
+});
+
+$("listingSearch").addEventListener("input",renderListings);
+$("sellerFilter").addEventListener("change",renderListings);
+$("listingKindFilter").addEventListener("change",renderListings);
+$("provinceFilter").addEventListener("change",()=>{
+  updateTerritoryFilters();
+  renderListings();
+});
+$("municipalityFilter").addEventListener("change",renderListings);
+$("municipality").addEventListener("input",()=>{
+  const info=getMunicipalityInfo($("municipality").value);
+  $("municipalityHint").textContent=info
+    ? "Comune riconosciuto: "+info.name+" · Provincia di "+info.provinceName
+    : $("municipality").value.trim()
+      ? "Comune non presente nel repertorio: sarà salvato come scritto."
+      : "Suggerimenti: tutti i Comuni delle Marche. È possibile inserire anche un Comune fuori regione.";
+});
+$("municipality").addEventListener("change",()=>{
+  const info=getMunicipalityInfo($("municipality").value);
+  if(info)$("municipality").value=info.name;
+});
+updateMunicipalitySuggestions();
 
 $("listingForm").addEventListener("submit",async event=>{
   event.preventDefault();
@@ -359,7 +665,7 @@ $("listingForm").addEventListener("submit",async event=>{
 
   const record={
     titolo:$("title").value.trim(),
-    comune:$("municipality").value.trim(),
+    comune:canonicalMunicipalityName($("municipality").value),
     prezzo:price===""?null:Number(price),
     contatto:$("contact").value.trim()||null,
     tipo_venditore:$("sellerType").value,
@@ -468,6 +774,186 @@ $("connectGmail").addEventListener("click",async()=>{
 
 /* TEST LETTURA GMAIL */
 
+
+async function loadPendingCandidates(){
+  if(!currentUser)return;
+  const {data,error}=await supabase
+    .from("annunci_candidati")
+    .select("*")
+    .eq("stato","da_verificare")
+    .order("created_at",{ascending:false});
+  if(error)throw error;
+  renderCandidateQueue(data||[]);
+}
+
+function renderCandidateQueue(candidates){
+  const container=$("candidateQueue");
+  container.replaceChildren();
+
+  const heading=document.createElement("h3");
+  heading.textContent="Candidati da verificare";
+  container.appendChild(heading);
+
+  const intro=document.createElement("p");
+  intro.className="hint";
+  intro.textContent="I candidati vengono conservati su Supabase. Solo dopo la Sua conferma entreranno nell'archivio annunci.";
+  container.appendChild(intro);
+
+  if(!candidates.length){
+    const empty=document.createElement("p");
+    empty.className="hint";
+    empty.textContent="Nessun candidato in attesa di verifica.";
+    container.appendChild(empty);
+    return;
+  }
+
+  candidates.forEach(candidate=>{
+    const card=document.createElement("article");
+    card.className="candidate-review";
+    card.dataset.candidateId=candidate.id;
+
+    const heading=document.createElement("h3");
+    heading.textContent=candidate.titolo||"Annuncio senza titolo";
+    card.appendChild(heading);
+
+    const grid=document.createElement("div");
+    grid.className="candidate-grid";
+
+    const makeField=(labelText,value,type="text")=>{
+      const wrapper=document.createElement("div");
+      const label=document.createElement("label");
+      label.textContent=labelText;
+      const input=document.createElement("input");
+      input.type=type;
+      input.value=value==null?"":String(value);
+      input.maxLength=type==="url"?1000:180;
+      wrapper.append(label,input);
+      grid.appendChild(wrapper);
+      return input;
+    };
+
+    const titleInput=makeField("Titolo",candidate.titolo);
+    const municipalityInput=makeField("Comune",candidate.comune);
+    municipalityInput.setAttribute("list","municipalityOptions");
+    const priceInput=makeField("Prezzo (€)",candidate.prezzo,"number");
+    priceInput.min="0";
+    priceInput.step="0.01";
+    const contactInput=makeField("Contatto venditore",candidate.contatto);
+    const sourceInput=makeField("Fonte / portale",candidate.portale);
+    const urlInput=makeField("Link annuncio",candidate.url,"url");
+
+    const sellerWrap=document.createElement("div");
+    const sellerLabel=document.createElement("label");
+    sellerLabel.textContent="Tipologia venditore";
+    const sellerSelect=document.createElement("select");
+    ["Da verificare","Privato","Agenzia"].forEach(value=>{
+      const option=document.createElement("option");
+      option.value=value;
+      option.textContent=value;
+      sellerSelect.appendChild(option);
+    });
+    sellerSelect.value=candidate.tipo_venditore||"Da verificare";
+    sellerWrap.append(sellerLabel,sellerSelect);
+    grid.appendChild(sellerWrap);
+
+    const details=document.createElement("p");
+    details.className="candidate-warnings";
+    const sender=candidate.notification_sender
+      ?"Mittente notifica: "+candidate.notification_sender+". "
+      :"";
+    const queued=candidate.created_at
+      ?"Inserito in coda: "+new Date(candidate.created_at).toLocaleString("it-IT")+". "
+      :"";
+    details.textContent=sender+queued+"Il mittente della notifica non viene considerato automaticamente il contatto del venditore.";
+    const actions=document.createElement("div");
+    actions.className="actions";
+
+    const saveButton=document.createElement("button");
+    saveButton.className="gold";
+    saveButton.type="button";
+    saveButton.textContent="Conferma e salva annuncio";
+
+    const discardButton=document.createElement("button");
+    discardButton.className="secondary";
+    discardButton.type="button";
+    discardButton.textContent="Scarta candidato";
+
+    const status=document.createElement("p");
+    status.className="status";
+
+    actions.append(saveButton,discardButton);
+    card.append(grid,details,actions,status);
+    container.appendChild(card);
+
+    discardButton.addEventListener("click",async()=>{
+      discardButton.disabled=true;
+      saveButton.disabled=true;
+      status.textContent="Scarto in corso...";
+      try{
+        const {error}=await supabase
+          .from("annunci_candidati")
+          .update({stato:"scartato",updated_at:new Date().toISOString()})
+          .eq("id",candidate.id)
+          .eq("stato","da_verificare");
+        if(error)throw error;
+        await loadPendingCandidates();
+        msg("gmailMsg","Candidato scartato.", "success");
+      }catch(error){
+        status.textContent="Non è stato possibile scartare il candidato: "+error.message;
+        discardButton.disabled=false;
+        saveButton.disabled=false;
+      }
+    });
+
+    saveButton.addEventListener("click",async()=>{
+      const rawUrl=urlInput.value.trim();
+      const cleanUrl=validUrl(rawUrl);
+      if(rawUrl&&!cleanUrl){
+        status.textContent="Il link deve iniziare con http:// o https://.";
+        return;
+      }
+      if(!titleInput.value.trim()||!municipalityInput.value.trim()){
+        status.textContent="Titolo e comune sono obbligatori.";
+        return;
+      }
+      const rawPrice=priceInput.value.trim();
+      if(rawPrice&&(Number(rawPrice)<0||!Number.isFinite(Number(rawPrice)))){
+        status.textContent="Inserisca un prezzo valido.";
+        return;
+      }
+
+      saveButton.disabled=true;
+      discardButton.disabled=true;
+      status.textContent="Salvataggio nell'archivio in corso...";
+      try{
+        const {data:annuncioId,error:confirmError}=await supabase.rpc(
+          "nmre_confirm_annuncio_candidato",
+          {
+            p_candidate_id:candidate.id,
+            p_titolo:titleInput.value.trim(),
+            p_comune:canonicalMunicipalityName(municipalityInput.value),
+            p_prezzo:rawPrice===""?null:Number(rawPrice),
+            p_contatto:contactInput.value.trim()||null,
+            p_tipo_venditore:sellerSelect.value,
+            p_portale:sourceInput.value.trim()||null,
+            p_url:cleanUrl
+          }
+        );
+        if(confirmError)throw confirmError;
+        if(!annuncioId)throw new Error("Conferma completata senza ID annuncio restituito.");
+
+        await loadListings();
+        await loadPendingCandidates();
+        msg("gmailMsg","Annuncio confermato e trasferito nell'archivio.","success");
+      }catch(error){
+        status.textContent="Salvataggio non riuscito: "+error.message;
+        saveButton.disabled=false;
+        discardButton.disabled=false;
+      }
+    });
+  });
+}
+
 $("testGmail").addEventListener("click",async()=>{
   const button=$("testGmail");
   const results=$("gmailResults");
@@ -530,6 +1016,44 @@ $("testGmail").addEventListener("click",async()=>{
       item.append(subject,sender,date,snippet);
       results.appendChild(item);
     });
+
+    const allCandidates=data.candidates||[];
+    const candidates=allCandidates.filter(candidate=>candidate.likelyRealEstate===true);
+    const ignoredCount=allCandidates.length-candidates.length;
+    if(candidates.length){
+      const rows=candidates
+        .filter(candidate=>candidate.deduplicationKey)
+        .map(candidate=>({
+          titolo:candidate.titolo||null,
+          comune:candidate.comune||null,
+          prezzo:candidate.prezzo??null,
+          contatto:candidate.contatto||null,
+          tipo_venditore:candidate.tipo_venditore||"Da verificare",
+          portale:candidate.portale||null,
+          url:validUrl(candidate.url),
+          data_pubblicazione:candidate.receivedAt||null,
+          notification_sender:candidate.notificationSender||null,
+          email_subject:candidate.emailSubject||null,
+          source_email_id:candidate.messageId||null,
+          dedup_key:candidate.deduplicationKey,
+          stato:"da_verificare"
+        }));
+
+      if(rows.length){
+        const {error:queueError}=await supabase
+          .from("annunci_candidati")
+          .upsert(rows,{onConflict:"owner_id,dedup_key",ignoreDuplicates:true});
+        if(queueError){
+          throw new Error("Email lette, ma non è stato possibile archiviare i candidati: "+queueError.message);
+        }
+      }
+    }
+
+    await loadPendingCandidates();
+    msg("gmailMsg",
+      `Email analizzate: ${data.total}. Candidati immobiliari: ${candidates.length}. Email non importate perché non riconosciute come immobiliari: ${ignoredCount}.`,
+      "success"
+    );
 
   }catch(error){
     msg(

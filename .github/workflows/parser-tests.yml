@@ -1,0 +1,29 @@
+name: Parser tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, "work/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  gmail-parser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Run Gmail parser tests
+        run: deno test supabase/functions/_shared/listing-email-parser.test.ts
+      - name: Type-check Gmail parser
+        run: deno check supabase/functions/_shared/listing-email-parser.ts
+      - name: Run territorial catalog tests
+        run: deno test territorio.test.js
+      - name: Type-check territorial catalog
+        run: deno check territorio.js
