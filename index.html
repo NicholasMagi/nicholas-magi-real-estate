@@ -42,7 +42,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .small{font-size:12px;color:var(--muted)}
 .gmail-email{padding:12px 0;border-top:1px solid var(--line);font-size:13px;line-height:1.5;overflow-wrap:anywhere}
 .gmail-email b{display:block;margin-bottom:5px}
-.gmail-email .gmail-meta{color:var(--muted);font-size:12px}
+.gmail-email .gmail-meta{color:var(--muted);font-size:12px}.crm{margin-top:12px;padding:12px;background:#f8f9fb;border:1px solid var(--line);border-radius:10px}.crm summary{cursor:pointer;font-weight:bold;font-size:13px}.crm textarea{width:100%;min-height:68px;border:1px solid #d9dfe8;border-radius:9px;padding:10px;font:inherit;font-size:13px;resize:vertical}.crm-entry{padding:8px 0;border-top:1px solid var(--line);font-size:12px}.crm-entry strong{display:block}.crm-history{margin-top:10px}.due{color:#a15c00;font-weight:bold}
 .candidate{border-top:1px solid var(--line);padding:14px 0}.candidate input{margin:5px 0}.candidate-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.toolbar input{max-width:280px}
 @media(max-width:650px){.grid{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}.heading{font-size:24px}}
 </style>
@@ -105,7 +105,7 @@ La casella viene controllata all’apertura dell’app e poi ogni ora mentre l�
 </section>
 
 <section class="panel">
-<div class="topline"><h2>Nuovi annunci da verificare</h2><div class="actions"><button class="secondary" id="exportCandidatesCsv">Esporta candidati</button><button class="secondary" id="refreshCandidates">Aggiorna</button></div></div>
+<div class="topline"><h2>Nuovi annunci da verificare</h2><div class="actions"><button class="secondary" id="exportCandidatesCsv">Candidati CSV</button><button class="secondary" id="exportCandidatesXlsx">Candidati Excel</button><button class="secondary" id="refreshCandidates">Aggiorna</button></div></div>
 <p class="hint">Le email importate diventano candidati. Verifichi titolo, comune e prezzo prima di confermarli nell'archivio principale.</p>
 <input id="candidateSearch" type="search" placeholder="Cerca candidati per titolo, comune, fonte o mittente" aria-label="Cerca candidati">
 <div id="candidateList"><p class="hint">Nessun candidato caricato.</p></div>
@@ -146,10 +146,10 @@ La casella viene controllata all’apertura dell’app e poi ogni ora mentre l�
 </section>
 
 <section class="panel">
-<div class="topline"><h2>Archivio annunci</h2><div class="actions"><button class="secondary" id="exportCsv">Esporta CSV</button><button class="secondary" id="refresh">Aggiorna</button></div></div>
+<div class="topline"><h2>Archivio annunci</h2><div class="actions"><button class="secondary" id="exportCsv">Esporta CSV</button><button class="secondary" id="exportXlsx">Esporta Excel</button><button class="secondary" id="refresh">Aggiorna</button></div></div>
 <div class="toolbar">
 <input id="listingSearch" type="search" placeholder="Cerca per titolo, comune o fonte">
-<select id="sellerFilter" aria-label="Filtra per venditore"><option value="">Tutti i venditori</option><option value="Privato">Privato</option><option value="Agenzia">Agenzia</option><option value="Da verificare">Da verificare</option></select>
+<select id="sellerFilter" aria-label="Filtra per venditore"><option value="">Tutti i venditori</option><option value="Privato">Privato</option><option value="Agenzia">Agenzia</option><option value="Da verificare">Da verificare</option></select><select id="contactFilter" aria-label="Filtra per stato contatto"><option value="">Tutti gli stati</option><option value="da_contattare">Da contattare</option><option value="primo_contatto">Primo contatto</option><option value="interessato">Interessato</option><option value="appuntamento">Appuntamento</option><option value="incarico_acquisito">Incarico acquisito</option><option value="non_interessato">Non interessato</option></select>
 </div>
 <div id="listingList"><p class="hint">Caricamento annunci...</p></div>
 <div id="listMsg" class="status"></div>
@@ -504,9 +504,10 @@ async function loadListings(){
   $("verifyCount").textContent=data.filter(x=>!x.tipo_venditore||x.tipo_venditore==="Da verificare").length;
   const query=$("listingSearch").value.trim().toLocaleLowerCase("it");
   const seller=$("sellerFilter").value;
+  const contactStatus=$("contactFilter").value;
   const filtered=data.filter(x=>{
     const haystack=[x.titolo,x.comune,x.portale,x.contatto].filter(Boolean).join(" ").toLocaleLowerCase("it");
-    return (!query||haystack.includes(query))&&(!seller||((x.tipo_venditore||"Da verificare")===seller));
+    return (!query||haystack.includes(query))&&(!seller||((x.tipo_venditore||"Da verificare")===seller))&&(!contactStatus||((x.stato_contatto||"da_contattare")===contactStatus));
   });
 
   if(!data.length){
@@ -532,14 +533,33 @@ async function loadListings(){
     <div class="meta">${safe(item.comune)} · ${safe(item.contatto||"Contatto non inserito")}<br>${safe(item.portale||"Fonte non indicata")}</div>
     <div class="price">${euro(item.prezzo)}</div>
     <span class="pill">${safe(item.tipo_venditore||"Da verificare")}</span>
+    <span class="pill">${safe(item.stato_contatto||"da_contattare")}</span>
     ${linkHtml}
+    <details class="crm" data-crm-id="${safe(item.id)}">
+      <summary>Gestione contatto, note e telefonate</summary>
+      <label>Stato del contatto</label><select data-crm-field="stato_contatto"><option value="da_contattare">Da contattare</option><option value="primo_contatto">Primo contatto</option><option value="interessato">Interessato</option><option value="appuntamento">Appuntamento</option><option value="incarico_acquisito">Incarico acquisito</option><option value="non_interessato">Non interessato</option></select>
+      <label>Note personali</label><textarea data-crm-field="note_personali" maxlength="10000">${safe(item.note_personali||"")}</textarea>
+      <label>Prossimo contatto</label><input type="date" data-crm-field="prossimo_contatto_il" value="${safe(item.prossimo_contatto_il||"")}">
+      <div class="actions"><button class="gold" data-save-crm>Salva scheda</button></div>
+      <hr><b>Registra una nuova interazione</b>
+      <div class="row"><div><label>Tipo</label><select data-new-type><option value="telefonata">Telefonata</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="appuntamento">Appuntamento</option><option value="nota">Nota</option><option value="altro">Altro</option></select></div><div><label>Esito</label><input data-new-outcome maxlength="180" placeholder="Es. Non risponde, interessato..."></div></div>
+      <label>Dettagli</label><textarea data-new-note maxlength="5000" placeholder="Riassunto della conversazione"></textarea>
+      <label>Richiamare il</label><input type="date" data-new-followup>
+      <div class="actions"><button class="secondary" data-add-interaction>Registra interazione</button></div>
+      <div class="crm-history" data-interaction-history>Aprire la scheda per caricare lo storico.</div>
+    </details>
     </div><button class="danger" data-delete="${safe(item.id)}">Elimina</button></article>`;
   }).join("");
 
-  $("listingList").querySelectorAll("[data-delete]").forEach(btn=>{
-    btn.addEventListener("click",()=>deleteListing(btn.dataset.delete));
+  $("listingList").querySelectorAll("[data-delete]").forEach(btn=>{btn.addEventListener("click",()=>deleteListing(btn.dataset.delete));});
+  $("listingList").querySelectorAll("[data-crm-id]").forEach(details=>{
+    const id=details.dataset.crmId, item=data.find(row=>row.id===id);
+    details.querySelector('[data-crm-field="stato_contatto"]').value=item?.stato_contatto||"da_contattare";
+    details.querySelector('[data-crm-field="prossimo_contatto_il"]').value=item?.prossimo_contatto_il||"";
+    details.addEventListener("toggle",()=>{if(details.open&&!details.dataset.loaded){details.dataset.loaded="1";loadInteractions(id,details);}});
+    details.querySelector("[data-save-crm]").addEventListener("click",()=>saveCrm(id,details));
+    details.querySelector("[data-add-interaction]").addEventListener("click",()=>addInteraction(id,details));
   });
-
   msg("listMsg",filtered.length+" annunci visualizzati su "+data.length+".","success");
 }
 
@@ -606,6 +626,30 @@ $("listingForm").addEventListener("submit",async event=>{
   }
 });
 
+async function loadInteractions(annuncioId,details){
+  const box=details.querySelector("[data-interaction-history]");
+  const {data,error}=await supabase.from("annunci_interazioni").select("*").eq("annuncio_id",annuncioId).order("created_at",{ascending:false}).limit(30);
+  if(error){box.textContent="Storico non disponibile: "+error.message;return;}
+  if(!data?.length){box.textContent="Nessuna interazione registrata.";return;}
+  box.innerHTML=data.map(entry=>`<div class="crm-entry"><strong>${safe(entry.tipo)} · ${safe(entry.esito||"Nessun esito")}</strong><span>${safe(new Date(entry.created_at).toLocaleString("it-IT"))}</span><div>${safe(entry.note||"")}</div>${entry.prossimo_contatto_il?'<div class="due">Richiamare il: '+safe(entry.prossimo_contatto_il)+'</div>':""}</div>`).join("");
+}
+async function saveCrm(id,details){
+  const value=field=>details.querySelector('[data-crm-field="'+field+'"]').value;
+  const payload={stato_contatto:value("stato_contatto"),note_personali:value("note_personali").trim()||null,prossimo_contatto_il:value("prossimo_contatto_il")||null};
+  const {error}=await supabase.from("annunci").update(payload).eq("id",id).eq("owner_id",currentUser.id);
+  if(error){msg("listMsg","Salvataggio scheda non riuscito: "+error.message,"error");return;}
+  msg("listMsg","Scheda CRM aggiornata.","success"); await loadListings();
+}
+async function addInteraction(id,details){
+  const tipo=details.querySelector("[data-new-type]").value, esito=details.querySelector("[data-new-outcome]").value.trim()||null, note=details.querySelector("[data-new-note]").value.trim()||null, followup=details.querySelector("[data-new-followup]").value||null;
+  const {error}=await supabase.from("annunci_interazioni").insert({owner_id:currentUser.id,annuncio_id:id,tipo,esito,note,prossimo_contatto_il:followup});
+  if(error){msg("listMsg","Registrazione interazione non riuscita: "+error.message,"error");return;}
+  const update={ultimo_contatto_il:new Date().toISOString()}; if(followup)update.prossimo_contatto_il=followup;
+  const {error:updateError}=await supabase.from("annunci").update(update).eq("id",id).eq("owner_id",currentUser.id);
+  msg("listMsg",updateError?"Interazione registrata, ma promemoria non aggiornato.":"Interazione registrata nello storico.",updateError?"error":"success");
+  details.querySelector("[data-new-outcome]").value=""; details.querySelector("[data-new-note]").value=""; details.querySelector("[data-new-followup]").value="";
+  await loadInteractions(id,details); await loadListings();
+}
 async function deleteListing(id){
   if(!confirm("Vuole eliminare questo annuncio?"))return;
 
@@ -625,7 +669,7 @@ function exportListingsCsv(){
     ["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],
     ["Contatto","contatto"],["Venditore","tipo_venditore"],
     ["Fonte","portale"],["Link","url"],["Data pubblicazione","data_pubblicazione"],
-    ["Inserito il","created_at"]
+    ["Inserito il","created_at"],["Stato contatto","stato_contatto"],["Note personali","note_personali"],["Prossimo contatto","prossimo_contatto_il"],["Ultimo contatto","ultimo_contatto_il"]
   ];
   const cell=value=>{
     let text=String(value??"");
@@ -676,10 +720,30 @@ function exportCandidatesCsv(){
 }
 $("exportCandidatesCsv").addEventListener("click",exportCandidatesCsv);
 
+
+async function exportXlsx(rows,columns,sheetName,fileName,messageId){
+ if(!rows.length){msg(messageId,"Non ci sono dati da esportare.");return;}
+ try{
+  msg(messageId,"Preparazione del file Excel...");
+  const XLSX=await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
+  const values=[columns.map(c=>c[0]),...rows.map(row=>columns.map(c=>{
+   const v=row[c[1]]; if(v===null||v===undefined)return "";
+   if(typeof v==="string"){const t=v.trimStart();if(t&&"=+-@".includes(t[0]))return "'"+v;}
+   return v;
+  }))];
+  const sheet=XLSX.utils.aoa_to_sheet(values), book=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book,sheet,sheetName); XLSX.writeFile(book,fileName);
+  msg(messageId,"Esportazione Excel completata.","success");
+ }catch(error){msg(messageId,"Esportazione Excel non riuscita: "+(error.message||"errore libreria"),"error");}
+}
+$("exportXlsx").addEventListener("click",()=>exportXlsx(listingCache,[["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],["Contatto","contatto"],["Venditore","tipo_venditore"],["Fonte","portale"],["Link","url"],["Data pubblicazione","data_pubblicazione"],["Inserito il","created_at"],["Stato contatto","stato_contatto"],["Note","note_personali"],["Prossimo contatto","prossimo_contatto_il"],["Ultimo contatto","ultimo_contatto_il"]],"Annunci","nicholas-magi-annunci-"+new Date().toISOString().slice(0,10)+".xlsx","listMsg"));
+$("exportCandidatesXlsx").addEventListener("click",()=>exportXlsx(candidateCache,[["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],["Contatto","contatto"],["Venditore","tipo_venditore"],["Fonte","portale"],["Link","url"],["Mittente","notification_sender"],["Oggetto email","email_subject"],["Data email","data_pubblicazione"],["Stato","stato"],["Ricevuto il","created_at"]],"Candidati","nmre-candidati-"+new Date().toISOString().slice(0,10)+".xlsx","candidateMsg"));
+
 $("exportCsv").addEventListener("click",exportListingsCsv);
 $("refresh").addEventListener("click",loadListings);
 $("listingSearch").addEventListener("input",loadListings);
 $("sellerFilter").addEventListener("change",loadListings);
+$("contactFilter").addEventListener("change",loadListings);
 let candidateSearchTimer=null;
 $("candidateSearch").addEventListener("input",()=>{
   clearTimeout(candidateSearchTimer);
