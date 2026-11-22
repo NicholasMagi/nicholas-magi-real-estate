@@ -605,7 +605,8 @@ function exportListingsCsv(){
     ["Inserito il","created_at"]
   ];
   const cell=value=>{
-    const text=String(value??"");
+    let text=String(value??"");
+    if(typeof value!=="number" && /^[\\s]*[=+\\-@]/.test(text))text="'"+text;
     return '"'+text.replace(/"/g,'""')+'"';
   };
   const csv=[
@@ -633,7 +634,11 @@ function exportCandidatesCsv(){
     ["Oggetto email","email_subject"],["Data email","data_pubblicazione"],
     ["Stato","stato"],["Ricevuto il","created_at"]
   ];
-  const cell=value=>'"'+String(value??"").replace(/"/g,'""')+'"';
+  const cell=value=>{
+    let text=String(value??"");
+    if(typeof value!=="number" && /^[\\s]*[=+\\-@]/.test(text))text="'"+text;
+    return '"'+text.replace(/"/g,'""')+'"';
+  };
   const csv=[
     columns.map(c=>cell(c[0])).join(";"),
     ...candidateCache.map(item=>columns.map(c=>cell(item[c[1]])).join(";"))
