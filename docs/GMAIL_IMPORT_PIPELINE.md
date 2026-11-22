@@ -1,44 +1,52 @@
-# Pipeline di importazione Gmail: specifica tecnica
+# Pipeline di importazione Gmail: stato e prossimi passi
 
-## Stato
+## Stato nel branch di sviluppo
 
-Il lettore Gmail già distribuito restituisce metadati e anteprima delle email. Non è ancora un importatore di annunci e non va descritto come tale.
-
-In questo branch è stato aggiunto un parser conservativo e indipendente:
-- legge le parti MIME `text/plain` e, in assenza, `text/html`;
-- propone titolo, comune, prezzo, mittente, dominio sorgente e URL;
-- produce una chiave per individuare probabili duplicati;
+Il codice della Edge Function `nmre-gmail-reader` fornito e verificato durante lo sviluppo è stato integrato con il parser conservativo:
+- recupera fino a 10 email della posta in arrivo degli ultimi 30 giorni;
+- richiede a Gmail il payload completo del messaggio;
+- estrae le parti MIME `text/plain` e, se assenti, `text/html`;
+- propone titolo, comune, prezzo, dominio sorgente e URL;
+- conserva il mittente della notifica separato dal contatto del venditore;
 - mantiene sempre `tipo_venditore = "Da verificare"`;
-- non salva nulla nel database.
+- restituisce candidati e avvisi, senza salvarli automaticamente.
 
-## Flusso previsto
+Nel frontend è stata aggiunta una revisione temporanea: i campi sono modificabili e l'utente può scartare il candidato o confermarlo tramite la Edge Function di salvataggio già usata dal modulo manuale.
 
-1. Il lettore Gmail recupera i messaggi e i relativi payload MIME tramite Gmail API.
-2. Il parser trasforma ogni messaggio in un candidato.
-3. Il server confronta la chiave di deduplicazione con quelle già viste.
-4. I candidati nuovi o modificati vengono mostrati in una coda di revisione.
-5. L'utente verifica fonte, link, comune, prezzo e tipologia del venditore.
-6. Solo dopo conferma esplicita il candidato viene inserito in `annunci`.
+**La coda attuale è temporanea:** i candidati non salvati non sono conservati dopo aver chiuso o aggiornato la pagina. Non è ancora una coda persistente e non è attiva alcuna scansione pianificata.
+
+## Flusso attuale
+
+1. L'utente avvia manualmente il test di lettura Gmail.
+2. La funzione legge fino a 10 messaggi in inbox degli ultimi 30 giorni.
+3. Il parser produce candidati con una chiave di deduplicazione preliminare.
+4. La pagina mostra i candidati e i campi modificabili.
+5. L'utente verifica fonte, URL, comune, prezzo e venditore.
+6. Solo dopo conferma esplicita il frontend invia i campi a `nmre-search-engine`.
 
 ## Contratto candidato
 
-Il parser produce i campi corrispondenti all'attuale archivio:
-`titolo`, `comune`, `prezzo`, `contatto`, `tipo_venditore`, `portale`, `url`.
+Il parser produce:
+`messageId`, `deduplicationKey`, `titolo`, `comune`, `prezzo`, `contatto`, `notificationSender`, `tipo_venditore`, `portale`, `url`, `allUrls`, `receivedAt`, `reviewStatus`, `warnings`.
 
-Aggiunge inoltre metadati interni:
-`messageId`, `deduplicationKey`, `allUrls`, `receivedAt`, `reviewStatus`, `warnings`.
+Il mittente dell'email non viene inserito come contatto del venditore: è normalmente il portale che invia la notifica.
 
-Questi metadati non devono essere scritti nella tabella `annunci` finché lo schema reale non è stato verificato. Per la coda serve una tabella dedicata con vincolo univoco su account e chiave di deduplicazione.
-
-## Limiti intenzionali
+## Limiti e precauzioni
 
 - Le email dei portali non hanno un formato standard: le estrazioni sono suggerimenti, non dati certificati.
-- Il mittente di una notifica è il portale, non il venditore dell'immobile.
-- Non si presume che il primo URL sia sempre il link all'annuncio: l'interfaccia deve consentire di correggerlo.
-- Gli allegati non vengono scaricati o interpretati da questo parser.
+- Il primo URL trovato può essere un link di tracciamento o un collegamento secondario: va controllato.
+- Le chiavi di deduplicazione sono preliminari; non esiste ancora un vincolo univoco persistente nel database.
+- Il parser non scarica allegati.
 - Nessuna classificazione automatica come "Privato" o "Agenzia".
 - Nessuna importazione automatica definitiva.
+- La funzione distribuita su Supabase non è stata modificata da questo lavoro su GitHub.
 
 ## Prima del rilascio
 
-Occorre collegarsi a Supabase e leggere il codice effettivo della Edge Function `nmre-gmail-reader`, quindi integrarla con questo parser, aggiungere la coda di revisione e verificare schema e policy RLS. Il deploy va eseguito solo dopo test con email campione reali, oscurando dati personali.
+1. Eseguire i test Deno e la verifica dei tipi.
+2. Provare il parser con notifiche reali rappresentative, oscurando dati personali.
+3. Verificare il codice effettivo della Edge Function di salvataggio e le policy RLS.
+4. Progettare una tabella persistente per la coda, con vincolo univoco per utente e chiave deduplicazione.
+5. Solo dopo approvazione, distribuire la nuova Edge Function e verificare il flusso end-to-end.
+
+Il progetto Google OAuth è ancora in modalità di test: la continuità dei token deve essere risolta prima di promettere un servizio 24/7.
