@@ -227,9 +227,23 @@ export function parseListingEmail(message: GmailApiMessage): ListingCandidate {
   const body = extractGmailMessageText(message);
   const combined = [subject, body].filter(Boolean).join("\n");
   const urls = extractUrls(combined);
-  const likelyRealEstate = /immobil|annunci?o|casa|appartament|villetta|villa|terreno|vendita|vendesi|affitto|bilocale|trilocale|quadrilocale|monolocale|attico|rustico|commerciale|nuova costruzione|prezzo/i.test(combined);
+  // Le conferme di ricerche salvate e le email di onboarding/sicurezza
+  // possono contenere il nome del portale o parole immobiliari, ma non
+  // rappresentano notifiche di nuovi annunci.
+  const nonListingNotification =
+    /\\b(?:la tua )?ricerca\\s+(?:è stata\\s+)?salvat[ao]\\b/i.test(subject) ||
+    /\\bbenvenut[oa]\\b/i.test(subject) ||
+    /\\bhai condiviso alcuni dati dell['’]account google\\b/i.test(subject) ||
+    /\\bverifica il tuo indirizzo email\\b/i.test(subject) ||
+    /\\bavviso di sicurezza\\b/i.test(subject);
+  const keywordMatch = /immobil|annunci?o|casa|appartament|villetta|villa|terreno|vendita|vendesi|affitto|bilocale|trilocale|quadrilocale|monolocale|attico|rustico|commerciale|nuova costruzione|prezzo/i.test(combined);
+  const likelyRealEstate = !nonListingNotification && keywordMatch;
   const warnings: string[] = [];
-  if (!likelyRealEstate) warnings.push("Email non chiaramente riconducibile a una notifica immobiliare: non importata automaticamente nella coda.");
+  if (nonListingNotification) {
+    warnings.push("Email di conferma o configurazione, non una notifica di nuovi immobili: esclusa dalla coda.");
+  } else if (!likelyRealEstate) {
+    warnings.push("Email non chiaramente riconducibile a una notifica immobiliare: non importata automaticamente nella coda.");
+  }
 
   if (!body) warnings.push("Il messaggio non contiene testo leggibile.");
   if (extractEmailAddress(from)) warnings.push("Il mittente è la casella che ha inviato la notifica: non è un contatto verificato del venditore.");
