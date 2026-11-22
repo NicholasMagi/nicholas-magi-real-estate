@@ -660,10 +660,10 @@ function renderCandidateQueue(candidates){
     const sender=candidate.notification_sender
       ?"Mittente notifica: "+candidate.notification_sender+". "
       :"";
-    const received=candidate.data_pubblicazione
-      ?"Ricevuta: "+new Date(candidate.data_pubblicazione).toLocaleString("it-IT")+". "
+    const queued=candidate.created_at
+      ?"Inserito in coda: "+new Date(candidate.created_at).toLocaleString("it-IT")+". "
       :"";
-    details.textContent=sender+received+"Il mittente della notifica non viene considerato automaticamente il contatto del venditore.";
+    details.textContent=sender+queued+"Il mittente della notifica non viene considerato automaticamente il contatto del venditore.";
     const actions=document.createElement("div");
     actions.className="actions";
 
@@ -725,38 +725,21 @@ function renderCandidateQueue(candidates){
       discardButton.disabled=true;
       status.textContent="Salvataggio nell'archivio in corso...";
       try{
-        const record={
-          owner_id:currentUser.id,
-          titolo:titleInput.value.trim(),
-          comune:municipalityInput.value.trim(),
-          prezzo:rawPrice===""?null:Number(rawPrice),
-          contatto:contactInput.value.trim()||null,
-          tipo_venditore:sellerSelect.value,
-          portale:sourceInput.value.trim()||null,
-          url:cleanUrl
-        };
-        const {data:listing,error:insertError}=await supabase
-          .from("annunci")
-          .insert(record)
-          .select("id")
-          .single();
-        if(insertError)throw insertError;
-
-        const {error:updateError}=await supabase
-          .from("annunci_candidati")
-          .update({
-            stato:"confermato",
-            annuncio_id:listing.id,
-            updated_at:new Date().toISOString()
-          })
-          .eq("id",candidate.id)
-          .eq("stato","da_verificare");
-
-        if(updateError){
-          status.textContent="ATTENZIONE: l'annuncio è stato creato, ma il candidato non è stato aggiornato. Non prema di nuovo 'Conferma': occorre verificare il collegamento in archivio.";
-          msg("gmailMsg","Annuncio creato; aggiornamento della coda da verificare manualmente.","error");
-          return;
-        }
+        const {data:annuncioId,error:confirmError}=await supabase.rpc(
+          "nmre_confirm_annuncio_candidato",
+          {
+            p_candidate_id:candidate.id,
+            p_titolo:titleInput.value.trim(),
+            p_comune:municipalityInput.value.trim(),
+            p_prezzo:rawPrice===""?null:Number(rawPrice),
+            p_contatto:contactInput.value.trim()||null,
+            p_tipo_venditore:sellerSelect.value,
+            p_portale:sourceInput.value.trim()||null,
+            p_url:cleanUrl
+          }
+        );
+        if(confirmError)throw confirmError;
+        if(!annuncioId)throw new Error("Conferma completata senza ID annuncio restituito.");
 
         await loadListings();
         await loadPendingCandidates();
@@ -845,7 +828,6 @@ $("testGmail").addEventListener("click",async()=>{
           tipo_venditore:candidate.tipo_venditore||"Da verificare",
           portale:candidate.portale||null,
           url:validUrl(candidate.url),
-          data_pubblicazione:candidate.receivedAt||null,
           notification_sender:candidate.notificationSender||null,
           email_subject:candidate.titolo||null,
           source_email_id:candidate.messageId||null,
