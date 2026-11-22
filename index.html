@@ -43,6 +43,10 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .gmail-email{padding:12px 0;border-top:1px solid var(--line);font-size:13px;line-height:1.5;overflow-wrap:anywhere}
 .gmail-email b{display:block;margin-bottom:5px}
 .gmail-email .gmail-meta{color:var(--muted);font-size:12px}
+.archive-tools{display:grid;grid-template-columns:minmax(220px,2fr) minmax(170px,1fr);gap:10px;margin:14px 0}
+.archive-tools input,.archive-tools select{margin:0}
+.archive-summary{font-size:12px;color:var(--muted);margin:8px 0}
+@media(max-width:650px){.archive-tools{grid-template-columns:1fr}}
 @media(max-width:650px){.grid{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}.heading{font-size:24px}}
 </style>
 </head>
@@ -137,7 +141,23 @@ l'acquisizione automatica delle notifiche immobiliari.
 </section>
 
 <section class="panel">
-<div class="topline"><h2>Archivio annunci</h2><button class="secondary" id="refresh">Aggiorna</button></div>
+<div class="topline">
+  <h2>Archivio annunci</h2>
+  <div class="actions">
+    <button class="secondary" id="exportCsv">Esporta CSV</button>
+    <button class="secondary" id="refresh">Aggiorna</button>
+  </div>
+</div>
+<div class="archive-tools">
+  <input id="listingSearch" type="search" placeholder="Cerca per immobile, comune, fonte o contatto" aria-label="Cerca annunci">
+  <select id="sellerFilter" aria-label="Filtra per tipologia venditore">
+    <option value="">Tutti i venditori</option>
+    <option value="Privato">Privati</option>
+    <option value="Agenzia">Agenzie</option>
+    <option value="Da verificare">Da verificare</option>
+  </select>
+</div>
+<div id="archiveSummary" class="archive-summary" aria-live="polite"></div>
 <div id="listingList"><p class="hint">Caricamento annunci...</p></div>
 <div id="listMsg" class="status"></div>
 </section>
@@ -153,6 +173,7 @@ const URL_KEY = "nmre-supabase-url";
 const API_KEY = "nmre-supabase-publishable-key";
 let supabase = null;
 let currentUser = null;
+let cachedListings = [];
 
 function msg(id,text,type=""){
   $(id).textContent=text;
@@ -298,29 +319,43 @@ $("signOut").addEventListener("click",async()=>{
   if(error)msg("listMsg",error.message,"error");
 });
 
-async function loadListings(){
-  if(!currentUser)return;
+function getFilteredListings(){
+  const query=$("listingSearch").value.trim().toLocaleLowerCase("it");
+  const seller=$("sellerFilter").value;
 
-  msg("listMsg","Caricamento...");
-  const {data,error}=await supabase.from("annunci").select("*").order("created_at",{ascending:false});
+  return cachedListings.filter(item=>{
+    const type=item.tipo_venditore||"Da verificare";
+    if(seller&&type!==seller)return false;
 
-  if(error){
-    $("listingList").innerHTML="";
-    msg("listMsg",error.message,"error");
+    const searchable=[
+      item.titolo,item.comune,item.contatto,item.portale,
+      item.tipo_venditore,item.prezzo,item.url
+    ].join(" ").toLocaleLowerCase("it");
+
+    return !query||searchable.includes(query);
+  });
+}
+
+function renderListings(){
+  const visible=getFilteredListings();
+  const total=cachedListings.length;
+
+  $("archiveSummary").textContent=
+    total===visible.length
+      ? `${visible.length} annunci in archivio`
+      : `${visible.length} annunci mostrati su ${total}`;
+
+  $("exportCsv").disabled=visible.length===0;
+
+  if(!visible.length){
+    $("listingList").innerHTML=
+      total
+        ? '<p class="hint">Nessun annuncio corrisponde ai filtri selezionati.</p>'
+        : '<p class="hint">Non ci sono ancora annunci. Inserisca il primo.</p>';
     return;
   }
 
-  $("totalCount").textContent=data.length;
-  $("privateCount").textContent=data.filter(x=>x.tipo_venditore==="Privato").length;
-  $("verifyCount").textContent=data.filter(x=>!x.tipo_venditore||x.tipo_venditore==="Da verificare").length;
-
-  if(!data.length){
-    $("listingList").innerHTML='<p class="hint">Non ci sono ancora annunci. Inserisca il primo.</p>';
-    msg("listMsg","");
-    return;
-  }
-
-  $("listingList").innerHTML=data.map(item=>{
+  $("listingList").innerHTML=visible.map(item=>{
     const url=validUrl(item.url);
     const linkHtml=url
       ? '<a href="' + safe(url) + '" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
@@ -338,9 +373,69 @@ async function loadListings(){
   $("listingList").querySelectorAll("[data-delete]").forEach(btn=>{
     btn.addEventListener("click",()=>deleteListing(btn.dataset.delete));
   });
-
-  msg("listMsg",data.length+" annunci caricati.","success");
 }
+
+async function loadListings(){
+  if(!currentUser)return;
+
+  msg("listMsg","Caricamento...");
+  const {data,error}=await supabase.from("annunci").select("*").order("created_at",{ascending:false});
+
+  if(error){
+    cachedListings=[];
+    $("listingList").innerHTML="";
+    $("archiveSummary").textContent="";
+    $("totalCount").textContent="—";
+    $("privateCount").textContent="—";
+    $("verifyCount").textContent="—";
+    msg("listMsg",error.message,"error");
+    return;
+  }
+
+  cachedListings=data||[];
+  $("totalCount").textContent=cachedListings.length;
+  $("privateCount").textContent=cachedListings.filter(x=>x.tipo_venditore==="Privato").length;
+  $("verifyCount").textContent=cachedListings.filter(x=>!x.tipo_venditore||x.tipo_venditore==="Da verificare").length;
+
+  renderListings();
+  msg("listMsg",cachedListings.length+" annunci caricati.","success");
+}
+
+function csvCell(value){
+  let text=String(value??"");
+  if(/^[=+@\\-\\t\\r]/.test(text))text="'"+text;
+  return '"' + text.replace(/"/g,'""') + '"';
+}
+
+$("exportCsv").addEventListener("click",()=>{
+  const rows=getFilteredListings();
+  if(!rows.length)return;
+
+  const columns=[
+    ["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],
+    ["Contatto","contatto"],["Venditore","tipo_venditore"],
+    ["Fonte","portale"],["URL","url"],["Data inserimento","created_at"]
+  ];
+
+  const lines=[
+    columns.map(([label])=>csvCell(label)).join(";"),
+    ...rows.map(item=>columns.map(([,key])=>csvCell(item[key])).join(";"))
+  ];
+
+  const blob=new Blob(["\\uFEFF"+lines.join("\\r\\n")],{type:"text/csv;charset=utf-8;"});
+  const objectUrl=URL.createObjectURL(blob);
+  const link=document.createElement("a");
+  link.href=objectUrl;
+  link.download="nicholas-magi-annunci-"+new Date().toISOString().slice(0,10)+".csv";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+  msg("listMsg",rows.length+" annunci esportati in CSV.","success");
+});
+
+$("listingSearch").addEventListener("input",renderListings);
+$("sellerFilter").addEventListener("change",renderListings);
 
 $("listingForm").addEventListener("submit",async event=>{
   event.preventDefault();
