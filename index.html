@@ -251,8 +251,8 @@ function euro(value){
 }
 
 function isAuction(item){
-  return /^ASTA\\s*[—-]/i.test(String(item?.titolo||"")) ||
-    /\\ball'asta\\b|\\basta giudiziaria\\b/i.test(String(item?.titolo||""));
+  return /^ASTA\s*[—-]/i.test(String(item?.titolo||"")) ||
+    /\ball'asta\b|\basta giudiziaria\b/i.test(String(item?.titolo||""));
 }
 
 function getProvinceName(item){
@@ -554,7 +554,7 @@ function renderListings(){
 
     return `<article class="listing"><div>
     <h3>${safe(item.titolo)}</h3>
-    <div class="meta">${safe(item.comune)} · ${safe(item.contatto||"Contatto non inserito")}<br>${safe(item.portale||"Fonte non indicata")}</div>
+    <div class="meta">${safe(item.comune)} · Provincia di ${safe(getProvinceName(item))}<br>${safe(item.contatto||"Contatto non inserito")} · ${safe(item.portale||"Fonte non indicata")}</div>
     <div class="price">${euro(item.prezzo)}</div>
     <span class="pill">${safe(item.tipo_venditore||"Da verificare")}</span>
     ${linkHtml}
