@@ -439,7 +439,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div><h2>Radar proprietari</h2><div class="dash-card-sub">Le opportunità da approfondire prima, ordinate per segnali verificabili</div></div>
       <button class="dash-link" id="sellerRadarAll">Apri tutte le opportunità</button>
     </div>
-    <p class="seller-radar-intro">Il punteggio indica una priorità di lavorazione, non la probabilità che il proprietario incarichi un'agenzia. Ribassi e date vengono valorizzati solo quando documentati; più email indicano più notifiche, non necessariamente una ripubblicazione.</p>
+    <p class="seller-radar-intro">Il punteggio indica una priorità di lavorazione, non la probabilità che il proprietario incarichi un'agenzia. La data mostrata è quella di ricezione dell'email Gmail e non certifica da quanto tempo l'annuncio sia online. Più email indicano più notifiche, non necessariamente una ripubblicazione.</p>
     <div class="seller-radar-metrics">
       <div class="seller-radar-metric"><strong id="sellerRadarHigh">0</strong><span>Priorità elevate</span></div>
       <div class="seller-radar-metric"><strong id="sellerRadarDrops">0</strong><span>Con ribasso documentato</span></div>
@@ -647,13 +647,13 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
     <div class="search-filter-field"><label for="candidateTypeFilter">Tipologia</label><select id="candidateTypeFilter"><option value="">Tutte le tipologie</option></select></div>
     <div class="search-filter-field"><label for="candidatePortalFilter">Portale</label><select id="candidatePortalFilter"><option value="">Tutti i portali</option></select></div>
     <div class="search-filter-field"><label for="candidateSellerFilter">Venditore</label><select id="candidateSellerFilter"><option value="">Tutti</option><option value="Privato">Privato riconosciuto</option><option value="Da verificare">Da verificare</option></select></div>
-    <div class="search-filter-field"><label for="candidateQualityFilter">Controllo qualità</label><select id="candidateQualityFilter"><option value="">Tutti gli annunci</option><option value="duplicates">Possibili duplicati</option><option value="priceDrop">Ribassi di prezzo documentati</option><option value="link">Link da verificare</option><option value="stale">Pubblicati da oltre 30 giorni</option><option value="incomplete">Dati incompleti</option></select></div>
+    <div class="search-filter-field"><label for="candidateQualityFilter">Controllo qualità</label><select id="candidateQualityFilter"><option value="">Tutti gli annunci</option><option value="duplicates">Possibili duplicati</option><option value="priceDrop">Ribassi di prezzo documentati</option><option value="link">Link da verificare</option><option value="stale">Email ricevuta oltre 30 giorni fa</option><option value="incomplete">Dati incompleti</option></select></div>
     <div class="search-filter-field"><label for="candidatePriceMin">Prezzo minimo (€)</label><input id="candidatePriceMin" type="number" min="0" step="1000" placeholder="Nessun minimo"></div>
     <div class="search-filter-field"><label for="candidatePriceMax">Prezzo massimo (€)</label><input id="candidatePriceMax" type="number" min="0" step="1000" placeholder="Nessun massimo"></div>
     <div class="search-filter-field"><label for="candidateSurfaceMin">Superficie minima (m²)</label><input id="candidateSurfaceMin" type="number" min="0" step="5" placeholder="Qualsiasi"></div>
     <div class="search-filter-field"><label for="candidateSurfaceMax">Superficie massima (m²)</label><input id="candidateSurfaceMax" type="number" min="0" step="5" placeholder="Qualsiasi"></div>
-    <div class="search-filter-field"><label for="candidateFromFilter">Pubblicato dal</label><input id="candidateFromFilter" type="date"></div>
-    <div class="search-filter-field"><label for="candidateToFilter">Pubblicato al</label><input id="candidateToFilter" type="date"></div>
+    <div class="search-filter-field"><label for="candidateFromFilter">Email ricevuta dal</label><input id="candidateFromFilter" type="date"></div>
+    <div class="search-filter-field"><label for="candidateToFilter">Email ricevuta al</label><input id="candidateToFilter" type="date"></div>
   </div>
   <div class="search-filter-actions"><span id="candidateFilterCount" class="search-filter-count">Caricamento risultati…</span><button class="secondary" id="candidateResetFilters" type="button">Azzera filtri</button></div>
 </div>
@@ -2054,13 +2054,8 @@ function sellerRadarPriority(item,now=new Date()){
   const documentedDrop=reduction>0&&Number.isFinite(previous)&&Number.isFinite(current)&&previous>current&&current>0;
   if(documentedDrop)add(reduction>=10?32:22,"Ribasso documentato del "+reduction.toLocaleString("it-IT")+"%");
 
-  const published=item.data_pubblicazione?Date.parse(item.data_pubblicazione):NaN;
-  if(Number.isFinite(published)){
-    const days=Math.max(0,Math.floor((now.getTime()-published)/86400000));
-    if(days>=60)add(12,"Pubblicazione indicata da "+days+" giorni");
-    else if(days>=30)add(7,"Pubblicazione indicata da "+days+" giorni");
-  }
-
+  // Notification age is shown as context only; it is not evidence of online duration
+  // or of a seller becoming more negotiable, so it does not increase the radar score.
   const municipality=normalizedMatchText(item.comune);
   const core=new Set(["ancona","osimo","castelfidardo","jesi"]);
   const nearby=new Set(["loreto","recanati","camerano","numana","sirolo","falconara marittima","porto recanati","filottrano","polverigi","agugliano","offagna","chiaravalle","montemarciano","monte urano","civitanova marche","porto sant elpidio","monte san vito","santa maria nuova","monsano"]);
@@ -2110,6 +2105,10 @@ function renderSellerRadar(candidates=candidateCache){
     const currentPrice=item.prezzo!==null&&item.prezzo!==undefined?euro(item.prezzo):"Prezzo non indicato";
     const seller=item.tipo_venditore==="Privato"?"Privato verificato":"Venditore da verificare";
     const title=safe(item.titolo||"Immobile senza titolo");
+    const notificationTime=item.data_pubblicazione||item.created_at;
+    const notificationLabel=notificationTime&&Number.isFinite(Date.parse(notificationTime))
+      ?"Email ricevuta il "+new Date(notificationTime).toLocaleDateString("it-IT")
+      :"Data email non disponibile";
     const meta=safe([item.comune,item.tipologia_immobile,item.portale].filter(Boolean).join(" · ")||"Dettagli da completare");
     const signals=radar.signals.slice(0,4).map(signal=>'<span class="seller-radar-signal">'+safe(signal)+'</span>').join("");
     const link=validUrl(item.url)&&isSpecificCandidateUrl(item.url)
@@ -2119,7 +2118,7 @@ function renderSellerRadar(candidates=candidateCache){
     return '<article class="seller-radar-item">'
       +'<div class="seller-radar-item-top"><span class="dash-lead-rank">'+(index===0?"Prima opportunità":"Priorità "+(index+1))+'</span><span class="seller-radar-score '+(radar.level==="high"?"seller-radar-score-high":"")+'">'+radar.score+'/100</span></div>'
       +'<div class="seller-radar-title">'+title+'</div>'
-      +'<div class="seller-radar-meta">'+meta+'<br>'+safe(seller)+' · '+safe(currentPrice)+'</div>'
+      +'<div class="seller-radar-meta">'+meta+'<br>'+safe(seller)+' · '+safe(currentPrice)+'<br>'+safe(notificationLabel)+'</div>'
       +'<div class="seller-radar-signals">'+signals+'</div>'
       +'<details><summary>Prepara la telefonata</summary><p class="seller-radar-script-text">'+safe(script)+'</p><button type="button" class="secondary" data-radar-copy="'+safe(item.id)+'">Copia copione</button></details>'
       +'<div class="actions"><button type="button" class="gold" data-radar-open="'+safe(item.id)+'">Apri scheda</button>'+link+'</div>'
@@ -2155,17 +2154,19 @@ function candidatePriority(item,now=new Date()){
   if(item.tipo_venditore==="Privato")add(25,"Privato riconosciuto");
   else if(item.tipo_venditore==="Da verificare")add(7,"Venditore da qualificare");
 
-  const published=item.data_pubblicazione?Date.parse(item.data_pubblicazione):NaN;
-  const received=item.created_at?Date.parse(item.created_at):NaN;
-  const hasPublication=Number.isFinite(published);
-  const timestamp=hasPublication?published:received;
+  // data_pubblicazione is a legacy column populated from Gmail's Date header.
+  // It records notification receipt, not the listing's publication date on the portal.
+  const notificationTimestamp=item.data_pubblicazione?Date.parse(item.data_pubblicazione):NaN;
+  const createdTimestamp=item.created_at?Date.parse(item.created_at):NaN;
+  const hasNotificationDate=Number.isFinite(notificationTimestamp);
+  const timestamp=hasNotificationDate?notificationTimestamp:createdTimestamp;
   if(Number.isFinite(timestamp)){
     const days=Math.max(0,Math.floor((now.getTime()-timestamp)/86400000));
-    const points=hasPublication
+    const points=hasNotificationDate
       ?(days<=2?20:days<=7?16:days<=14?11:days<=30?5:0)
       :(days<=2?10:days<=7?8:days<=14?5:days<=30?2:0);
-    add(points,hasPublication?"Pubblicazione recente ("+days+" gg)":"Notifica recente ("+days+" gg)");
-  }else reasons.push("Data non disponibile");
+    add(points,hasNotificationDate?"Notifica email ricevuta ("+days+" gg fa)":"Record acquisito ("+days+" gg fa)");
+  }else reasons.push("Data notifica non disponibile");
 
   const municipality=normalizedMatchText(item.comune);
   const coreTerritory=new Set(["ancona","osimo","castelfidardo","jesi"]);
@@ -2267,9 +2268,10 @@ function findCandidateDuplicate(item,candidates,archive){
 
 function candidateQuality(item,candidates,archive,now=new Date()){
   const specificLink=isSpecificCandidateUrl(item.url);
-  const published=item.data_pubblicazione?Date.parse(item.data_pubblicazione):NaN;
-  const hasPublication=Number.isFinite(published);
-  const days=hasPublication?Math.max(0,Math.floor((now.getTime()-published)/86400000)):null;
+  // This legacy column stores the email's Date header, not portal listing age.
+  const notificationTimestamp=item.data_pubblicazione?Date.parse(item.data_pubblicazione):NaN;
+  const hasNotificationDate=Number.isFinite(notificationTimestamp);
+  const notificationDays=hasNotificationDate?Math.max(0,Math.floor((now.getTime()-notificationTimestamp)/86400000)):null;
   const missing=[];
   if(!String(item.comune||"").trim())missing.push("comune");
   if(!(Number(item.prezzo)>0))missing.push("prezzo");
@@ -2277,6 +2279,7 @@ function candidateQuality(item,candidates,archive,now=new Date()){
   if(!(Number(item.superficie_mq)>0))missing.push("superficie");
   if(!(Number(item.locali)>0))missing.push("locali");
   if(!String(item.contatto||"").trim())missing.push("contatto");
+  if(!hasNotificationDate)missing.push("data notifica email");
   const duplicate=findCandidateDuplicate(item,candidates,archive);
 
   // Il punteggio misura soltanto quanto sono completi e verificabili i dati.
@@ -2287,7 +2290,7 @@ function candidateQuality(item,candidates,archive,now=new Date()){
   if(Number(item.superficie_mq)>0)qualityScore+=15;
   if(Number(item.locali)>0)qualityScore+=5;
   if(specificLink)qualityScore+=15;
-  if(hasPublication)qualityScore+=10;
+  if(hasNotificationDate)qualityScore+=10;
   if(item.tipo_venditore==="Privato"&&Number(item.seller_confidence)>=90)qualityScore+=10;
   if(String(item.contatto||"").trim())qualityScore+=5;
 
@@ -2299,10 +2302,9 @@ function candidateQuality(item,candidates,archive,now=new Date()){
   return {
     specificLink,
     hasValidUrl:!!validUrl(item.url||item.url_originale),
-    hasPublication,
-    days,
-    stale:hasPublication&&days>30,
-    aging:hasPublication&&days>14&&days<=30,
+    hasNotificationDate,
+    notificationDays,
+    oldNotification:hasNotificationDate&&notificationDays>30,
     missing,
     incomplete:missing.length>0,
     duplicate,
@@ -2332,8 +2334,8 @@ function renderCandidates(){
     if(qualityFilter==="priceDrop")return Number(item.price_drop_percent)>0
       &&Number(item.previous_price)>Number(item.current_price_at_drop||item.prezzo);
     if(qualityFilter==="link")return !quality.specificLink;
-    if(qualityFilter==="stale")return quality.stale;
-    if(qualityFilter==="incomplete")return quality.incomplete||!quality.hasPublication;
+    if(qualityFilter==="stale")return quality.oldNotification;
+    if(qualityFilter==="incomplete")return quality.incomplete||!quality.hasNotificationDate;
     return true;
   };
   const visible=data.filter(item=>{
@@ -2363,8 +2365,8 @@ function renderCandidates(){
   const allQuality=[...qualityById.values()];
   const duplicateCount=allQuality.filter(x=>x.duplicate).length;
   const linkReviewCount=allQuality.filter(x=>!x.specificLink).length;
-  const staleCount=allQuality.filter(x=>x.stale).length;
-  const incompleteCount=allQuality.filter(x=>x.incomplete||!x.hasPublication).length;
+  const oldNotificationCount=allQuality.filter(x=>x.oldNotification).length;
+  const incompleteCount=allQuality.filter(x=>x.incomplete||!x.hasNotificationDate).length;
   const qualityHighCount=allQuality.filter(x=>x.qualityLevel==="high").length;
   const priceDropCount=visible.filter(item=>Number(item.price_drop_percent)>0).length;
   const averageQuality=allQuality.length
@@ -2374,7 +2376,7 @@ function renderCandidates(){
     ?priorityCounts.high+" priorità alte · "+priorityCounts.medium+" medie · "+priorityCounts.low+" da qualificare. "
       +qualityHighCount+" schede con dati solidi · qualità media "+averageQuality+"/100. "
       +priceDropCount+" ribassi di prezzo documentati · "+duplicateCount+" possibili duplicati · "
-      +linkReviewCount+" link da verificare · "+staleCount+" annunci oltre 30 giorni · "+incompleteCount+" incompleti."
+      +linkReviewCount+" link da verificare · "+oldNotificationCount+" email ricevute oltre 30 giorni fa · "+incompleteCount+" incompleti."
     :"Nessuna opportunità da classificare.";
   const visibleNotificationIds=new Set();
   visible.forEach(item=>{
@@ -2398,21 +2400,21 @@ function renderCandidates(){
   }
   box.innerHTML=uniqueRanked.map(({item:c,priority,quality})=>{
     const isPrivate=c.tipo_venditore==="Privato";
-    const published=quality.hasPublication
-      ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data di pubblicazione non indicata";
+    const notificationDate=quality.hasNotificationDate
+      ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data email non indicata";
     const url=validUrl(c.url);
     const linkHtml=quality.specificLink
       ?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
       :'<span class="candidate-link-warning">Link diretto non verificato: apertura sospesa</span>';
-    const ageText=quality.hasPublication
-      ?(quality.days===0?"Pubblicato oggi":"Pubblicato "+quality.days+" giorni fa")
-      :"Data di pubblicazione da verificare";
+    const ageText=quality.hasNotificationDate
+      ?(quality.notificationDays===0?"Email ricevuta oggi":"Email ricevuta "+quality.notificationDays+" giorni fa")
+      :"Data di ricezione dell'email non disponibile";
     const linkText=quality.specificLink?"Link specifico individuato":(quality.hasValidUrl?"Collegamento generico o non riconosciuto":"Nessun collegamento disponibile");
     const missingText=quality.missing.length?"Dati mancanti: "+quality.missing.join(", "):"Dati essenziali presenti";
     const duplicateText=quality.duplicate
       ?"Possibile duplicato nell'"+(quality.duplicate.scope==="archivio"?"archivio":"elenco opportunità")+": "+(quality.duplicate.item.titolo||"annuncio simile")+" ("+quality.duplicate.reason+")"
       :"Nessun duplicato evidente individuato";
-    const tone=quality.duplicate||!quality.specificLink||quality.stale?"warning":quality.incomplete||!quality.hasPublication?"review":"ok";
+    const tone=quality.duplicate||!quality.specificLink||quality.oldNotification?"warning":quality.incomplete||!quality.hasNotificationDate?"review":"ok";
     const qualityHtml='<div class="candidate-quality candidate-quality-'+tone+'"><strong>Controllo qualità:</strong> '+safe(linkText)+' · '+safe(ageText)+' · '+safe(missingText)+'<br>'+safe(duplicateText)+'</div>';
     const history=Array.isArray(c.notification_history)?c.notification_history:[];
     const latestPriceDrop=history.find(entry=>
@@ -2460,7 +2462,7 @@ function renderCandidates(){
       +analysisHtml
       +priceDropHtml
       +qualityHtml
-      +'<div class="topline"><span class="meta">'+safe(c.portale||"Portale non indicato")+' · '+safe(published)+'</span><span class="pill">'+(isPrivate?"Privato riconosciuto":c.tipo_venditore==="Agenzia"?"Agenzia riconosciuta":"Venditore da verificare")+'</span></div>'
+      +'<div class="topline"><span class="meta">'+safe(c.portale||"Portale non indicato")+' · Email ricevuta: '+safe(notificationDate)+'</span><span class="pill">'+(isPrivate?"Privato riconosciuto":c.tipo_venditore==="Agenzia"?"Agenzia riconosciuta":"Venditore da verificare")+'</span></div>'
       +'<div class="candidate-quality"><strong>Riconoscimento venditore:</strong> '+safe(c.seller_evidence||"Nessuna prova automatica disponibile")+' · '+(Number(c.seller_confidence)>0?Number(c.seller_confidence)+"% di confidenza":"Confidenza non determinabile")+(c.seller_manual_override?" · Verifica manuale":"")+'</div>'
       +historyHtml
       +'<label>Titolo / descrizione dell\'annuncio</label><input data-field="titolo" value="'+safe(c.titolo||"Annuncio immobiliare")+'" maxlength="250">'
