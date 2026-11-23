@@ -925,7 +925,12 @@ function parseOmiNumber(value){
   }else if(raw.includes(",")){
     const tail=raw.split(",").pop();
     raw=/^\d{1,2}$/.test(tail)?raw.replace(",","."):raw.replace(/,/g,"");
-  }else if((raw.match(/\./g)||[]).length>1)raw=raw.replace(/\./g,"");
+  }else if((raw.match(/\./g)||[]).length>1){
+    const parts=raw.split(".");
+    if(parts.slice(1).every(part=>part.length===3))raw=parts.join("");
+  }else if(/^[0-9]{1,3}\.[0-9]{3}$/.test(raw)){
+    raw=raw.replace(".","");
+  }
   const number=Number(raw);
   return Number.isFinite(number)&&number>=0?number:null;
 }
