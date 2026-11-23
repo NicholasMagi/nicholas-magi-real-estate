@@ -1269,7 +1269,7 @@ async function importOmiCsv(){
       rows.push({
         owner_id:currentUser.id,semestre:Number(semester),provincia:province,comune_istat:communeIstat,
         comune:commune,fascia:get("FASCIA"),zona:zone,dizione:get("DIZIONE")||get("DESCRIZIONE_ZONA")||"",
-        destinazione,
+        destinazione:destination,
         link_zona:get("LINK_ZONA")||communeIstat+":"+zone,
         cod_tip:tipology||tipCode,tipologia:tipology||"Non indicata",stato:get("STATO"),
         stato_prevalente:get("STATO_PREVALENTE"),compr_min:buyMin,compr_max:buyMax,
