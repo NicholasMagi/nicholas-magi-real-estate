@@ -95,6 +95,18 @@ button:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:760px){.competitor-form{grid-template-columns:1fr 1fr}.competitor-stats{grid-template-columns:1fr 1fr}}
 @media(max-width:520px){.competitor-form{grid-template-columns:1fr}.competitor-wide{grid-column:auto}}
 
+/* NMRE WORKSPACE / GESTIONALE */
+.workspace-nav{position:sticky;top:0;z-index:20;display:flex;gap:6px;overflow-x:auto;padding:10px;margin:0 0 16px;background:rgba(245,246,248,.96);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:13px;scrollbar-width:thin}
+.workspace-tab{white-space:nowrap;background:transparent;color:#526075;border:1px solid transparent;padding:10px 13px;font-size:12px}
+.workspace-tab:hover{background:#fff}
+.workspace-tab.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.workspace-view{animation:workspaceIn .16s ease-out}
+.workspace-view[hidden]{display:none!important}
+.workspace-footnote{margin:8px 2px 0}
+.workspace-view .panel{box-shadow:0 2px 10px rgba(16,26,43,.025)}
+.workspace-view h2{letter-spacing:-.2px}
+@keyframes workspaceIn{from{opacity:.65;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:650px){.workspace-nav{margin-left:-4px;margin-right:-4px;border-radius:10px}.workspace-tab{padding:9px 11px;font-size:11px}}
 </style>
 </head>
 <body>
@@ -132,6 +144,15 @@ button:disabled{opacity:.55;cursor:not-allowed}
 </section>
 
 <section id="appArea" hidden>
+<nav class="workspace-nav" aria-label="Navigazione gestionale">
+  <button type="button" class="workspace-tab active" data-workspace-target="home" aria-pressed="true">Panoramica</button>
+  <button type="button" class="workspace-tab" data-workspace-target="inbox" aria-pressed="false">Posta e candidati</button>
+  <button type="button" class="workspace-tab" data-workspace-target="opportunita" aria-pressed="false">Opportunità</button>
+  <button type="button" class="workspace-tab" data-workspace-target="concorrenza" aria-pressed="false">Concorrenza</button>
+  <button type="button" class="workspace-tab" data-workspace-target="territorio" aria-pressed="false">Territorio</button>
+  <button type="button" class="workspace-tab" data-workspace-target="impostazioni" aria-pressed="false">Impostazioni</button>
+</nav>
+<div class="workspace-view" data-workspace-view="impostazioni">
 <div class="panel topline">
 <div><b>Area personale</b><div class="small" id="userEmail"></div></div>
 <div class="actions">
@@ -140,6 +161,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 </div>
 </div>
 
+<div class="workspace-view" data-workspace-view="inbox">
 <section class="panel">
 <h2>Collegamento Gmail</h2>
 <p class="hint">
@@ -155,12 +177,18 @@ l'acquisizione automatica delle notifiche immobiliari.
 <div id="candidateQueue"></div>
 </section>
 
+</div>
+
+<div class="workspace-view" data-workspace-view="home">
 <div class="grid panel">
 <div class="stat"><strong id="totalCount">0</strong><span>Annunci totali</span></div>
 <div class="stat"><strong id="privateCount">0</strong><span>Venditori privati</span></div>
 <div class="stat"><strong id="verifyCount">0</strong><span>Da verificare</span></div>
 </div>
 
+</div>
+
+<div class="workspace-view" data-workspace-view="territorio">
 <section class="panel">
   <div class="topline">
     <h2>Territorio e copertura</h2>
@@ -181,6 +209,9 @@ l'acquisizione automatica delle notifiche immobiliari.
 </section>
 
 
+</div>
+
+<div class="workspace-view" data-workspace-view="concorrenza">
 <section id="competitorPanel" class="panel competitor-panel">
   <div class="topline">
     <div><h2>Monitoraggio della concorrenza</h2><div class="small">Competitive Intelligence · Osservatorio agenzie e immobili</div></div>
@@ -218,6 +249,9 @@ l'acquisizione automatica delle notifiche immobiliari.
   <div id="competitorMsg" class="status" aria-live="polite"></div>
 </section>
 
+</div>
+
+<div class="workspace-view" data-workspace-view="opportunita">
 <section class="panel">
 <h2>Registra un nuovo immobile</h2>
 <form id="listingForm">
@@ -279,7 +313,8 @@ l'acquisizione automatica delle notifiche immobiliari.
 <div id="listingList"><p class="hint">Caricamento annunci...</p></div>
 <div id="listMsg" class="status"></div>
 </section>
-<p class="hint">I dati sono associati al Suo account e protetti dalle regole di sicurezza di Supabase.</p>
+</div>
+<p class="hint workspace-footnote">I dati sono associati al Suo account e protetti dalle regole di sicurezza di Supabase.</p>
 </section>
 </main>
 
@@ -1254,6 +1289,22 @@ $("testGmail").addEventListener("click",async()=>{
     button.disabled=false;
   }
 });
+
+/* NAVIGAZIONE GESTIONALE */
+const workspaceTabs=[...document.querySelectorAll("[data-workspace-target]")];
+const workspaceViews=[...document.querySelectorAll(".workspace-view[data-workspace-view]")];
+function showWorkspaceView(name){
+  if(!workspaceViews.some(view=>view.dataset.workspaceView===name))return;
+  workspaceViews.forEach(view=>{view.hidden=view.dataset.workspaceView!==name;});
+  workspaceTabs.forEach(tab=>{
+    const active=tab.dataset.workspaceTarget===name;
+    tab.classList.toggle("active",active);
+    tab.setAttribute("aria-pressed",String(active));
+  });
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+workspaceTabs.forEach(tab=>tab.addEventListener("click",()=>showWorkspaceView(tab.dataset.workspaceTarget)));
+showWorkspaceView("home");
 
 boot().catch(e=>{
   showSetup();
