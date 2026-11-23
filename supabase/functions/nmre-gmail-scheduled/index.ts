@@ -540,6 +540,8 @@ export default {
           portale: portal || "Portale non indicato",
           url,
           url_originale: originalUrl,
+          // Legacy column name: this is Gmail's Date header (notification receipt),
+          // not the original publication date of the property listing on the portal.
           data_pubblicazione: email.date && !Number.isNaN(Date.parse(email.date))
             ? new Date(email.date).toISOString()
             : null,
