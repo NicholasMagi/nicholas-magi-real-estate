@@ -54,4 +54,6 @@ Deno.test("property type parser recognises additional Italian categories",()=>{
 Deno.test("municipality parser recognises core territory",()=>{
   assertEquals(municipality("Osimo - zona centro"),"Osimo","Osimo");
   assertEquals(municipality("Castelfidardo (AN)"),"Castelfidardo","Castelfidardo");
+  assertEquals(municipality("Porto Sant'Elpidio - zona centro"),"Porto Sant'Elpidio","Porto Sant'Elpidio");
+  assertEquals(municipality("Morro d'Alba"),"Morro d'Alba","Morro d'Alba");
 });
