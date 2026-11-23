@@ -570,6 +570,13 @@ button:disabled{opacity:.55;cursor:not-allowed}
     <div class="seller-radar-intro">Priorità operativa, non probabilità statistica di acquisire l'incarico. Il sistema usa soltanto informazioni registrate: identità del venditore, recapito, motivazione, tempistiche, disponibilità sul prezzo, storico dei ribassi e richiami programmati. Le esclusive in corso e i contatti chiusi vengono esclusi dalla coda di acquisizione.</div>
     <div id="acquisitionPredictorList"><div class="dash-empty">Preparazione della coda di acquisizione…</div></div>
   </section>
+  <section class="dash-card dash-action-plan" id="territoryScannerPanel" style="margin:14px 0">
+    <div class="dash-card-head"><div><h2>NMRE Territory Scanner</h2><div class="dash-card-sub">Dove concentrare la ricerca, in base alle opportunità realmente registrate</div></div><span class="small" id="territoryScannerCount">Analisi in corso</span></div>
+    <div class="seller-radar-intro">Indice operativo di attività territoriale: combina annunci privati riconosciuti, proprietari attivi nel CRM e freschezza dei lead. Non rappresenta domanda di mercato, valore immobiliare o probabilità di acquisire un incarico.</div>
+    <div id="territoryScannerSummary" class="dash-overview" style="margin:12px 0"></div>
+    <div id="territoryScannerList"><div class="dash-empty">Analisi dei comuni presenti nell'archivio…</div></div>
+    <p class="hint">I comuni senza dati non vengono interpretati come territori senza opportunità. La classifica cambia con gli aggiornamenti dell'archivio e del CRM.</p>
+  </section>
   <div class="dash-grid">
     <section class="dash-card">
       <div class="dash-card-head">
@@ -1304,6 +1311,61 @@ function renderAcquisitionPredictor(all=listingCache,candidates=candidateCache,n
  }));
 }
 
+
+function renderTerritoryScanner(all=listingCache,candidates=candidateCache,now=new Date()){
+ const box=$("territoryScannerList");if(!box)return;
+ const territories=new Map();
+ const seen={candidate:new Set(),crm:new Set()};
+ const cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-30);
+ const ensure=(name)=>{
+  const label=String(name||"").trim();
+  if(!label)return null;
+  const key=label.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("it");
+  if(!territories.has(key))territories.set(key,{name:label,privateAds:0,otherAds:0,crmActive:0,recent:0,items:[],score:0});
+  return territories.get(key);
+ };
+ const add=(item,kind)=>{
+  const town=ensure(item.comune);if(!town)return;
+  const url=canonicalCandidateUrl(item.url||item.url_originale);
+  const key=url||((kind==="crm"?"crm:":"candidate:")+String(item.id||""));
+  if(seen[kind].has(key))return;seen[kind].add(key);
+  const created=Date.parse(item.created_at||"");
+  const isRecent=Number.isFinite(created)&&created>=cutoff.getTime()&&created<=now.getTime();
+  if(isRecent)town.recent++;
+  if(item.tipo_venditore==="Privato")town.privateAds++;
+  else town.otherAds++;
+  if(kind==="crm"&&!["incarico_acquisito","non_interessato"].includes(item.stato_contatto||"da_contattare")&&item.altre_agenzie!=="esclusiva")town.crmActive++;
+  town.items.push({item,kind,isRecent});
+ };
+ (Array.isArray(candidates)?candidates:[]).forEach(item=>add(item,"candidate"));
+ (Array.isArray(all)?all:[]).forEach(item=>add(item,"crm"));
+ const rows=[...territories.values()].map(t=>{
+  t.score=t.privateAds*3+t.crmActive*2+t.recent*2;
+  t.items.sort((a,b)=>(b.isRecent?1:0)-(a.isRecent?1:0)||(Number(b.item.prezzo)||0)-(Number(a.item.prezzo)||0));
+  return t;
+ }).sort((a,b)=>b.score-a.score||b.privateAds-a.privateAds||b.crmActive-a.crmActive||a.name.localeCompare(b.name,"it"));
+ const count=$("territoryScannerCount");if(count)count.textContent=rows.length+" comuni analizzati";
+ const totalPrivate=rows.reduce((n,r)=>n+r.privateAds,0);
+ const totalActive=rows.reduce((n,r)=>n+r.crmActive,0);
+ const totalRecent=rows.reduce((n,r)=>n+r.recent,0);
+ const summary=$("territoryScannerSummary");
+ if(summary)summary.innerHTML=[[rows.length,"Comuni con dati"],[totalPrivate,"Annunci privati"],[totalActive,"Proprietari attivi CRM"],[totalRecent,"Lead aggiornati negli ultimi 30 giorni"]].map(x=>'<div class="dash-overview-item"><strong>'+x[0]+'</strong><span>'+x[1]+'</span></div>').join("");
+ if(!rows.length){box.innerHTML='<div class="dash-empty">Non ci sono ancora comuni sufficientemente valorizzati negli annunci o nel CRM. Completi il campo comune nelle schede per attivare la classifica.</div>';return;}
+ box.innerHTML='<div class="seller-radar-list">'+rows.slice(0,8).map((t,index)=>{
+  const examples=t.items.slice(0,2).map(x=>x.item);
+  const buttons=examples.map((item,i)=>'<button type="button" class="secondary" data-territory-kind="'+t.items[i].kind+'" data-territory-id="'+safe(item.id)+'">Apri '+(t.items[i].kind==="candidate"?"lead":"proprietario")+'</button>').join("");
+  return '<article class="seller-radar-item"><div class="seller-radar-item-top"><span class="dash-lead-rank">'+(index===0?"Territorio più attivo":"Posizione "+(index+1))+'</span><span class="seller-radar-score">'+t.score+' pt</span></div>'+
+   '<div class="seller-radar-title">'+safe(t.name)+'</div>'+
+   '<div class="seller-radar-meta">'+t.privateAds+' annunci privati · '+t.crmActive+' proprietari attivi CRM · '+t.recent+' lead recenti (30 gg)</div>'+
+   '<div class="seller-radar-signals"><span class="seller-radar-signal">Privati × 3</span><span class="seller-radar-signal">CRM attivo × 2</span><span class="seller-radar-signal">Recenti × 2</span></div>'+
+   '<div class="actions">'+(buttons||'<span class="hint">Nessuna scheda apribile</span>')+'</div></article>';
+ }).join("")+'</div>';
+ box.querySelectorAll("[data-territory-kind]").forEach(btn=>btn.addEventListener("click",()=>{
+  if(btn.dataset.territoryKind==="candidate")openDashboardCandidate(btn.dataset.territoryId);
+  else openCallCrm(btn.dataset.territoryId);
+ }));
+}
+
 function renderDashboard(){
   const all=Array.isArray(listingCache)?listingCache:[];
   const candidates=Array.isArray(candidateCache)?candidateCache:[];
@@ -1336,6 +1398,7 @@ function renderDashboard(){
   renderDailyActionPlan(all,candidates,today);
   renderOwnerQualificationRadar(all);
   renderAcquisitionPredictor(all,candidates,today);
+  renderTerritoryScanner(all,candidates,today);
   const privateCount=all.filter(item=>item.tipo_venditore==="Privato").length;
   const sources=new Set(all.map(item=>item.portale).filter(Boolean)).size;
   const dateEl=$("dashboardDate");
