@@ -2058,8 +2058,8 @@ function renderSalesPerformance(){
  const mandateKeys=new Set(mandateEvents.map(x=>x.property_id||x.contact_id));
  const mandates=mandateKeys.size;
  const callResponse=nmreCrmPercent(responses.length,calls.length);
- const responseAppointment=nmreCrmPercent(appointments.length,responses.length);
- const appointmentMandate=nmreCrmPercent(mandates,appointments.length);
+ const responseAppointment=nmreCrmPercent(appointments,responses.length);
+ const appointmentMandate=nmreCrmPercent(mandates,appointments);
  $("salesPerfCalls").textContent=String(calls.length);
  $("salesPerfResponses").textContent=String(responses.length);
  $("salesPerfAppointments").textContent=String(appointments.length);
