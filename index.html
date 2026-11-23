@@ -253,7 +253,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div id="candidateMsg" class="status"></div>
 </section>
 
-<div class="grid panel">
+<div class="grid panel" hidden>
 <div class="stat"><strong id="totalCount">0</strong><span>Annunci totali</span></div>
 <div class="stat"><strong id="privateCount">0</strong><span>Venditori privati</span></div>
 <div class="stat"><strong id="verifyCount">0</strong><span>Da verificare</span></div>
@@ -379,6 +379,7 @@ function renderDashboard(){
   const interested=count("interessato");
   const appointments=count("appuntamento");
   const mandates=count("incarico_acquisito");
+  const notInterested=count("non_interessato");
   const privateCount=all.filter(item=>item.tipo_venditore==="Privato").length;
   const sources=new Set(all.map(item=>item.portale).filter(Boolean)).size;
   const dateEl=$("dashboardDate");
@@ -396,7 +397,8 @@ function renderDashboard(){
     ["Primo contatto",firstContact],
     ["Interessato",interested],
     ["Appuntamento",appointments],
-    ["Incarico acquisito",mandates]
+    ["Incarico acquisito",mandates],
+    ["Non interessato",notInterested]
   ];
   const denominator=Math.max(all.length,1);
   $("dashPipeline").innerHTML=stages.map(stage=>{
