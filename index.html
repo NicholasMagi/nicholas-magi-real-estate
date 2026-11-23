@@ -550,6 +550,10 @@ button:disabled{opacity:.55;cursor:not-allowed}
     <div class="dash-card-head"><div><h2>Piano operativo suggerito</h2><div class="dash-card-sub">Le prossime azioni, ordinate per urgenza e qualità dei dati disponibili</div></div><span class="small" id="dashActionPlanCount">Analisi attività</span></div>
     <div id="dashActionPlan"><div class="dash-empty">Preparazione del piano operativo…</div></div>
   </section>
+  <section class="dash-card dash-action-plan" style="margin:14px 0">
+    <div class="dash-card-head"><div><h2>Qualificazione proprietari</h2><div class="dash-card-sub">Priorità basata su informazioni confermate durante il contatto, non su supposizioni</div></div><span class="small" id="ownerQualificationCount">0 schede</span></div>
+    <div id="ownerQualificationList"><div class="dash-empty">Caricamento qualificazioni…</div></div>
+  </section>
   <div class="dash-grid">
     <section class="dash-card">
       <div class="dash-card-head">
@@ -1054,6 +1058,37 @@ function renderDailyActionPlan(all,candidates,today){
  }));
 }
 
+function sellerQualification(item){
+ let score=0;const signals=[];
+ const add=(n,label)=>{score+=n;signals.push(label);};
+ if(item.altre_agenzie==="nessuna")add(15,"Nessun'altra agenzia");
+ else if(item.altre_agenzie==="non_esclusiva")add(10,"Altre agenzie senza esclusiva");
+ else if(item.altre_agenzie==="esclusiva")signals.push("Esclusiva attiva: non sollecitare un incarico concorrente");
+ else if(item.altre_agenzie==="in_trattativa")signals.push("Rapporto con altre agenzie da chiarire");
+ if(item.tempistiche_vendita==="entro_30_giorni")add(20,"Vendita entro 30 giorni");
+ else if(item.tempistiche_vendita==="1_3_mesi")add(15,"Vendita entro 1–3 mesi");
+ else if(item.tempistiche_vendita==="3_6_mesi")add(8,"Orizzonte 3–6 mesi");
+ else if(item.tempistiche_vendita==="oltre_6_mesi"||item.tempistiche_vendita==="senza_fretta")add(3,"Tempistiche non immediate");
+ if(item.prezzo_trattabile==="si")add(15,"Apertura a rivedere il prezzo");
+ else if(item.prezzo_trattabile==="parzialmente")add(8,"Possibile margine sul prezzo");
+ else if(item.prezzo_trattabile==="no")signals.push("Prezzo non trattabile al momento");
+ if(String(item.vendita_motivazione||"").trim())add(5,"Motivazione vendita conosciuta");
+ if(item.tipo_venditore==="Privato")add(10,"Privato verificato");
+ return {score:Math.min(65,score),signals,qualified:!!(item.altre_agenzie&&item.altre_agenzie!=="da_verificare"&&item.tempistiche_vendita&&item.prezzo_trattabile!=="da_verificare")};
+}
+function renderOwnerQualificationRadar(all){
+ const box=$("ownerQualificationList");if(!box)return;
+ const rows=(all||[]).filter(x=>!["Agenzia"].includes(x.tipo_venditore)&&!["incarico_acquisito","non_interessato"].includes(x.stato_contatto))
+  .map(item=>({item,q:sellerQualification(item)}))
+  .filter(x=>x.q.qualified||x.q.signals.length>0)
+  .sort((a,b)=>b.q.score-a.q.score)
+  .slice(0,5);
+ $("ownerQualificationCount").textContent=rows.length+" schede qualificate";
+ if(!rows.length){box.innerHTML='<div class="dash-action-empty">Nessuna qualificazione ancora registrata. Dopo una telefonata, apra la scheda dell’immobile e inserisca motivo, tempi, altre agenzie e disponibilità sul prezzo.</div>';return;}
+ box.innerHTML=rows.map(({item,q},i)=>'<div class="dash-action-row"><div class="dash-action-number">'+(i+1)+'</div><div class="dash-action-copy"><strong>'+safe(item.titolo||"Proprietario")+'</strong><span>'+safe([item.comune,q.score+" punti indicativi",...q.signals.slice(0,3)].join(" · "))+'</span></div><button class="secondary" data-owner-open="'+safe(item.id)+'">Apri scheda</button></div>').join("");
+ box.querySelectorAll("[data-owner-open]").forEach(btn=>btn.addEventListener("click",()=>openCallCrm(btn.dataset.ownerOpen)));
+}
+
 function renderDashboard(){
   const all=Array.isArray(listingCache)?listingCache:[];
   const candidates=Array.isArray(candidateCache)?candidateCache:[];
@@ -1082,6 +1117,7 @@ function renderDashboard(){
   const mandates=count("incarico_acquisito");
   const notInterested=count("non_interessato");
   renderDailyActionPlan(all,candidates,today);
+  renderOwnerQualificationRadar(all);
   const privateCount=all.filter(item=>item.tipo_venditore==="Privato").length;
   const sources=new Set(all.map(item=>item.portale).filter(Boolean)).size;
   const dateEl=$("dashboardDate");
@@ -3037,6 +3073,12 @@ function renderListings(){
       +'<label>Stato del contatto</label><select data-crm-field="stato_contatto"><option value="da_contattare">Da contattare</option><option value="primo_contatto">Primo contatto</option><option value="interessato">Interessato</option><option value="appuntamento">Appuntamento</option><option value="incarico_acquisito">Incarico acquisito</option><option value="non_interessato">Non interessato</option></select>'
       +'<label>Note personali</label><textarea data-crm-field="note_personali" maxlength="10000">'+safe(item.note_personali||"")+'</textarea>'
       +'<label>Prossimo contatto</label><input type="date" data-crm-field="prossimo_contatto_il" value="'+safe(item.prossimo_contatto_il||"")+'">'
+      +'<hr><b>Qualificazione commerciale del proprietario</b>'
+      +'<div class="hint">Compili questi campi solo dopo averli verificati durante la conversazione.</div>'
+      +'<label>Motivo della vendita</label><select data-crm-field="vendita_motivazione"><option value="">Da chiedere</option><option value="trasferimento" '+(item.vendita_motivazione==="trasferimento"?"selected":"")+'>Trasferimento</option><option value="successione" '+(item.vendita_motivazione==="successione"?"selected":"")+'>Successione</option><option value="acquisto_altro_immobile" '+(item.vendita_motivazione==="acquisto_altro_immobile"?"selected":"")+'>Acquisto altro immobile</option><option value="esigenze_familiari" '+(item.vendita_motivazione==="esigenze_familiari"?"selected":"")+'>Esigenze familiari</option><option value="investimento" '+(item.vendita_motivazione==="investimento"?"selected":"")+'>Investimento</option><option value="altro" '+(item.vendita_motivazione==="altro"?"selected":"")+'>Altro</option></select>'
+      +'<label>Tempistiche desiderate</label><select data-crm-field="tempistiche_vendita"><option value="">Da chiarire</option><option value="entro_30_giorni" '+(item.tempistiche_vendita==="entro_30_giorni"?"selected":"")+'>Entro 30 giorni</option><option value="1_3_mesi" '+(item.tempistiche_vendita==="1_3_mesi"?"selected":"")+'>1–3 mesi</option><option value="3_6_mesi" '+(item.tempistiche_vendita==="3_6_mesi"?"selected":"")+'>3–6 mesi</option><option value="oltre_6_mesi" '+(item.tempistiche_vendita==="oltre_6_mesi"?"selected":"")+'>Oltre 6 mesi</option><option value="senza_fretta" '+(item.tempistiche_vendita==="senza_fretta"?"selected":"")+'>Senza fretta</option></select>'
+      +'<label>Rapporto con altre agenzie</label><select data-crm-field="altre_agenzie"><option value="da_verificare" '+((item.altre_agenzie||"da_verificare")==="da_verificare"?"selected":"")+'>Da verificare</option><option value="nessuna" '+(item.altre_agenzie==="nessuna"?"selected":"")+'>Nessuna altra agenzia</option><option value="non_esclusiva" '+(item.altre_agenzie==="non_esclusiva"?"selected":"")+'>Altre agenzie senza esclusiva</option><option value="esclusiva" '+(item.altre_agenzie==="esclusiva"?"selected":"")+'>Esclusiva attiva con altra agenzia</option><option value="in_trattativa" '+(item.altre_agenzie==="in_trattativa"?"selected":"")+'>In trattativa / situazione da chiarire</option></select>'
+      +'<label>Disponibilità a valutare una revisione del prezzo</label><select data-crm-field="prezzo_trattabile"><option value="da_verificare" '+((item.prezzo_trattabile||"da_verificare")==="da_verificare"?"selected":"")+'>Da verificare</option><option value="si" '+(item.prezzo_trattabile==="si"?"selected":"")+'>Sì</option><option value="parzialmente" '+(item.prezzo_trattabile==="parzialmente"?"selected":"")+'>In parte</option><option value="no" '+(item.prezzo_trattabile==="no"?"selected":"")+'>No</option></select>'
       +'<div class="actions"><button class="gold" data-save-crm>Salva scheda</button></div>'
       +'<hr><b>Registra una nuova interazione</b>'
       +'<div class="row"><div><label>Tipo</label><select data-new-type><option value="telefonata">Telefonata</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="appuntamento">Appuntamento</option><option value="nota">Nota</option><option value="altro">Altro</option></select></div><div><label>Esito</label><input data-new-outcome maxlength="180" placeholder="Es. Non risponde, interessato..."></div></div>'
@@ -3386,7 +3428,15 @@ async function loadInteractions(annuncioId,details){
 }
 async function saveCrm(id,details){
   const value=field=>details.querySelector('[data-crm-field="'+field+'"]').value;
-  const payload={stato_contatto:value("stato_contatto"),note_personali:value("note_personali").trim()||null,prossimo_contatto_il:value("prossimo_contatto_il")||null};
+  const payload={
+    stato_contatto:value("stato_contatto"),
+    note_personali:value("note_personali").trim()||null,
+    prossimo_contatto_il:value("prossimo_contatto_il")||null,
+    vendita_motivazione:value("vendita_motivazione")||null,
+    tempistiche_vendita:value("tempistiche_vendita")||null,
+    altre_agenzie:value("altre_agenzie")||"da_verificare",
+    prezzo_trattabile:value("prezzo_trattabile")||"da_verificare"
+  };
   const {error}=await supabase.from("annunci").update(payload).eq("id",id).eq("owner_id",currentUser.id);
   if(error){msg("listMsg","Salvataggio scheda non riuscito: "+error.message,"error");return;}
   msg("listMsg","Scheda CRM aggiornata.","success"); await loadListings();
