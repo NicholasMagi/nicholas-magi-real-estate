@@ -2209,7 +2209,13 @@ function renderCandidates(){
       +qualityHighCount+" schede con dati solidi · qualità media "+averageQuality+"/100. "
       +duplicateCount+" possibili duplicati · "+linkReviewCount+" link da verificare · "+staleCount+" annunci oltre 30 giorni · "+incompleteCount+" incompleti."
     :"Nessuna opportunità da classificare.";
-  const visibleNotifications=visible.reduce((total,item)=>total+Number(item.notification_count||0),0);
+  const visibleNotificationIds=new Set();
+  visible.forEach(item=>{
+    const history=Array.isArray(item.notification_history)?item.notification_history:[];
+    history.forEach(entry=>{if(entry.source_email_id)visibleNotificationIds.add(String(entry.source_email_id));});
+    if(!history.length&&item.source_email_id)visibleNotificationIds.add(String(item.source_email_id));
+  });
+  const visibleNotifications=visibleNotificationIds.size;
   $("candidateFilterCount").textContent=(qualityFilter==="duplicates"?uniqueRanked.length+" possibili duplicati":uniqueRanked.length+" immobili unici")+" · "+visibleNotifications+" notifiche email storiche";
   if(!data.length){
     box.innerHTML='<p class="hint">Nessun nuovo annuncio da valutare. La ricerca automatica continua in background.</p>';
@@ -2321,7 +2327,7 @@ async function loadCandidates(){
     for(let offset=0;;offset+=500){
       const {data:notifications,error}=await supabase
         .from("annunci_candidati_notifiche")
-        .select("candidate_id,notification_sender,email_subject,notified_at,created_at")
+        .select("candidate_id,source_email_id,notification_sender,email_subject,notified_at,created_at")
         .in("candidate_id",ids)
         .order("notified_at",{ascending:false})
         .order("created_at",{ascending:false})
@@ -2339,6 +2345,7 @@ async function loadCandidates(){
     const history=notificationHistory.get(String(item.id))||[];
     if(!history.length&&item.source_email_id){
       history.push({
+        source_email_id:item.source_email_id,
         notification_sender:item.notification_sender,
         email_subject:item.email_subject,
         notified_at:item.data_pubblicazione,
