@@ -146,7 +146,7 @@ export default {
       // portal homepage instead of an individual listing.
       const { data: candidatesToRepair, error: repairQueryError } = await ctx.supabaseAdmin
         .from("annunci_candidati")
-        .select("source_email_id,url,url_originale,seller_classification_version,seller_manual_override")
+        .select("source_email_id,url,url_originale,seller_classification_version,data_extraction_version,seller_manual_override")
         .eq("owner_id", owner)
         .eq("stato", "da_verificare")
         .not("source_email_id", "is", null)
@@ -158,6 +158,7 @@ export default {
           if (typeof candidate.source_email_id !== "string" || !candidate.url_originale) return false;
           if (candidate.seller_manual_override === true) return false;
           if (Number(candidate.seller_classification_version || 0) < 3) return true;
+          if (Number(candidate.data_extraction_version || 0) < 2) return true;
           if (!candidate.url) return true;
           try {
             const link = new URL(candidate.url);
@@ -253,6 +254,7 @@ export default {
           locali: rooms(text),
           camere: bedrooms(text),
           bagni: bathrooms(text),
+          data_extraction_version: 2,
           tipo_venditore: seller.classification,
           seller_confidence: seller.confidence,
           seller_evidence: seller.evidence,
@@ -304,6 +306,7 @@ export default {
             locali: row.locali,
             camere: row.camere,
             bagni: row.bagni,
+            data_extraction_version: row.data_extraction_version,
             updated_at: new Date().toISOString()
           })
           .eq("owner_id", owner)
