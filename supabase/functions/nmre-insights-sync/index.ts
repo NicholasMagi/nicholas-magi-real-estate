@@ -145,7 +145,7 @@ Deno.serve(async (req: Request) => {
       leadUseApproved,
       canImport: settings.configured && leadUseApproved,
       environment,
-      capabilities: ["ricerca annunci di privati con telefono disponibile", "ricerca separata di professionisti", "classificazione tramite clientTypeID ufficiale", "incrocio con notifiche email per eliminare i duplicati"],
+      capabilities: ["ricerca di annunci pubblicati da privati tramite clientTypeID ufficiale", "filtro phoneNumberProvided per selezionare annunci in cui il portale segnala un recapito", "il numero telefonico non è restituito dall’API e va verificato manualmente nell’annuncio", "ricerca separata di professionisti", "incrocio con notifiche email per eliminare i duplicati"],
       missingSecrets: [
         ["INSIGHTS_CLIENT_ID", settings.clientId],
         ["INSIGHTS_CLIENT_SECRET", settings.clientSecret],
