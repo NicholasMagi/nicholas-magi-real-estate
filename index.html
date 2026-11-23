@@ -1986,6 +1986,13 @@ function isSpecificCandidateUrl(value){
   }catch{return false;}
 }
 
+function formatCurrency(value){
+  const amount=Number(value);
+  return Number.isFinite(amount)
+    ?new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(amount)
+    :"—";
+}
+
 function candidatePriority(item,now=new Date()){
   let score=0;
   const reasons=[];
