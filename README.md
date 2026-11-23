@@ -18,6 +18,7 @@ Applicazione web per la raccolta, la verifica e la gestione di opportunità immo
 - Monitoraggio delle sincronizzazioni Gmail: esito, durata, annunci letti, candidati inseriti, agenzie escluse, duplicati ed errori; vengono salvati soltanto contatori operativi, non il contenuto delle email.
 - Coda di annunci privati riconosciuti e opportunità ambigue da approvare manualmente.
 - Doppio punteggio in coda: priorità di acquisizione (venditore, freschezza, territorio e contatto) separata dalla qualità/completezza dei dati; mostra anche il rapporto tra prezzo richiesto e m² quando calcolabile, senza presentarlo come stima di mercato.
+- Dashboard Lead Intelligence: mostra i quattro candidati con il punteggio operativo più alto, i fattori che lo compongono e l'accesso diretto alla scheda; il punteggio organizza il lavoro e non rappresenta una probabilità di acquisire l'incarico.
 - Estrazione migliorata di comune, prezzo, tipologia, superficie, locali, camere e bagni, con gestione dei formati italiani (€, euro, mila, mq, m²) e più categorie immobiliari.
 - Versionamento dell'estrazione: le notifiche Gmail ancora in coda vengono rielaborate una sola volta quando cambia il parser; le classificazioni manuali dei venditori restano protette.
 - Deduplicazione tramite ID Gmail.
