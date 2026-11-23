@@ -99,8 +99,13 @@ export default {
       return Response.json({ error: "Metodo non consentito" }, { status: 405 });
     }
 
+    const startedAt = new Date();
+    let ownerForLog: string | null = null;
+    let syncModeForLog: "full_initial" | "full_recovery" | "incremental" | null = null;
+
     try {
       const owner = Deno.env.get("NMRE_ALLOWED_USER_ID");
+      ownerForLog = owner;
       const encryptionSecret = Deno.env.get("INTEGRATION_TOKEN_ENCRYPTION_KEY");
       if (!owner || !/^[0-9a-f-]{36}$/i.test(owner) || !encryptionSecret) {
         throw new Error("Configurazione server incompleta");
@@ -135,6 +140,7 @@ export default {
           syncMode = "full_recovery";
         }
       }
+      syncModeForLog = syncMode;
 
       // Reprocess pending Immobiliare.it alerts whose saved URL was resolved to the
       // portal homepage instead of an individual listing.
@@ -322,6 +328,34 @@ export default {
       await saveSyncCursor(ctx.supabaseAdmin, nextHistoryId);
 
       const excludedAgencies = propertyEmails.length - classified.length;
+      const completedAt = new Date();
+      const syncRun = {
+        owner_id: owner,
+        status: "success",
+        sync_mode: syncMode,
+        started_at: startedAt.toISOString(),
+        completed_at: completedAt.toISOString(),
+        duration_ms: Math.max(0, completedAt.getTime() - startedAt.getTime()),
+        listed_count: messageIds.length,
+        read_count: mailboxEmails.length,
+        property_notifications_count: propertyEmails.length,
+        private_recognized_count: rows.filter(row => row.tipo_venditore === "Privato").length,
+        needs_user_review_count: rows.filter(row => row.tipo_venditore === "Da verificare").length,
+        excluded_agencies_count: excludedAgencies,
+        discarded_existing_count: discardedExisting,
+        inserted_count: inserted,
+        updated_count: updated,
+        duplicates_or_existing_count: Math.max(0, rows.length - inserted - updated),
+        missing_messages_count: emails.filter(email => !email).length,
+        error_message: null
+      };
+      const { error: syncLogError } = await ctx.supabaseAdmin
+        .from("nmre_gmail_sync_runs")
+        .insert(syncRun);
+      if (syncLogError) {
+        console.error("Gmail sync monitor write failed:", syncLogError.message);
+      }
+
       return Response.json({
         success: true,
         account: ACCOUNT,
@@ -341,6 +375,27 @@ export default {
         missingMessages: emails.filter(email => !email).length
       });
     } catch (error) {
+      if (ownerForLog && /^[0-9a-f-]{36}$/i.test(ownerForLog)) {
+        const completedAt = new Date();
+        const errorMessage = error instanceof Error
+          ? error.message.slice(0, 400)
+          : "Errore sincronizzazione Gmail";
+        const { error: syncLogError } = await ctx.supabaseAdmin
+          .from("nmre_gmail_sync_runs")
+          .insert({
+            owner_id: ownerForLog,
+            status: "error",
+            sync_mode: syncModeForLog,
+            started_at: startedAt.toISOString(),
+            completed_at: completedAt.toISOString(),
+            duration_ms: Math.max(0, completedAt.getTime() - startedAt.getTime()),
+            error_message: errorMessage
+          });
+        if (syncLogError) {
+          console.error("Gmail sync monitor error-log write failed:", syncLogError.message);
+        }
+      }
+
       console.error(
         "Errore Gmail scheduled reader:",
         error instanceof Error ? error.message : "Errore sconosciuto"
