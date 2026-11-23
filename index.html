@@ -462,8 +462,8 @@ function euro(value){
 }
 
 function normalizeSellerIdentifier(value){
-  return String(value??"").normalize("NFD").replace(/[\\u0300-\\u036f]/g,"")
-    .toLocaleLowerCase("it").replace(/[^\\p{L}\\p{N}@.+]+/gu," ").replace(/\\s+/g," ").trim();
+  return String(value??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLocaleLowerCase("it").replace(/[^\p{L}\p{N}@.+]+/gu," ").replace(/\s+/g," ").trim();
 }
 
 function buildSellerRegistryRows(sellerType,identity,contact,candidateId){
@@ -483,15 +483,15 @@ function buildSellerRegistryRows(sellerType,identity,contact,candidateId){
   };
   const identityText=String(identity||"").trim();
   const normalizedIdentity=normalizeSellerIdentifier(identityText);
-  if(normalizedIdentity.length>=5&&!/^\\d+$/.test(normalizedIdentity)){
+  if(normalizedIdentity.length>=5&&!/^\d+$/.test(normalizedIdentity)){
     add("identity",identityText,normalizedIdentity);
   }
   const combined=identityText+" "+String(contact||"");
-  const emails=combined.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi)||[];
+  const emails=combined.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)||[];
   emails.forEach(email=>add("email",email,email.toLowerCase()));
-  const phones=combined.match(/\\+?\\d[\\d\\s().\\/-]{7,}\\d/g)||[];
+  const phones=combined.match(/\+?\d[\d\s().\/-]{7,}\d/g)||[];
   phones.forEach(phone=>{
-    const digits=phone.replace(/\\D/g,"");
+    const digits=phone.replace(/\D/g,"");
     if(digits.length>=9&&digits.length<=15)add("phone",phone,digits);
   });
   return [...rows.values()];
