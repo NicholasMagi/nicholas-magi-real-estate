@@ -83,7 +83,7 @@ export function surface(s:string):number|null {
   const value=String(s||"").replace(/\s+/g," ");
   const patterns=[
     /(?:superficie(?:\s+(?:commerciale|calpestabile|totale))?|metratura|mq\s+totali|sup\.?)\s*[:\-]?\s*(?:circa\s*|ca\.?\s*)?([1-9]\d{0,3}(?:[.,]\d{1,3})?)\s*(?:m²|m2|mq|metri quadrati|metri)?\b/i,
-    /\b([1-9]\d{0,3}(?:[.,]\d{1,3})?)\s*(?:m²|m2|mq|metri quadrati)\b/i
+    /\b([1-9]\d{0,3}(?:[.,]\d{1,3})?)\s*(?:m²|m2|mq|metri quadrati)(?=\s|$|[.,;])/i
   ];
   for(const pattern of patterns){
     const match=value.match(pattern);
