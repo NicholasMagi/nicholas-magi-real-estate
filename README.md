@@ -11,6 +11,7 @@ Applicazione web per la raccolta, la verifica e la gestione di opportunità immo
 - Agenda dei richiami con scadenze passate, odierne e dei prossimi sette giorni.
 - Centro operativo telefonate con richiami scaduti, attività odierne, richiami nei prossimi sette giorni, nuovi proprietari e appuntamenti in pipeline; ogni scheda consente di registrare esito, stato commerciale e prossimo contatto.
 - Storico di telefonate, WhatsApp, email, appuntamenti e note.
+- Il Centro telefonate sincronizza gli esiti con la pipeline: “Interessato”, “Non interessato” e “Appuntamento fissato” aggiornano automaticamente lo stato; un appuntamento non può essere registrato senza la relativa data.
 - Collegamento Gmail OAuth, con token conservati cifrati lato server.
 - Acquisizione automatica di notifiche immobiliari in background.
 - Monitoraggio delle sincronizzazioni Gmail: esito, durata, annunci letti, candidati inseriti, agenzie escluse, duplicati ed errori; vengono salvati soltanto contatori operativi, non il contenuto delle email.
