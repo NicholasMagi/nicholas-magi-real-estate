@@ -932,7 +932,7 @@ function candidateQuality(item,candidates,archive,now=new Date()){
   const duplicate=findCandidateDuplicate(item,candidates,archive);
   return {
     specificLink,
-    hasValidUrl:!!validUrl(item.url),
+    hasValidUrl:!!validUrl(item.url||item.url_originale),
     hasPublication,
     days,
     stale:hasPublication&&days>30,
@@ -1007,9 +1007,11 @@ function renderCandidates(){
     const published=quality.hasPublication
       ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data di pubblicazione non indicata";
     const url=validUrl(c.url);
+    const originalUrl=validUrl(c.url_originale);
+    const fallbackUrl=originalUrl||url;
     const linkHtml=quality.specificLink
       ?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
-      :(c.url?'<span class="candidate-link-warning">Link non verificato: apertura sospesa</span>':'<span class="candidate-link-warning">Link non disponibile</span>');
+      :(fallbackUrl?'<a href="'+safe(fallbackUrl)+'" target="_blank" rel="noopener noreferrer">Apri link ricevuto · da verificare</a>':'<span class="candidate-link-warning">Link non disponibile</span>');
     const ageText=quality.hasPublication
       ?(quality.days===0?"Pubblicato oggi":"Pubblicato "+quality.days+" giorni fa")
       :"Data di pubblicazione da verificare";
@@ -1020,7 +1022,7 @@ function renderCandidates(){
       :"Nessun duplicato evidente individuato";
     const tone=quality.duplicate||!quality.specificLink||quality.stale?"warning":quality.incomplete||!quality.hasPublication?"review":"ok";
     const qualityHtml='<div class="candidate-quality candidate-quality-'+tone+'"><strong>Controllo qualità:</strong> '+safe(linkText)+' · '+safe(ageText)+' · '+safe(missingText)+'<br>'+safe(duplicateText)+'</div>';
-    return '<article class="candidate" data-candidate="'+safe(c.id)+'" data-url="'+safe(c.url||"")+'" data-portal="'+safe(c.portale||"Portale non indicato")+'">'
+    return '<article class="candidate" data-candidate="'+safe(c.id)+'" data-url="'+safe(c.url||"")+'" data-url-originale="'+safe(c.url_originale||"")+'" data-portal="'+safe(c.portale||"Portale non indicato")+'">'
       +'<div class="candidate-priority candidate-priority-'+priority.level+'" aria-label="Priorità operativa '+priority.score+' su 100">'
       +'<div class="candidate-priority-score"><strong>'+priority.score+'</strong><span>/100</span></div>'
       +'<div class="candidate-priority-info"><strong>Priorità '+safe(priority.label)+'</strong><span>'+safe(priority.description)+'</span><small>'+safe(priority.reasons.join(" · "))+'</small></div>'
@@ -1074,7 +1076,7 @@ async function confirmCandidate(id,button){
   const title=value("titolo"), municipality=value("comune"), price=value("prezzo");
   const seller=value("venditore");
   const contact=value("contatto")||null;
-  const sourceUrl=card.dataset.url||null;
+  const sourceUrl=card.dataset.url||card.dataset.urlOriginale||null;
   const sourcePortal=card.dataset.portal||"Portale non indicato";
   const optionalNumber=name=>value(name)===""?null:Number(value(name));
   if(!title||!municipality){msg("candidateMsg","Titolo e comune sono necessari per confermare.","error");return;}
@@ -1148,7 +1150,7 @@ function renderListings(){
     const url=validUrl(item.url);
     const linkHtml=isSpecificCandidateUrl(item.url)
       ? '<a href="' + safe(url) + '" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
-      : (item.url?'<span class="candidate-link-warning">Link non verificato: apertura sospesa</span>':'');
+      : (url?'<a href="' + safe(url) + '" target="_blank" rel="noopener noreferrer">Apri link ricevuto · da verificare</a>':'');
     const detailText=[item.tipologia_immobile,item.superficie_mq?item.superficie_mq+" m²":null,item.locali?item.locali+" locali":null,item.camere?item.camere+" camere":null,item.bagni?item.bagni+" bagni":null].filter(Boolean).join(" · ")||"Dettagli dimensionali non disponibili";
     return '<article class="listing"><div>'
       +'<h3>'+safe(item.titolo)+'</h3>'
