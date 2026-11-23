@@ -88,6 +88,36 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .dash-overview-item{padding:12px;border-radius:10px;background:#f7f8fa}
 .dash-overview-item strong{display:block;font-size:18px;font-variant-numeric:tabular-nums}
 .dash-overview-item span{display:block;color:var(--muted);font-size:10px;line-height:1.4;margin-top:4px}
+.call-center{margin:0 0 14px}
+.call-center-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-bottom:13px}
+.call-center-stat{border:1px solid var(--line);background:#fafbfc;border-radius:10px;padding:10px 12px;min-width:0}
+.call-center-stat strong{display:block;font-family:Georgia,serif;font-size:23px;color:var(--ink);font-variant-numeric:tabular-nums}
+.call-center-stat span{display:block;font-size:10px;color:var(--muted);margin-top:3px}
+.call-center-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0 10px}
+.call-center-toolbar select{max-width:230px;padding:9px 10px;font-size:12px}
+.call-center-count{font-size:11px;color:var(--muted)}
+.call-queue{display:grid;gap:10px}
+.call-task{border:1px solid var(--line);border-radius:12px;padding:13px;background:#fff;min-width:0}
+.call-task-overdue{border-left:4px solid #b66a56}
+.call-task-today{border-left:4px solid #bd995b}
+.call-task-new{border-left:4px solid #718ca9}
+.call-task-plan{border-left:4px solid #a3aab5}
+.call-task-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.call-task-title{font-size:13px;font-weight:700;color:var(--ink);line-height:1.4}
+.call-task-meta{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.55}
+.call-task-status{font-size:10px;font-weight:700;color:#536176;background:#f0f3f6;padding:5px 8px;border-radius:20px;white-space:nowrap}
+.call-task-contact{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px}
+.call-task-contact a,.call-task-contact button{font-size:11px;padding:8px 10px;text-decoration:none;border-radius:8px}
+.call-task-contact .call-link{background:#edf0f5;color:var(--ink)}
+.call-task-contact .whatsapp-link{background:#eef5ef;color:#315c3d}
+.call-task-missing{font-size:11px;color:#9b6b34}
+.call-task-form{display:grid;grid-template-columns:minmax(130px,1fr) minmax(150px,1fr) minmax(130px,.85fr) minmax(170px,1.3fr) auto;gap:8px;align-items:end;margin-top:11px;padding-top:10px;border-top:1px solid #edf0f4}
+.call-task-form label{margin:0 0 4px;font-size:10px}
+.call-task-form select,.call-task-form input,.call-task-form textarea{padding:9px 10px;font-size:11px;min-width:0;width:100%;border:1px solid #d9dfe8;border-radius:8px;font:inherit}
+.call-task-form textarea{min-height:36px;resize:vertical}
+.call-task-form button{padding:9px 11px;font-size:11px;white-space:nowrap}
+.call-center-empty{padding:18px 10px;text-align:center;color:var(--muted);font-size:12px;line-height:1.5;border:1px dashed #d7dde5;border-radius:10px}
+.call-center-foot{font-size:10px;color:var(--muted);margin:10px 0 0;line-height:1.5}
 .dash-link{border:0;background:transparent;color:#785d35;padding:0;font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 
 .search-filter-panel{background:#fbfcfd;border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0 14px}
@@ -105,7 +135,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 
 .dash-section-anchor{scroll-margin-top:16px}
 @media(max-width:900px){.dash-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-grid{grid-template-columns:1fr}}
-@media(max-width:650px){.dash-hero{padding:20px;align-items:flex-start;flex-direction:column}.dash-title{font-size:24px}.dash-hero-actions{width:100%}.dash-hero-actions button{flex:1}.dash-metrics{gap:8px}.dash-metric{padding:13px}.dash-metric-value{font-size:26px}.dash-latest{grid-template-columns:1fr}.dash-overview{grid-template-columns:repeat(3,minmax(0,1fr))}.dash-pipeline-row{grid-template-columns:100px minmax(35px,1fr) 24px;gap:7px}.dash-pipeline-label{font-size:11px}.dash-priority button{padding:7px 8px}}
+@media(max-width:650px){.dash-hero{padding:20px;align-items:flex-start;flex-direction:column}.dash-title{font-size:24px}.dash-hero-actions{width:100%}.dash-hero-actions button{flex:1}.dash-metrics{gap:8px}.dash-metric{padding:13px}.dash-metric-value{font-size:26px}.dash-latest{grid-template-columns:1fr}.dash-overview{grid-template-columns:repeat(3,minmax(0,1fr))}.dash-pipeline-row{grid-template-columns:100px minmax(35px,1fr) 24px;gap:7px}.dash-pipeline-label{font-size:11px}.dash-priority button{padding:7px 8px}.call-center-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.call-center-toolbar{align-items:flex-start;flex-direction:column}.call-center-toolbar select{max-width:none;width:100%}.call-task-form{grid-template-columns:1fr 1fr}.call-task-form .call-task-note{grid-column:1/-1}.call-task-form button{grid-column:1/-1}.call-task-head{align-items:flex-start}}
 @media(max-width:650px){.grid{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}.heading{font-size:24px}}
 </style>
 </head>
@@ -188,6 +218,31 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div class="dash-metric-note">Incarichi registrati nel CRM</div>
     </article>
   </div>
+
+  <section class="dash-card call-center" id="callCenter" aria-label="Centro operativo telefonate">
+    <div class="dash-card-head">
+      <div><h2>Centro operativo telefonate</h2><div class="dash-card-sub">Prima i richiami scaduti, poi quelli di oggi e i nuovi proprietari da contattare</div></div>
+      <button class="dash-link" id="callCenterOpenArchive">Apri archivio CRM</button>
+    </div>
+    <div class="call-center-metrics">
+      <div class="call-center-stat"><strong id="callStatOverdue">0</strong><span>Richiami scaduti</span></div>
+      <div class="call-center-stat"><strong id="callStatToday">0</strong><span>Da fare oggi</span></div>
+      <div class="call-center-stat"><strong id="callStatNew">0</strong><span>Nuovi proprietari</span></div>
+      <div class="call-center-stat"><strong id="callStatReachable">0</strong><span>Con recapito telefonico</span></div>
+    </div>
+    <div class="call-center-toolbar">
+      <span id="callQueueCount" class="call-center-count">Preparazione della lista...</span>
+      <select id="callQueueFilter" aria-label="Filtra le attività telefoniche">
+        <option value="all">Tutte le attività</option>
+        <option value="overdue">Richiami scaduti</option>
+        <option value="today">Da fare oggi</option>
+        <option value="new">Nuovi proprietari</option>
+        <option value="plan">Da pianificare</option>
+      </select>
+    </div>
+    <div id="callQueueList" class="call-queue"><div class="call-center-empty">La lista apparirà dopo il caricamento dell'archivio.</div></div>
+    <p class="call-center-foot">La lista usa soltanto i recapiti già presenti nell'archivio. La chiamata o il messaggio partono solo quando seleziona il relativo collegamento; nessun contatto viene inviato automaticamente.</p>
+  </section>
 
   <div class="dash-grid">
     <section class="dash-card">
@@ -496,6 +551,8 @@ $("dashboardRefresh").addEventListener("click",async()=>{
   }
 });
 $("dashboardNewListing").addEventListener("click",()=>dashboardScroll("newListingSection"));
+$("callQueueFilter").addEventListener("change",renderCallCenter);
+$("callCenterOpenArchive").addEventListener("click",()=>dashboardScroll("archiveSection"));
 $("dashOpenArchive").addEventListener("click",()=>dashboardScroll("archiveSection"));
 $("dashOpenCandidates").addEventListener("click",()=>dashboardScroll("candidateSection"));
 $("dashPriorities").addEventListener("click",event=>{
@@ -1218,6 +1275,171 @@ $("listingForm").addEventListener("submit",async event=>{
   }
 });
 
+function parseContactDetails(value){
+  const source=String(value||"");
+  const emailMatch=source.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  const candidates=source.match(/(?:\+|00)?[\d\s().\-\/]{7,}/g)||[];
+  const phones=candidates.map(raw=>{
+    const trimmed=raw.trim();
+    const startsInternational=trimmed.startsWith("+")||trimmed.startsWith("00");
+    let digits=trimmed.replace(/\D/g,"");
+    if(digits.startsWith("00"))digits=digits.slice(2);
+    if(startsInternational){
+      if(digits.length<9||digits.length>15)return null;
+      return {tel:"+"+digits,whatsapp:digits,raw:trimmed,digits:digits.length};
+    }
+    if(digits.startsWith("39")&&digits.length>=11&&digits.length<=13){
+      return {tel:"+"+digits,whatsapp:digits,raw:trimmed,digits:digits.length};
+    }
+    if((digits.length===9||digits.length===10)&&/^[03]/.test(digits)){
+      return {tel:"+39"+digits,whatsapp:"39"+digits,raw:trimmed,digits:digits.length};
+    }
+    return null;
+  }).filter(Boolean).sort((a,b)=>b.digits-a.digits);
+  return {email:emailMatch?emailMatch[0]:null,phone:phones[0]||null};
+}
+
+function callQueueModel(data,now=new Date()){
+  const today=new Date(now);
+  today.setHours(0,0,0,0);
+  return (data||[]).map(item=>{
+    const status=item.stato_contatto||"da_contattare";
+    if(["incarico_acquisito","non_interessato"].includes(status)||item.tipo_venditore==="Agenzia")return null;
+    const hasDate=!!item.prossimo_contatto_il;
+    const due=hasDate?new Date(item.prossimo_contatto_il+"T00:00:00"):null;
+    if(hasDate&&(!due||Number.isNaN(due.getTime())))return null;
+    let kind=null,sort=9;
+    if(due&&due<today){kind="overdue";sort=0;}
+    else if(due&&due.getTime()===today.getTime()){kind="today";sort=1;}
+    else if(due&&due>today){return null;}
+    else if(status==="da_contattare"){kind="new";sort=2;}
+    else if(["primo_contatto","interessato"].includes(status)){kind="plan";sort=3;}
+    else return null;
+    const contact=parseContactDetails(item.contatto);
+    const days=due?Math.round((due-today)/86400000):null;
+    return {item,kind,sort,days,contact};
+  }).filter(Boolean).sort((a,b)=>{
+    if(a.sort!==b.sort)return a.sort-b.sort;
+    if(a.kind==="overdue"&&a.days!==b.days)return a.days-b.days;
+    const aDate=a.item.created_at?Date.parse(a.item.created_at):0;
+    const bDate=b.item.created_at?Date.parse(b.item.created_at):0;
+    return aDate-bDate;
+  });
+}
+
+function callQueueDateLabel(entry){
+  if(entry.kind==="overdue")return "In ritardo di "+Math.abs(entry.days)+" "+(Math.abs(entry.days)===1?"giorno":"giorni");
+  if(entry.kind==="today")return "Da fare oggi";
+  if(entry.kind==="new")return "Primo contatto da avviare";
+  return "Nessun richiamo programmato";
+}
+
+function renderCallCenter(){
+  const all=callQueueModel(listingCache);
+  const count=kind=>all.filter(entry=>entry.kind===kind).length;
+  $("callStatOverdue").textContent=String(count("overdue"));
+  $("callStatToday").textContent=String(count("today"));
+  $("callStatNew").textContent=String(count("new"));
+  $("callStatReachable").textContent=String(all.filter(entry=>entry.contact.phone).length);
+  const filter=$("callQueueFilter").value||"all";
+  const visible=filter==="all"?all:all.filter(entry=>entry.kind===filter);
+  $("callQueueCount").textContent=visible.length+" attività visualizzate · "+all.length+" attività da gestire";
+  const box=$("callQueueList");
+  if(!visible.length){
+    const message=all.length
+      ?"Nessuna attività in questa categoria. Selezioni un altro filtro per visualizzare altre chiamate."
+      :"Nessun contatto in coda. Confermi nuove opportunità oppure programmi un richiamo dall'archivio.";
+    box.innerHTML='<div class="call-center-empty">'+safe(message)+'</div>';
+    return;
+  }
+  box.innerHTML=visible.slice(0,25).map(entry=>{
+    const item=entry.item;
+    const contact=entry.contact;
+    const last=item.ultimo_contatto_il&&Number.isFinite(Date.parse(item.ultimo_contatto_il))
+      ?"Ultimo contatto: "+new Date(item.ultimo_contatto_il).toLocaleDateString("it-IT")
+      :"Nessun contatto registrato";
+    const phone=contact.phone
+      ?'<a class="call-link" href="tel:'+safe(contact.phone.tel)+'">Chiama '+safe(contact.phone.raw)+'</a>'
+      :'';
+    const whatsapp=contact.phone?.whatsapp
+      ?'<a class="whatsapp-link" href="https://wa.me/'+safe(contact.phone.whatsapp)+'" target="_blank" rel="noopener noreferrer">WhatsApp</a>'
+      :'';
+    const email=contact.email
+      ?'<a class="call-link" href="mailto:'+safe(contact.email)+'">Email</a>'
+      :'';
+    const noContact=!phone&&!email
+      ?'<span class="call-task-missing">Nessun recapito riconosciuto: verifichi la scheda prima del contatto.</span>'
+      :'';
+    return '<article class="call-task call-task-'+entry.kind+'" data-call-task="'+safe(item.id)+'">'
+      +'<div class="call-task-head"><div><div class="call-task-title">'+safe(item.titolo||"Immobile senza titolo")+'</div>'
+      +'<div class="call-task-meta">'+safe([item.comune,item.tipologia_immobile,item.portale].filter(Boolean).join(" · "))+'<br>'+safe(euro(item.prezzo))+' · '+safe(item.tipo_venditore||"Venditore da verificare")+'<br>'+safe(last)+'</div></div>'
+      +'<span class="call-task-status">'+safe(callQueueDateLabel(entry))+'</span></div>'
+      +'<div class="call-task-contact">'+phone+whatsapp+email+noContact+'<button type="button" class="secondary" data-open-call-crm="'+safe(item.id)+'">Apri scheda CRM</button></div>'
+      +'<div class="call-task-form">'
+      +'<div><label>Stato commerciale</label><select data-call-status>'
+      +'<option value="da_contattare"'+(item.stato_contatto==="da_contattare"||!item.stato_contatto?" selected":"")+'>Da contattare</option>'
+      +'<option value="primo_contatto"'+(item.stato_contatto==="primo_contatto"?' selected':"")+'>Primo contatto</option>'
+      +'<option value="interessato"'+(item.stato_contatto==="interessato"?' selected':"")+'>Interessato</option>'
+      +'<option value="appuntamento"'+(item.stato_contatto==="appuntamento"?' selected':"")+'>Appuntamento</option>'
+      +'<option value="incarico_acquisito"'+(item.stato_contatto==="incarico_acquisito"?' selected':"")+'>Incarico acquisito</option>'
+      +'<option value="non_interessato"'+(item.stato_contatto==="non_interessato"?' selected':"")+'>Non interessato</option>'
+      +'</select></div>'
+      +'<div><label>Esito della chiamata</label><select data-call-outcome><option value="">Selezioni l’esito</option><option value="Non risponde">Non risponde</option><option value="Parlato · richiamare">Parlato · richiamare</option><option value="Interessato">Interessato</option><option value="Non interessato">Non interessato</option><option value="Appuntamento fissato">Appuntamento fissato</option><option value="Numero errato">Numero errato</option><option value="Altro">Altro</option></select></div>'
+      +'<div><label>Prossimo richiamo</label><input data-call-followup type="date" value="'+safe(item.prossimo_contatto_il||"")+'"></div>'
+      +'<div class="call-task-note"><label>Note della conversazione</label><textarea data-call-note maxlength="5000" placeholder="Es. proprietario assente, richiama venerdì..."></textarea></div>'
+      +'<button type="button" class="gold" data-save-call>Registra esito</button>'
+      +'</div></article>';
+  }).join("");
+  box.querySelectorAll("[data-open-call-crm]").forEach(button=>button.addEventListener("click",()=>openCallCrm(button.dataset.openCallCrm)));
+  box.querySelectorAll("[data-save-call]").forEach(button=>button.addEventListener("click",()=>saveCallTask(button.closest("[data-call-task]").dataset.callTask,button.closest("[data-call-task]"),button)));
+}
+
+async function openCallCrm(id){
+  $("listingSearch").value="";
+  $("listingTownFilter").value="";
+  $("listingTypeFilter").value="";
+  $("listingPortalFilter").value="";
+  $("sellerFilter").value="";
+  $("contactFilter").value="";
+  await loadListings();
+  const details=[...$("listingList").querySelectorAll("[data-crm-id]")].find(node=>node.dataset.crmId===String(id));
+  if(details){
+    details.open=true;
+    details.scrollIntoView({behavior:"smooth",block:"center"});
+    details.querySelector('[data-crm-field="stato_contatto"]')?.focus({preventScroll:true});
+  }
+}
+
+async function saveCallTask(id,card,button){
+  const outcome=card.querySelector("[data-call-outcome]").value;
+  const status=card.querySelector("[data-call-status]").value;
+  const followup=card.querySelector("[data-call-followup]").value||null;
+  const note=card.querySelector("[data-call-note]").value.trim()||null;
+  if(!outcome){
+    msg("listMsg","Selezioni l'esito della chiamata prima di registrarla.","error");
+    card.querySelector("[data-call-outcome]").focus();
+    return;
+  }
+  button.disabled=true;
+  const {error:interactionError}=await supabase.from("annunci_interazioni").insert({
+    owner_id:currentUser.id,annuncio_id:id,tipo:"telefonata",esito:outcome,note,prossimo_contatto_il:followup
+  });
+  if(interactionError){
+    msg("listMsg","Registrazione chiamata non riuscita: "+interactionError.message,"error");
+    button.disabled=false;
+    return;
+  }
+  const {error:updateError}=await supabase.from("annunci").update({
+    stato_contatto:status,
+    ultimo_contatto_il:new Date().toISOString(),
+    prossimo_contatto_il:followup
+  }).eq("id",id).eq("owner_id",currentUser.id);
+  msg("listMsg",updateError
+    ?"Chiamata registrata nello storico. Non è stato possibile aggiornare lo stato e il promemoria: "+updateError.message
+    :"Chiamata registrata. Storico e prossima attività aggiornati.",updateError?"error":"success");
+  await loadListings();
+}
+
 async function loadInteractions(annuncioId,details){
   const box=details.querySelector("[data-interaction-history]");
   const {data,error}=await supabase.from("annunci_interazioni").select("*").eq("annuncio_id",annuncioId).order("created_at",{ascending:false}).limit(30);
@@ -1273,14 +1495,7 @@ function renderFollowups(data){
     const label=days<0?"In ritardo di "+Math.abs(days)+" giorni":days===0?"Da fare oggi":"Tra "+days+" giorni";
     return `<div class="crm-entry"><strong>${safe(item.titolo)}</strong><span>${safe(item.comune)} · ${safe(item.prossimo_contatto_il)} · <span class="due">${label}</span></span><div><button class="secondary" data-open-followup="${safe(item.id)}">Apri scheda</button></div></div>`;
   }).join("");
-  box.querySelectorAll("[data-open-followup]").forEach(button=>button.addEventListener("click",async()=>{
-    $("listingSearch").value="";
-    $("sellerFilter").value="";
-    $("contactFilter").value="";
-    await loadListings();
-    const details=$('listingList').querySelector('[data-crm-id="'+button.dataset.openFollowup+'"]');
-    if(details){details.open=true;details.scrollIntoView({behavior:"smooth",block:"center"});}
-  }));
+  box.querySelectorAll("[data-open-followup]").forEach(button=>button.addEventListener("click",()=>openCallCrm(button.dataset.openFollowup)));
 }
 
 function exportListingsCsv(){
