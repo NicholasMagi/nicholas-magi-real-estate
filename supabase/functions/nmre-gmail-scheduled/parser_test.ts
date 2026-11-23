@@ -13,6 +13,8 @@ Deno.test("prezzo italiano con separatore migliaia",()=>{
   assertEquals(price("€ 52.523 82 m² | 3 locali"),52523,"non ingloba la metratura successiva");
   assertEquals(price("€ 215.000 80 m² | 3 locali"),215000,"prezzo e superficie separati");
   assertEquals(price("€ 63.000 48 m²"),63000,"prezzo con metratura a due cifre");
+  assertEquals(price("€ 246.000 118 m² | 4 locali"),246000,"non ingloba metratura a tre cifre");
+  assertEquals(price("€ 112.950 214 m²"),112950,"prezzo prima di superficie a tre cifre");
 });
 Deno.test("estrazione tipologia, metratura e vani",()=>{
   assertEquals(propertyType("Appartamento trilocale con balcone"),"Trilocale","tipologia trilocale");
