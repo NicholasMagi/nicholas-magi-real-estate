@@ -17,9 +17,11 @@ Deno.test("prezzo italiano con separatore migliaia",()=>{
   assertEquals(price("€ 112.950 214 m²"),112950,"prezzo prima di superficie a tre cifre");
   assertEquals(listingPrice("notifica senza importo","Quadrilocale € 246.000 118 m²"),246000,"recupera prezzo dal titolo dell’annuncio");
   assertEquals(listingPrice("notifica senza importo","Appartamento in vendita 118 m²"),null,"non inventa il prezzo mancante");
-  assertEquals(priceReduction("€ 167.000 € 179.000 (-6,7%)"),{
-    currentPrice:167000,previousPrice:179000,reductionAmount:12000,reductionPercent:6.7
-  },"legge il ribasso esplicito del portale");
+  const reduction=priceReduction("€ 167.000 € 179.000 (-6,7%)");
+  assertEquals(reduction?.currentPrice,167000,"prezzo attuale del ribasso");
+  assertEquals(reduction?.previousPrice,179000,"prezzo precedente del ribasso");
+  assertEquals(reduction?.reductionAmount,12000,"importo della riduzione");
+  assertEquals(reduction?.reductionPercent,6.7,"percentuale della riduzione");
   assertEquals(priceReduction("€ 85.000 € 105.000 (-19,0%)")?.reductionPercent,19,"legge un ribasso del 19%");
   assertEquals(priceReduction("€ 179.000"),null,"non inventa il prezzo precedente");
   assertEquals(priceReduction("€ 180.000 € 179.000 (-6,7%)"),null,"rifiuta coppie prezzo incoerenti");
