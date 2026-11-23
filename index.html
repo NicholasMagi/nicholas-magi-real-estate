@@ -44,6 +44,54 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .gmail-email b{display:block;margin-bottom:5px}
 .gmail-email .gmail-meta{color:var(--muted);font-size:12px}.crm{margin-top:12px;padding:12px;background:#f8f9fb;border:1px solid var(--line);border-radius:10px}.crm summary{cursor:pointer;font-weight:bold;font-size:13px}.crm textarea{width:100%;min-height:68px;border:1px solid #d9dfe8;border-radius:9px;padding:10px;font:inherit;font-size:13px;resize:vertical}.crm-entry{padding:8px 0;border-top:1px solid var(--line);font-size:12px}.crm-entry strong{display:block}.crm-history{margin-top:10px}.due{color:#a15c00;font-weight:bold}
 .candidate{border-top:1px solid var(--line);padding:14px 0}.candidate input{margin:5px 0}.candidate-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.toolbar input{max-width:280px}
+.dashboard{margin:0 0 18px}
+.dash-hero{background:linear-gradient(120deg,#101a2b 0%,#1a2a43 72%,#243650 100%);color:#fff;border:1px solid #263751;border-radius:18px;padding:24px 26px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:18px;box-shadow:0 10px 28px rgba(16,26,43,.10)}
+.dash-kicker{font-size:10px;letter-spacing:2.3px;color:#d7bd91;text-transform:uppercase;font-weight:700}
+.dash-title{font-family:Georgia,serif;font-size:27px;font-weight:normal;line-height:1.15;margin:9px 0 6px}
+.dash-date{font-size:13px;color:#c5ccda;text-transform:capitalize}
+.dash-hero-note{font-size:12px;color:#d8deea;margin-top:12px}
+.dash-hero-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.dash-hero .secondary{background:#ffffff18;color:#fff;border:1px solid #ffffff2b}
+.dash-hero .gold{background:var(--gold);color:#182235}
+.dash-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.dash-metric{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 17px;min-width:0;position:relative;overflow:hidden}
+.dash-metric:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--gold)}
+.dash-metric-label{font-size:11px;letter-spacing:.4px;color:var(--muted);font-weight:700;text-transform:uppercase}
+.dash-metric-value{font-family:Georgia,serif;font-size:30px;line-height:1.1;margin:11px 0 5px;color:var(--ink);font-variant-numeric:tabular-nums}
+.dash-metric-note{font-size:11px;color:var(--muted);line-height:1.4}
+.dash-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr);gap:14px;margin-bottom:14px}
+.dash-card{background:#fff;border:1px solid var(--line);border-radius:15px;padding:18px;min-width:0}
+.dash-card-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:15px}
+.dash-card-head h2{margin:0;font-size:15px}
+.dash-card-sub{font-size:11px;color:var(--muted);margin-top:4px}
+.dash-pipeline-row{display:grid;grid-template-columns:116px minmax(50px,1fr) 30px;gap:10px;align-items:center;margin:13px 0}
+.dash-pipeline-label{font-size:12px;color:#425067;white-space:nowrap}
+.dash-track{height:7px;border-radius:20px;background:#edf0f4;overflow:hidden}
+.dash-fill{height:100%;border-radius:20px;background:linear-gradient(90deg,#b8955b,#d9c59f);min-width:0}
+.dash-pipeline-count{text-align:right;font-size:12px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.dash-pipeline-foot{border-top:1px solid var(--line);padding-top:12px;margin-top:14px;display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--muted)}
+.dash-priority-list{display:grid;gap:9px}
+.dash-priority{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid #edf0f4}
+.dash-priority:last-child{border-bottom:0;padding-bottom:0}
+.dash-priority-mark{width:34px;height:34px;flex:0 0 34px;border-radius:10px;background:#f3f0e9;color:#9b7842;display:grid;place-items:center;font-size:15px;font-weight:700}
+.dash-priority-copy{min-width:0;flex:1}
+.dash-priority-copy strong{font-size:12px;display:block;color:var(--ink);margin-bottom:3px}
+.dash-priority-copy span{font-size:11px;color:var(--muted);line-height:1.35}
+.dash-priority button{padding:8px 10px;font-size:11px;white-space:nowrap}
+.dash-latest{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.dash-opportunity{border:1px solid var(--line);border-radius:11px;padding:12px;min-width:0;background:#fcfcfd}
+.dash-opportunity-title{font-size:12px;font-weight:700;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:34px}
+.dash-opportunity-meta{font-size:11px;color:var(--muted);margin-top:6px}
+.dash-opportunity-price{font-size:14px;font-weight:700;margin-top:8px;color:#85683d}
+.dash-empty{font-size:12px;color:var(--muted);padding:12px 0;line-height:1.5}
+.dash-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.dash-overview-item{padding:12px;border-radius:10px;background:#f7f8fa}
+.dash-overview-item strong{display:block;font-size:18px;font-variant-numeric:tabular-nums}
+.dash-overview-item span{display:block;color:var(--muted);font-size:10px;line-height:1.4;margin-top:4px}
+.dash-link{border:0;background:transparent;color:#785d35;padding:0;font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.dash-section-anchor{scroll-margin-top:16px}
+@media(max-width:900px){.dash-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-grid{grid-template-columns:1fr}}
+@media(max-width:650px){.dash-hero{padding:20px;align-items:flex-start;flex-direction:column}.dash-title{font-size:24px}.dash-hero-actions{width:100%}.dash-hero-actions button{flex:1}.dash-metrics{gap:8px}.dash-metric{padding:13px}.dash-metric-value{font-size:26px}.dash-latest{grid-template-columns:1fr}.dash-overview{grid-template-columns:repeat(3,minmax(0,1fr))}.dash-pipeline-row{grid-template-columns:100px minmax(35px,1fr) 24px;gap:7px}.dash-pipeline-label{font-size:11px}.dash-priority button{padding:7px 8px}}
 @media(max-width:650px){.grid{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}.heading{font-size:24px}}
 </style>
 </head>
@@ -90,8 +138,81 @@ button:disabled{opacity:.55;cursor:not-allowed}
 </div>
 </div>
 
+<section id="dashboard" class="dashboard" aria-label="Dashboard operativa">
+  <div class="dash-hero">
+    <div>
+      <div class="dash-kicker">Nicholas Magi Real Estate · Centro operativo</div>
+      <div class="dash-title">La Sua giornata immobiliare</div>
+      <div id="dashboardDate" class="dash-date"></div>
+      <div class="dash-hero-note">Una panoramica delle opportunità, dei proprietari e delle attività da gestire.</div>
+    </div>
+    <div class="dash-hero-actions">
+      <button class="secondary" id="dashboardRefresh">Aggiorna dati</button>
+      <button class="gold" id="dashboardNewListing">+ Registra immobile</button>
+    </div>
+  </div>
+
+  <div class="dash-metrics">
+    <article class="dash-metric">
+      <div class="dash-metric-label">Nuove opportunità</div>
+      <div class="dash-metric-value" id="dashCandidates">0</div>
+      <div class="dash-metric-note" id="dashCandidatesNote">Annunci in attesa di valutazione</div>
+    </article>
+    <article class="dash-metric">
+      <div class="dash-metric-label">Da contattare</div>
+      <div class="dash-metric-value" id="dashToCall">0</div>
+      <div class="dash-metric-note">Proprietari nell'archivio senza primo contatto</div>
+    </article>
+    <article class="dash-metric">
+      <div class="dash-metric-label">Richiami in scadenza</div>
+      <div class="dash-metric-value" id="dashDue">0</div>
+      <div class="dash-metric-note" id="dashDueNote">Scaduti o previsti per oggi</div>
+    </article>
+    <article class="dash-metric">
+      <div class="dash-metric-label">Incarichi acquisiti</div>
+      <div class="dash-metric-value" id="dashMandates">0</div>
+      <div class="dash-metric-note">Incarichi registrati nel CRM</div>
+    </article>
+  </div>
+
+  <div class="dash-grid">
+    <section class="dash-card">
+      <div class="dash-card-head">
+        <div><h2>Pipeline commerciale</h2><div class="dash-card-sub">Distribuzione degli immobili per stato del contatto</div></div>
+        <button class="dash-link" id="dashOpenArchive">Apri archivio</button>
+      </div>
+      <div id="dashPipeline"></div>
+      <div class="dash-pipeline-foot"><span id="dashPipelineTotal">0 immobili in archivio</span><span id="dashPipelineProgress">0% trasformati in incarichi</span></div>
+    </section>
+
+    <section class="dash-card">
+      <div class="dash-card-head">
+        <div><h2>Priorità operative</h2><div class="dash-card-sub">Le attività che meritano attenzione</div></div>
+      </div>
+      <div id="dashPriorities" class="dash-priority-list"></div>
+    </section>
+  </div>
+
+  <div class="dash-grid">
+    <section class="dash-card">
+      <div class="dash-card-head">
+        <div><h2>Ultime opportunità ricevute</h2><div class="dash-card-sub">Candidati in attesa di verifica</div></div>
+        <button class="dash-link" id="dashOpenCandidates">Vedi tutti</button>
+      </div>
+      <div id="dashLatest" class="dash-latest"><div class="dash-empty">Caricamento opportunità...</div></div>
+    </section>
+
+    <section class="dash-card">
+      <div class="dash-card-head">
+        <div><h2>Panoramica portafoglio</h2><div class="dash-card-sub">Situazione dell'archivio personale</div></div>
+      </div>
+      <div id="dashOverview" class="dash-overview"></div>
+      <div class="dash-card-sub" style="margin-top:12px">I dati vengono aggiornati insieme alle liste dell'app e non richiedono servizi esterni aggiuntivi.</div>
+    </section>
+  </div>
+</section>
+
 <section class="panel">
-<h2>Acquisizione automatica degli annunci</h2>
 <p class="hint">
 La casella Gmail viene elaborata dal server in background. Qui non vengono mostrate le email: vede soltanto i dati estratti dagli annunci immobiliari, senza mittente, oggetto o testo dei messaggi.
 </p>
