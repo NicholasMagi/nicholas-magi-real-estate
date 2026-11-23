@@ -242,6 +242,26 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .seller-radar-feedback{font-size:11px;color:#267447;min-height:16px;margin-top:9px}
 @media(max-width:650px){.seller-radar-list{grid-template-columns:1fr}.seller-radar-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.seller-radar-metric{padding:9px}.seller-radar-metric strong{font-size:19px}}
 
+
+.sales-performance{margin:14px 0}
+.sales-performance-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sales-performance-head select{min-width:150px;max-width:190px}
+.sales-performance-sub{font-size:11px;color:var(--muted);line-height:1.5;margin:4px 0 14px}
+.sales-performance-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}
+.sales-performance-metric{border:1px solid var(--line);border-radius:11px;padding:12px;min-width:0;background:#fff}
+.sales-performance-metric strong{display:block;font:700 24px Georgia,serif;color:var(--ink);font-variant-numeric:tabular-nums}
+.sales-performance-metric span{display:block;font-size:10px;color:var(--muted);margin-top:4px;line-height:1.35}
+.sales-performance-funnel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}
+.sales-performance-step{background:#f8f9fb;border:1px solid var(--line);border-radius:10px;padding:12px}
+.sales-performance-step-top{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted);margin-bottom:8px}
+.sales-performance-step strong{font-size:16px;color:var(--ink)}
+.sales-performance-track{height:7px;border-radius:20px;background:#e8ebef;overflow:hidden}
+.sales-performance-fill{height:100%;border-radius:20px;background:#b28d53}
+.sales-performance-note{font-size:10px;color:var(--muted);line-height:1.5;margin-top:12px}
+.nmre-crm-outcome-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media(max-width:800px){.sales-performance-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.sales-performance-funnel{grid-template-columns:1fr}}
+@media(max-width:520px){.sales-performance-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.sales-performance-metric strong{font-size:21px}.nmre-crm-outcome-grid{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -466,6 +486,26 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div id="dashPriorities" class="dash-priority-list"></div>
     </section>
   </div>
+
+  
+  <section class="dash-card sales-performance" id="salesPerformancePanel" aria-label="Performance commerciale">
+    <div class="sales-performance-head">
+      <div><h2>Performance commerciale</h2><div class="dash-card-sub">Dalle attività registrate agli incarichi acquisiti</div></div>
+      <label class="small" for="salesPerformanceRange">Periodo
+        <select id="salesPerformanceRange"><option value="7">Ultimi 7 giorni</option><option value="30" selected>Ultimi 30 giorni</option><option value="90">Ultimi 90 giorni</option></select>
+      </label>
+    </div>
+    <p class="sales-performance-sub">I numeri derivano dalle telefonate e dagli esiti registrati nel CRM, dagli appuntamenti in agenda e dalle valutazioni completate. Le attività non registrate non vengono stimate.</p>
+    <div class="sales-performance-metrics">
+      <div class="sales-performance-metric"><strong id="salesPerfCalls">0</strong><span>Telefonate registrate</span></div>
+      <div class="sales-performance-metric"><strong id="salesPerfResponses">0</strong><span>Conversazioni effettive</span></div>
+      <div class="sales-performance-metric"><strong id="salesPerfAppointments">0</strong><span>Appuntamenti e visite fissati</span></div>
+      <div class="sales-performance-metric"><strong id="salesPerfValuations">0</strong><span>Valutazioni completate</span></div>
+      <div class="sales-performance-metric"><strong id="salesPerfMandates">0</strong><span>Incarichi acquisiti registrati</span></div>
+    </div>
+    <div class="sales-performance-funnel" id="salesPerformanceFunnel"></div>
+    <div class="sales-performance-note" id="salesPerformanceNote" aria-live="polite">Registri l'esito delle telefonate nello storico del contatto per iniziare a misurare i tassi di conversione.</div>
+  </section>
 
   <div class="dash-grid">
     <section class="dash-card">
@@ -1715,7 +1755,18 @@ async function showApp(session){
 
 
 /* NMRE CRM workspace */
-let nmreCrmContacts=[],nmreCrmProperties=[],nmreCrmAppointments=[];
+let nmreCrmContacts=[],nmreCrmProperties=[],nmreCrmAppointments=[],nmreCrmInteractions=[];
+const nmreCrmOutcomeLabels={
+ nessuna_risposta:"Nessuna risposta",
+ parlato:"Conversazione avvenuta",
+ richiamare:"Richiamare",
+ interessato:"Interessato",
+ appuntamento_fissato:"Appuntamento fissato",
+ valutazione_fissata:"Valutazione fissata",
+ valutazione_completata:"Valutazione completata",
+ incarico_acquisito:"Incarico acquisito",
+ non_interessato:"Non interessato"
+};
 const nmreCrmLabels={
  contact:{proprietario:"Proprietario",acquirente:"Acquirente",venditore:"Venditore",locatore:"Locatore",conduttore:"Conduttore",investitore:"Investitore",professionista:"Professionista",altro:"Altro"},
  contactStatus:{nuovo:"Nuovo",da_contattare:"Da contattare",contattato:"Contattato",interessato:"Interessato",cliente:"Cliente",non_interessato:"Non interessato",archiviato:"Archiviato"},
@@ -1724,6 +1775,39 @@ const nmreCrmLabels={
 };
 function nmreCrmOption(id,rows,placeholder,label){const el=$(id),old=el.value;el.replaceChildren(new Option(placeholder,""));rows.forEach(r=>el.add(new Option(label(r),r.id)));if(rows.some(r=>r.id===old))el.value=old;}
 function nmreCrmSetTab(tab){document.querySelectorAll("[data-crm-tab]").forEach(b=>b.classList.toggle("active",b.dataset.crmTab===tab));document.querySelectorAll("[data-crm-pane]").forEach(p=>p.hidden=p.dataset.crmPane!==tab);}
+function nmreCrmPercent(value,total){return total?Math.round(value/total*100):0;}
+function renderSalesPerformance(){
+ const range=Number($("salesPerformanceRange")?.value||30);
+ const from=new Date();from.setDate(from.getDate()-range+1);from.setHours(0,0,0,0);
+ const inRange=row=>{const date=Date.parse(row.created_at||"");return Number.isFinite(date)&&date>=from.getTime();};
+ const interactions=nmreCrmInteractions.filter(inRange);
+ const calls=interactions.filter(x=>x.interaction_type==="telefonata");
+ const responseCodes=new Set(["parlato","richiamare","interessato","appuntamento_fissato","valutazione_fissata","valutazione_completata","incarico_acquisito","non_interessato"]);
+ const responses=calls.filter(x=>responseCodes.has(x.outcome_code));
+ const appointments=nmreCrmAppointments.filter(x=>inRange(x)&&["appuntamento","visita"].includes(x.appointment_type)&&x.status!=="annullato");
+ const valuations=nmreCrmAppointments.filter(x=>inRange(x)&&x.appointment_type==="valutazione"&&x.status==="completato");
+ const mandateEvents=interactions.filter(x=>x.outcome_code==="incarico_acquisito");
+ const mandateKeys=new Set(mandateEvents.map(x=>x.property_id||x.contact_id));
+ const mandates=mandateKeys.size;
+ const callResponse=nmreCrmPercent(responses.length,calls.length);
+ const responseAppointment=nmreCrmPercent(appointments.length,responses.length);
+ const appointmentMandate=nmreCrmPercent(mandates,appointments.length);
+ $("salesPerfCalls").textContent=String(calls.length);
+ $("salesPerfResponses").textContent=String(responses.length);
+ $("salesPerfAppointments").textContent=String(appointments.length);
+ $("salesPerfValuations").textContent=String(valuations.length);
+ $("salesPerfMandates").textContent=String(mandates);
+ const steps=[
+  {label:"Telefonate → Risposte",value:callResponse,detail:responses.length+" su "+calls.length+" telefonate"},
+  {label:"Risposte → Appuntamenti",value:responseAppointment,detail:appointments.length+" su "+responses.length+" conversazioni"},
+  {label:"Appuntamenti → Incarichi",value:appointmentMandate,detail:mandates+" incarichi su "+appointments.length+" appuntamenti"}
+ ];
+ $("salesPerformanceFunnel").innerHTML=steps.map(step=>'<div class="sales-performance-step"><div class="sales-performance-step-top"><span>'+step.label+'</span><strong>'+step.value+'%</strong></div><div class="sales-performance-track"><div class="sales-performance-fill" style="width:'+Math.min(100,step.value)+'%"></div></div><div class="sales-performance-note">'+step.detail+'</div></div>').join("");
+ const unclassified=calls.filter(x=>!x.outcome_code).length;
+ $("salesPerformanceNote").textContent=calls.length
+  ?range+" giorni · "+(calls.length/range).toFixed(1).replace(".",",")+" telefonate registrate al giorno in media · "+unclassified+" telefonate senza esito classificato. Gli incarichi sono contati per immobile collegato, oppure per contatto se l'immobile non è specificato."
+  :"Nessuna telefonata registrata nel periodo. Registri ogni chiamata nello storico del contatto e selezioni il relativo esito: il cruscotto inizierà a misurare le conversioni.";
+}
 function nmreCrmRender(){
  $("nmreCrmContactCount").textContent=nmreCrmContacts.length;$("nmreCrmPropertyCount").textContent=nmreCrmProperties.length;$("nmreCrmAgendaCount").textContent=nmreCrmAppointments.length;
  $("nmreCrmStatContacts").textContent=nmreCrmContacts.length;
@@ -1733,18 +1817,20 @@ function nmreCrmRender(){
 }
 async function loadCrmWorkspace(){
  if(!currentUser||!supabase)return;
- const [c,p,a]=await Promise.all([
+ const interactionSince=new Date(Date.now()-90*86400000).toISOString();
+ const [c,p,a,i]=await Promise.all([
   supabase.from("nmre_contacts").select("*").eq("owner_id",currentUser.id).order("full_name"),
   supabase.from("nmre_properties").select("*").eq("owner_id",currentUser.id).order("created_at",{ascending:false}),
-  supabase.from("nmre_appointments").select("*").eq("owner_id",currentUser.id).order("starts_at",{ascending:true})
+  supabase.from("nmre_appointments").select("*").eq("owner_id",currentUser.id).order("starts_at",{ascending:true}),
+  supabase.from("nmre_contact_interactions").select("id,contact_id,property_id,interaction_type,outcome_code,created_at").eq("owner_id",currentUser.id).gte("created_at",interactionSince).order("created_at",{ascending:false}).limit(5000)
  ]);
- const err=c.error||p.error||a.error;if(err){$("nmreCrmError").textContent="Caricamento CRM non riuscito: "+err.message;return;}
- nmreCrmContacts=c.data||[];nmreCrmProperties=p.data||[];nmreCrmAppointments=a.data||[];
+ const err=c.error||p.error||a.error||i.error;if(err){$("nmreCrmError").textContent="Caricamento CRM non riuscito: "+err.message;return;}
+ nmreCrmContacts=c.data||[];nmreCrmProperties=p.data||[];nmreCrmAppointments=a.data||[];nmreCrmInteractions=i.data||[];
  nmreCrmOption("nmreCrmPropertyContact",nmreCrmContacts,"Nessun contatto collegato",x=>x.full_name);
  nmreCrmOption("nmreCrmAgendaContact",nmreCrmContacts,"Nessun contatto",x=>x.full_name);
  nmreCrmOption("nmreCrmAgendaProperty",nmreCrmProperties,"Nessun immobile",x=>x.title+" · "+x.municipality);
  nmreCrmOption("nmreCrmPropertySource",listingCache,"Nessun annuncio collegato",x=>(x.titolo||"Annuncio")+" · "+(x.comune||""));
- $("nmreCrmError").textContent="";nmreCrmRender();
+ $("nmreCrmError").textContent="";nmreCrmRender();renderSalesPerformance();
 }
 function nmreCrmRenderContacts(){
  const q=$("nmreCrmContactSearch").value.toLocaleLowerCase("it"),f=$("nmreCrmContactFilter").value;
@@ -1753,7 +1839,9 @@ function nmreCrmRenderContacts(){
  '<details class="nmre-crm-history" data-crm-history="'+safe(x.id)+'"><summary>Storico conversazioni e interazioni</summary>'+
  '<form class="nmre-crm-history-form" data-crm-history-form="'+safe(x.id)+'">'+
  '<label>Tipo di interazione<select name="interaction_type"><option value="telefonata">Telefonata</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="appuntamento">Appuntamento</option><option value="visita">Visita</option><option value="valutazione">Valutazione</option><option value="follow_up">Follow-up</option><option value="altro">Altro</option></select></label>'+
- '<label>Esito<input name="outcome" maxlength="180" placeholder="Es. richiamare venerdì"></label>'+
+ '<div class="nmre-crm-outcome-grid"><label>Esito commerciale<select name="outcome_code"><option value="">Da classificare</option>'+Object.entries(nmreCrmOutcomeLabels).map(([v,l])=>'<option value="'+v+'">'+l+'</option>').join("")+'</select></label>'+
+ '<label>Immobile collegato<select name="property_id"><option value="">Nessun immobile specifico</option>'+nmreCrmProperties.filter(p=>!p.contact_id||p.contact_id===x.id).map(p=>'<option value="'+safe(p.id)+'">'+safe(p.title+" · "+p.municipality)+'</option>').join("")+'</select></label></div>'+
+ '<label>Esito / promemoria libero<input name="outcome" maxlength="180" placeholder="Es. richiamare venerdì alle 18"></label>'+
  '<label class="wide">Note della conversazione<textarea name="notes" rows="2" maxlength="4000" placeholder="Cosa vi siete detti? Quali esigenze o obiezioni sono emerse?"></textarea></label>'+
  '<label>Prossimo contatto<input name="next_contact_at" type="date"></label>'+
  '<div class="wide"><button class="gold" type="submit">Registra interazione</button> <span class="status" data-crm-history-msg></span></div></form>'+
@@ -1770,12 +1858,12 @@ async function nmreCrmLoadContactHistory(contactId){
  const {data,error}=await supabase.from("nmre_contact_interactions").select("*").eq("owner_id",currentUser.id).eq("contact_id",contactId).order("created_at",{ascending:false}).limit(50);
  if(error){box.innerHTML='<div class="nmre-crm-history-empty">Storico non disponibile: '+safe(error.message)+'</div>';return;}
  if(!data?.length){box.innerHTML='<div class="nmre-crm-history-empty">Nessuna interazione ancora registrata per questo contatto.</div>';return;}
- box.innerHTML=data.map(item=>'<article class="nmre-crm-history-entry"><strong>'+safe((item.interaction_type||"altro").replaceAll("_"," "))+(item.outcome?" · "+safe(item.outcome):"")+'</strong><time>'+safe(new Date(item.created_at).toLocaleString("it-IT",{dateStyle:"medium",timeStyle:"short"}))+'</time>'+(item.notes?'<p>'+safe(item.notes)+'</p>':"")+(item.next_contact_at?'<p class="due">Prossimo contatto: '+safe(new Date(item.next_contact_at+"T00:00:00").toLocaleDateString("it-IT"))+'</p>':"")+'</article>').join("");
+ box.innerHTML=data.map(item=>'<article class="nmre-crm-history-entry"><strong>'+safe((item.interaction_type||"altro").replaceAll("_"," "))+(item.outcome_code?" · "+safe(nmreCrmOutcomeLabels[item.outcome_code]||item.outcome_code):"")+(item.outcome?" · "+safe(item.outcome):"")+'</strong><time>'+safe(new Date(item.created_at).toLocaleString("it-IT",{dateStyle:"medium",timeStyle:"short"}))+'</time>'+(item.notes?'<p>'+safe(item.notes)+'</p>':"")+(item.next_contact_at?'<p class="due">Prossimo contatto: '+safe(new Date(item.next_contact_at+"T00:00:00").toLocaleDateString("it-IT"))+'</p>':"")+'</article>').join("");
 }
 async function nmreCrmSaveContactInteraction(event,form){
  event.preventDefault();
  const contactId=form.dataset.crmHistoryForm,fd=new FormData(form);
- const payload={owner_id:currentUser.id,contact_id:contactId,interaction_type:String(fd.get("interaction_type")||"telefonata"),outcome:String(fd.get("outcome")||"").trim()||null,notes:String(fd.get("notes")||"").trim()||null,next_contact_at:String(fd.get("next_contact_at")||"")||null};
+ const payload={owner_id:currentUser.id,contact_id:contactId,property_id:String(fd.get("property_id")||"")||null,interaction_type:String(fd.get("interaction_type")||"telefonata"),outcome_code:String(fd.get("outcome_code")||"")||null,outcome:String(fd.get("outcome")||"").trim()||null,notes:String(fd.get("notes")||"").trim()||null,next_contact_at:String(fd.get("next_contact_at")||"")||null};
  const button=form.querySelector('button[type="submit"]'),status=form.querySelector("[data-crm-history-msg]");
  button.disabled=true;status.textContent="Salvataggio…";
  const {error}=await supabase.from("nmre_contact_interactions").insert(payload);
@@ -1783,7 +1871,7 @@ async function nmreCrmSaveContactInteraction(event,form){
  if(error){status.textContent="Errore: "+error.message;return;}
  status.textContent="Interazione registrata.";
  form.reset();
- await nmreCrmLoadContactHistory(contactId);
+ await Promise.all([nmreCrmLoadContactHistory(contactId),loadCrmWorkspace()]);
 }
 function nmreCrmRenderProperties(){
  const q=$("nmreCrmPropertySearch").value.toLocaleLowerCase("it"),f=$("nmreCrmPropertyFilter").value;
@@ -1804,6 +1892,7 @@ $("nmreCrmRefresh").addEventListener("click",loadCrmWorkspace);
 $("nmreCrmContactSearch").addEventListener("input",nmreCrmRenderContacts);$("nmreCrmContactFilter").addEventListener("change",nmreCrmRenderContacts);
 $("nmreCrmPropertySearch").addEventListener("input",nmreCrmRenderProperties);$("nmreCrmPropertyFilter").addEventListener("change",nmreCrmRenderProperties);
 $("nmreCrmAgendaFilter").addEventListener("change",nmreCrmRenderAgenda);
+$("salesPerformanceRange").addEventListener("change",renderSalesPerformance);
 
 async function boot(){
   loadConfig();
