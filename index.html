@@ -349,7 +349,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div class="search-filter-actions"><span class="search-filter-count" id="omiFilterCount">Nessuna quotazione caricata</span></div>
     </div>
     <div id="omiQuotationList" class="market-table-wrap"><p class="hint">Carichi un CSV OMI per visualizzare le quotazioni.</p></div>
-    <p class="market-attribution">Fonte: Agenzia delle Entrate · Osservatorio del Mercato Immobiliare (OMI). I dati originali non sono alterati. Citare la fonte: “Agenzia Entrate - OMI”.</p>
+    <p class="market-attribution">Fonte originaria: Agenzia delle Entrate · Osservatorio del Mercato Immobiliare (OMI). Distribuzione open data: <a href="https://cruscotto-italia.dati.gov.it/" target="_blank" rel="noopener noreferrer">Cruscotto Italia / AgID</a>. Licenza CC BY 4.0; attribuzione obbligatoria “Agenzia delle Entrate - OMI”.</p>
   </div>
 
   <div class="market-block">
@@ -1041,7 +1041,7 @@ function runOmiComparison(){
   let matches=omiQuotationCache.filter(row=>row.comune===town&&row.zona===zone&&row.tipologia===type&&
     (!destination||row.destinazione===destination)&&
     (!state||(row.stato||row.stato_prevalente)===state)&&
-    (!row.sup_nl_compr||row.sup_nl_compr===surfaceBasis)&&
+    row.sup_nl_compr===surfaceBasis&&
     row.compr_min!==null&&row.compr_max!==null);
   if(!matches.length){
     target.textContent="Non ci sono intervalli OMI di compravendita importati per questa combinazione e per la superficie selezionata. Verifichi destinazione e stato conservativo.";
@@ -1109,7 +1109,9 @@ async function syncOmiOpenData(){
   const allRows=[],loaded=[],failed=[];
   try{
     msg("omiImportStatus","Collegamento all'archivio pubblico OMI di Cruscotto Italia / AgID...");
-    for(const municipality of OMI_CORE_MUNICIPALITIES){
+    for(let municipalityIndex=0;municipalityIndex<OMI_CORE_MUNICIPALITIES.length;municipalityIndex++){
+      const municipality=OMI_CORE_MUNICIPALITIES[municipalityIndex];
+      if(municipalityIndex>0)await new Promise(resolve=>setTimeout(resolve,650));
       try{
         const url=OMI_OPEN_DATA_BASE+"/omi/"+municipality.istat+".json";
         const response=await fetch(url,{
