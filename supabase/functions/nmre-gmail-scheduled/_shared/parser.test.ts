@@ -19,12 +19,14 @@ Deno.test("price parser handles Italian euro formats",()=>{
   assertEquals(price("Richiesta 210.000 euro"),210000,"euro suffix");
   assertEquals(price("€ 180,5 mila"),180500,"thousands suffix");
   assertEquals(price("Prezzo: 1.250.000,00 EUR"),1250000,"decimal cents");
+  assertEquals(price("Richiesta &euro; 180.000"),180000,"HTML encoded euro symbol");
   assertEquals(price("Appartamento di 95 mq e 4 locali"),null,"no invented price");
 });
 
 Deno.test("surface parser handles common portal formats",()=>{
   assertEquals(surface("Superficie commerciale: 95 mq"),95,"commercial surface");
   assertEquals(surface("120 m²"),120,"square metre symbol");
+  assertEquals(surface("Superficie commerciale: 95 m&sup2;"),95,"HTML encoded square metre symbol");
   assertEquals(surface("1.200 m2"),1200,"thousands separated square metres");
   assertEquals(surface("Superficie: circa 100 metri quadrati"),100,"approximate surface");
   assertEquals(surface("4 locali, 2 bagni"),null,"no invented surface");
