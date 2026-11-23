@@ -279,6 +279,16 @@ button:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:850px){.sales-goals-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.sales-goal-editor{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:520px){.sales-goals-grid,.sales-goal-editor{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
+.dash-action-plan{padding:16px}
+.dash-action-list{display:grid;gap:9px}
+.dash-action-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:11px;align-items:center;padding:11px 0;border-top:1px solid var(--line)}
+.dash-action-number{width:30px;height:30px;border-radius:9px;background:#f2f4f7;display:grid;place-items:center;font-weight:bold;color:var(--ink);font-size:12px}
+.dash-action-copy strong{display:block;font-size:12px;margin-bottom:3px}
+.dash-action-copy span{display:block;color:var(--muted);font-size:11px;line-height:1.45}
+.dash-action-tag{display:inline-block;font-size:9px;font-weight:bold;letter-spacing:.3px;color:#795b2d;background:#f7f1e7;padding:4px 6px;border-radius:5px;margin-bottom:4px}
+.dash-action-empty{padding:12px;border:1px dashed var(--line);border-radius:9px;color:var(--muted);font-size:12px;line-height:1.5}
+@media(max-width:560px){.dash-action-row{grid-template-columns:30px minmax(0,1fr)}.dash-action-row button{grid-column:2;justify-self:start;padding:9px 12px}}
+
 </style>
 </head>
 <body>
@@ -536,6 +546,10 @@ button:disabled{opacity:.55;cursor:not-allowed}
     </div>
   </section>
 
+  <section class="dash-card dash-action-plan" style="margin:14px 0">
+    <div class="dash-card-head"><div><h2>Piano operativo suggerito</h2><div class="dash-card-sub">Le prossime azioni, ordinate per urgenza e qualità dei dati disponibili</div></div><span class="small" id="dashActionPlanCount">Analisi attività</span></div>
+    <div id="dashActionPlan"><div class="dash-empty">Preparazione del piano operativo…</div></div>
+  </section>
   <div class="dash-grid">
     <section class="dash-card">
       <div class="dash-card-head">
@@ -997,6 +1011,49 @@ function openDashboardCandidate(id){
   }
 }
 
+function renderDailyActionPlan(all,candidates,today){
+ const active=item=>!["incarico_acquisito","non_interessato"].includes(item.stato_contatto||"da_contattare");
+ const actions=[];
+ const dateOnly=value=>{if(!value)return null;const d=new Date(String(value).slice(0,10)+"T00:00:00");return Number.isNaN(d.getTime())?null:d;};
+ const due=all.filter(item=>active(item)&&dateOnly(item.prossimo_contatto_il)&&dateOnly(item.prossimo_contatto_il)<=today)
+  .sort((a,b)=>String(a.prossimo_contatto_il).localeCompare(String(b.prossimo_contatto_il)));
+ due.slice(0,3).forEach(item=>{
+  const d=dateOnly(item.prossimo_contatto_il),days=Math.round((d-today)/86400000);
+  actions.push({kind:"call",id:item.id,tag:days<0?"RICHIAMO IN RITARDO":"DA FARE OGGI",
+   title:item.titolo||"Proprietario da ricontattare",
+   detail:[item.comune,days<0?"Scaduto da "+Math.abs(days)+" giorni":"Richiamo previsto oggi",item.contatto].filter(Boolean).join(" · "),
+   button:"Apri chiamata",priority:days<0?0:1});
+ });
+ const ranked=candidates.map(item=>({item,priority:candidatePriority(item)}))
+  .sort((a,b)=>b.priority.score-a.priority.score||(Date.parse(b.item.created_at||"")||0)-(Date.parse(a.item.created_at||"")||0));
+ ranked.slice(0,2).forEach(({item,priority})=>{
+  actions.push({kind:"candidate",id:item.id,tag:item.tipo_venditore==="Privato"?"PRIVATO RICONOSCIUTO":"NUOVA OPPORTUNITÀ",
+   title:item.titolo||"Annuncio da verificare",
+   detail:[item.comune,priority.score+"/100 priorità",priority.reasons?.slice(0,2).join(" · ")].filter(Boolean).join(" · "),
+   button:"Verifica lead",priority:item.tipo_venditore==="Privato"?2:3});
+ });
+ const untouched=all.filter(item=>active(item)&&["da_contattare","primo_contatto"].includes(item.stato_contatto||"da_contattare")
+  &&!item.prossimo_contatto_il&&item.contatto)
+  .sort((a,b)=>(a.tipo_venditore==="Privato"?0:1)-(b.tipo_venditore==="Privato"?0:1)||(Date.parse(b.created_at||"")||0)-(Date.parse(a.created_at||"")||0));
+ untouched.slice(0,2).forEach(item=>actions.push({kind:"call",id:item.id,tag:item.tipo_venditore==="Privato"?"CONTATTO PRIVATO":"LEAD DA CONTATTARE",
+  title:item.titolo||"Nuovo proprietario",detail:[item.comune,item.contatto,"Nessun richiamo programmato"].filter(Boolean).join(" · "),
+  button:"Apri chiamata",priority:item.tipo_venditore==="Privato"?4:5}));
+ const follow=all.filter(item=>active(item)&&item.stato_contatto==="interessato"&&!item.prossimo_contatto_il).slice(0,1);
+ follow.forEach(item=>actions.push({kind:"call",id:item.id,tag:"OPPORTUNITÀ CALDA",title:item.titolo||"Proprietario interessato",
+  detail:[item.comune,"Interessato senza prossimo richiamo"].filter(Boolean).join(" · "),button:"Pianifica seguito",priority:6}));
+ actions.sort((a,b)=>a.priority-b.priority);
+ const chosen=actions.slice(0,5),box=$("dashActionPlan");
+ $("dashActionPlanCount").textContent=chosen.length+" azioni suggerite";
+ if(!chosen.length){box.innerHTML='<div class="dash-action-empty">Nessuna urgenza rilevata nei dati registrati. Può dedicarsi alla verifica dei nuovi annunci o alla ricerca di proprietari da contattare. Il piano si aggiorna quando registra nuove attività.</div>';return;}
+ box.innerHTML='<div class="dash-action-list">'+chosen.map((item,index)=>
+  '<div class="dash-action-row"><div class="dash-action-number">'+(index+1)+'</div><div class="dash-action-copy"><span class="dash-action-tag">'+safe(item.tag)+'</span><strong>'+safe(item.title)+'</strong><span>'+safe(item.detail)+'</span></div><button type="button" class="secondary" data-action-kind="'+item.kind+'" data-action-id="'+safe(item.id)+'">'+safe(item.button)+'</button></div>'
+ ).join("")+'</div>';
+ box.querySelectorAll("[data-action-kind]").forEach(button=>button.addEventListener("click",()=>{
+  if(button.dataset.actionKind==="candidate")openDashboardCandidate(button.dataset.actionId);
+  else openCallCrm(button.dataset.actionId);
+ }));
+}
+
 function renderDashboard(){
   const all=Array.isArray(listingCache)?listingCache:[];
   const candidates=Array.isArray(candidateCache)?candidateCache:[];
@@ -1024,6 +1081,7 @@ function renderDashboard(){
   const appointments=count("appuntamento");
   const mandates=count("incarico_acquisito");
   const notInterested=count("non_interessato");
+  renderDailyActionPlan(all,candidates,today);
   const privateCount=all.filter(item=>item.tipo_venditore==="Privato").length;
   const sources=new Set(all.map(item=>item.portale).filter(Boolean)).size;
   const dateEl=$("dashboardDate");
