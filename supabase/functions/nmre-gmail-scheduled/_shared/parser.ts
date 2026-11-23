@@ -27,30 +27,47 @@ export function municipality(s:string):string|null {
 
 
 function parseItalianAmount(value:string):number|null {
-  let raw=String(value||"").trim().replace(/\s+/g,"");
+  let raw=String(value||"").trim().replace(/\\s+/g,"");
   let multiplier=1;
   if(/(?:mila|k)$/i.test(raw)){
     multiplier=1000;
     raw=raw.replace(/(?:mila|k)$/i,"");
   }
-  if(!/^\d[\d.,]*$/.test(raw))return null;
-  const separator=Math.max(raw.lastIndexOf(","),raw.lastIndexOf("."));
+  if(!/^\\d[\\d.,]*$/.test(raw))return null;
+
   let amount:number;
-  if(separator>=0 && /^\d{1,2}$/.test(raw.slice(separator+1)) && raw.slice(0,separator).replace(/\D/g,"").length>=1){
-    amount=Number(raw.slice(0,separator).replace(/\D/g,"")+"."+raw.slice(separator+1));
+  if(raw.includes(",")&&raw.includes(".")){
+    if(raw.lastIndexOf(",")>raw.lastIndexOf(".")){
+      amount=Number(raw.replace(/\\./g,"").replace(",","."));
+    }else{
+      amount=Number(raw.replace(/,/g,""));
+    }
+  }else if(raw.includes(",")){
+    const parts=raw.split(",");
+    const tail=parts.pop()||"";
+    const integer=parts.join("").replace(/\\D/g,"");
+    amount=/^\\d{1,2}$/.test(tail)?Number(integer+"."+tail):Number(integer+tail);
+  }else if(raw.includes(".")){
+    const parts=raw.split(".");
+    const tail=parts[parts.length-1];
+    const prefix=parts.slice(0,-1).join("");
+    if(/^\\d{3}$/.test(tail)&&prefix.length<=3)amount=Number(prefix+tail);
+    else amount=Number(prefix+"."+tail);
   }else{
-    amount=Number(raw.replace(/\D/g,""));
+    amount=Number(raw);
   }
+
   amount*=multiplier;
   return Number.isFinite(amount)&&amount>=10000&&amount<=100000000?Math.round(amount):null;
 }
 
 export function price(s:string):number|null {
   const value=normalizePropertyText(s);
+  const number=String.raw`((?:\\d{1,3}(?:[. ]\\d{3})+|\\d+)(?:,\\d{1,2})?(?:\\s*(?:mila|k))?)`;
   const patterns=[
-    /(?:€|eur)\s*([0-9][0-9\s.,]*(?:\s*(?:mila|k))?)/i,
-    /([0-9][0-9\s.,]*(?:\s*(?:mila|k))?)\s*(?:€|eur|euro)\b/i,
-    /(?:prezzo|richiesta|richiesto|in vendita(?: a)?|a partire da)\s*[:\-]?\s*(?:€|eur)?\s*([0-9][0-9\s.,]*(?:\s*(?:mila|k))?)/i
+    new RegExp(String.raw`(?:€|eur)\\s*${number}`,"i"),
+    new RegExp(String.raw`${number}\\s*(?:€|eur|euro)\\b`,"i"),
+    new RegExp(String.raw`(?:prezzo|richiesta|richiesto|in vendita(?: a)?|a partire da)\\s*[:\\-]?\\s*(?:€|eur)?\\s*${number}`,"i")
   ];
   for(const pattern of patterns){
     const match=value.match(pattern);
@@ -60,7 +77,6 @@ export function price(s:string):number|null {
   }
   return null;
 }
-
 
 export function propertyType(s:string):string|null {
   const value=normalizePropertyText(s);
