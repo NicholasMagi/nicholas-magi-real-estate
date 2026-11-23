@@ -8,8 +8,8 @@ import {
 Deno.test("Insight search is restricted to private sale offers with a phone number available", () => {
   const payload = buildInsightsSearchPayload(new Date("2026-11-23T12:00:00Z"), 30, 2);
   if (payload.Filters.clientTypeID !== 1) throw new Error("Client type must be private");
-  if (payload.Filters.contractTypeID !== 1) throw new Error("Search must target sale offers");
-  if ("comparableTypeID" in payload.Filters) throw new Error("Full Search endpoint defines Asking type implicitly");
+  if (payload.Filters.comparableTypeID !== 1 || payload.Filters.contractTypeID !== 1) throw new Error("Search must target asking offers for sale");
+  if (payload.Filters.categoryTypeID !== 1) throw new Error("Search must target residential property");
   if (payload.Filters.phoneNumberProvided !== true) throw new Error("Phone availability filter missing");
   if (payload.Pagination.page !== 2 || payload.Pagination.limit !== 10) throw new Error("Pagination mismatch");
   if (payload.Filters.pubblicationStatusID.join(",") !== "1,2") throw new Error("Publication filters mismatch");
