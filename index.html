@@ -1007,11 +1007,9 @@ function renderCandidates(){
     const published=quality.hasPublication
       ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data di pubblicazione non indicata";
     const url=validUrl(c.url);
-    const originalUrl=validUrl(c.url_originale);
-    const fallbackUrl=originalUrl||url;
     const linkHtml=quality.specificLink
       ?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
-      :(fallbackUrl?'<a href="'+safe(fallbackUrl)+'" target="_blank" rel="noopener noreferrer">Apri link ricevuto · da verificare</a>':'<span class="candidate-link-warning">Link non disponibile</span>');
+      :'<span class="candidate-link-warning">Link diretto non verificato: apertura sospesa</span>';
     const ageText=quality.hasPublication
       ?(quality.days===0?"Pubblicato oggi":"Pubblicato "+quality.days+" giorni fa")
       :"Data di pubblicazione da verificare";
@@ -1076,7 +1074,7 @@ async function confirmCandidate(id,button){
   const title=value("titolo"), municipality=value("comune"), price=value("prezzo");
   const seller=value("venditore");
   const contact=value("contatto")||null;
-  const sourceUrl=card.dataset.url||card.dataset.urlOriginale||null;
+  const sourceUrl=card.dataset.url||null;
   const sourcePortal=card.dataset.portal||"Portale non indicato";
   const optionalNumber=name=>value(name)===""?null:Number(value(name));
   if(!title||!municipality){msg("candidateMsg","Titolo e comune sono necessari per confermare.","error");return;}
@@ -1150,7 +1148,7 @@ function renderListings(){
     const url=validUrl(item.url);
     const linkHtml=isSpecificCandidateUrl(item.url)
       ? '<a href="' + safe(url) + '" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
-      : (url?'<a href="' + safe(url) + '" target="_blank" rel="noopener noreferrer">Apri link ricevuto · da verificare</a>':'');
+      : (url?'<span class="candidate-link-warning">Link diretto non verificato: apertura sospesa</span>':'');
     const detailText=[item.tipologia_immobile,item.superficie_mq?item.superficie_mq+" m²":null,item.locali?item.locali+" locali":null,item.camere?item.camere+" camere":null,item.bagni?item.bagni+" bagni":null].filter(Boolean).join(" · ")||"Dettagli dimensionali non disponibili";
     return '<article class="listing"><div>'
       +'<h3>'+safe(item.titolo)+'</h3>'
