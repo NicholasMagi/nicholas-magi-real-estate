@@ -50,37 +50,31 @@ I campi strutturati disponibili su candidati e archivio sono: tipologia immobile
 
 Il parser e l'adattatore Gmail History sono separati nella cartella supabase/functions/nmre-gmail-scheduled/_shared e coperti da test automatici. Il workflow Validate application code esegue i test Deno del parser e della cronologia Gmail, i test del connettore Insights, controlla la sintassi JavaScript incorporata in index.html e verifica che gli ID HTML siano univoci.
 
-## Analisi OMI e compravendite dichiarate
+## Analisi di mercato: OMI e compravendite dichiarate
 
-La sezione **Analisi di mercato** mantiene separati tre livelli informativi:
+NMRE mantiene separati due livelli informativi:
 
-1. **Quotazioni OMI**: l'utente scarica il file CSV VALORI dall'area ufficiale Forniture dati OMI dell'Agenzia delle Entrate e lo importa nell'app. Il parser riconosce il tracciato VALORI (comune, codice ISTAT, provincia, fascia, zona, link zona, tipologia, stato, compravendita min/max €/m² e locazione min/max €/m²/mese), gestisce delimitatori e numeri nel formato italiano e importa le province AN, MC, FM e AP. Il file ZONE da solo non contiene i valori economici e viene rifiutato.
-2. **Confronto OMI**: consente di confrontare il prezzo richiesto per m² con l'intervallo OMI dell'ultimo semestre importato per comune, zona, tipologia e stato conservativo. Viene mostrato anche il riferimento alla superficie OMI (lorda/netta). È un confronto orientativo, non una perizia e non un prezzo di singola transazione.
-3. **Compravendite dichiarate**: il registro consente di annotare manualmente i dati non identificativi delle schede-atto consultate presso l'Agenzia delle Entrate. Il campo corrispettivo resta riferito all'intero atto; quando l'atto include più immobili, NMRE non lo divide per la superficie né attribuisce prezzi individuali alle unità. Non sono richiesti nomi, codici fiscali o indirizzi esatti.
+1. **Quotazioni OMI**: intervalli semestrali minimi/massimi in €/m² per zona omogenea, tipologia, destinazione d'uso e stato conservativo. Non sono prezzi realizzati su una singola compravendita e non sostituiscono una valutazione professionale.
+2. **Compravendite dichiarate**: schede-atto anonimizzate della Consultazione Valori Immobiliari Dichiarati dell'Agenzia delle Entrate. Il corrispettivo resta riferito all'intero atto e non viene attribuito o ripartito automaticamente tra più immobili.
 
-Le tabelle `nmre_omi_quotazioni` e `nmre_compravendite_atti` hanno RLS attiva e policy di proprietà: ogni utente autenticato può leggere e modificare soltanto i propri dati. Le quotazioni conservano semestre, comune, zona, fonte, file importato e campi grezzi essenziali per la tracciabilità. Per l'uso dei dati OMI va citata la fonte “Agenzia Entrate - OMI”.
+### Caricamento OMI
 
-## Punteggi della coda candidati
+La sezione Analisi di mercato supporta due metodi:
 
-La **priorità di acquisizione** (0–100) ordina il lavoro commerciale: venditore privato riconosciuto (25 punti) o venditore da verificare (7), freschezza della pubblicazione (fino a 20; la sola data di notifica vale meno), territorio principale (20) o esteso (10), contatto diretto inserito (15), link specifico (10), prezzo (4), superficie (4) e tipologia (2). Il punteggio non certifica il venditore: una classificazione non supportata resta da verificare.
+- **Aggiornamento automatico**: legge gli shard JSON pubblici `/data/omi/<istat>.json` di Cruscotto Italia / AgID e importa il semestre più recente disponibile per Ancona (042002), Castelfidardo (042010), Jesi (042021) e Osimo (042034). La fonte dei dati è Agenzia delle Entrate - OMI; Cruscotto Italia dichiara licenza CC BY 4.0 e attribuzione obbligatoria «Agenzia delle Entrate - OMI». L'aggiornamento è manuale, su richiesta dell'utente, non automatico a ogni apertura della pagina.
+- **CSV VALORI**: consente di importare semestri precedenti e altre località delle Marche dai file ufficiali VALORI dell'Agenzia delle Entrate (non il file ZONE). Il parser controlla il tracciato, gestisce codifica e delimitatori, conserva semestre e nome file e importa le province AN, MC, FM e AP. Le chiavi univoche impediscono di duplicare le stesse righe quando si reimporta lo stesso semestre e la stessa fonte.
 
-La **qualità dei dati** (0–100) misura la completezza della scheda: comune (15), prezzo (15), tipologia (10), superficie (15), locali (5), link specifico (15), data di pubblicazione (10), venditore privato verificato con confidenza almeno 90% (10) e contatto inserito (5).
+Ogni riga conserva comune, codice ISTAT, zona e descrizione della zona, destinazione, tipologia, stato conservativo, intervalli di compravendita e locazione, base di superficie e provenienza. Il confronto di un immobile richiede comune, zona, tipologia, prezzo, superficie e scelta della base di superficie **lorda (L)** o **netta (N)**. La comparazione usa il semestre più recente disponibile per quella combinazione e non confronta basi di superficie diverse. Il rapporto prezzo richiesto/superficie è un confronto orientativo con l'intervallo OMI, non il prezzo di una transazione né una perizia.
 
-Il rapporto **prezzo richiesto / m²** viene mostrato solo quando entrambi i dati sono presenti. È un indicatore descrittivo dell'annuncio, non una comparazione con i valori di mercato né una valutazione della convenienza economica.
+### Compravendite dichiarate
 
-## Analisi di mercato: quotazioni OMI e compravenduti
+Il registro consente di annotare manualmente i dati non identificativi delle schede-atto consultate presso l'Agenzia delle Entrate: mese e anno, tipologia di atto, numero di atti restituiti dalla ricerca, corrispettivo dichiarato dell'intero atto, numero di immobili coinvolti e, facoltativamente, zona OMI e riepilogo delle unità.
 
-Le quotazioni OMI sono intervalli semestrali minimi/massimi in euro al metro quadro per zona omogenea, tipologia e stato conservativo. Non sono prezzi realizzati su una singola compravendita e non sostituiscono una valutazione professionale. La fonte va citata come **Agenzia Entrate - OMI**.
+Il servizio mostra i risultati in forma anonimizzata e richiede almeno cinque atti nella ricerca. NMRE non effettua scraping del servizio, non salva nominativi, codici fiscali o indirizzi esatti e non divide il corrispettivo complessivo per il numero di immobili. Non calcola quindi un prezzo €/m² individuale a partire da un atto che può contenere più unità. Le schede registrate sono riferimenti documentali da consultare e interpretare, non comparabili individuali automaticamente validati.
 
-Per caricare i dati, scaricare dall'Agenzia delle Entrate il file CSV **VALORI** del semestre scelto (non il file ZONE), quindi caricarlo nella sezione Analisi di mercato. Il parser controlla il tracciato, gestisce codifica e delimitatori, conserva semestre/nome file e importa le sole province AN, MC, FM e AP. Le chiavi univoche impediscono di duplicare righe in caso di reimportazione dello stesso semestre.
+Le tabelle `nmre_omi_quotazioni` e `nmre_compravendite_atti` hanno RLS attiva e policy di proprietà: ogni utente autenticato può leggere e modificare soltanto i propri dati.
 
-Il confronto di un immobile usa la quotazione del semestre più recente disponibile per comune, zona, tipologia ed eventuale stato conservativo. La base di superficie OMI (lorda/netta) viene mostrata perché non si devono confrontare direttamente valori che usano superfici diverse.
-
-Il registro dei **Valori Immobiliari Dichiarati** è separato dalle quotazioni OMI. Si inseriscono i dati non identificativi della scheda-atto consultata: il corrispettivo dichiarato viene sempre conservato come importo complessivo dell'atto, insieme al numero di immobili. Non viene ripartito automaticamente tra più unità.
-
-NMRE calcola un prezzo €/m² attribuibile soltanto quando sono vere tutte le condizioni: un solo immobile nell'atto, attribuzione del corrispettivo confermata manualmente, dati verificati sulla fonte e superficie catastale effettivamente espressa in m². Le consistenze in vani non vengono convertite. I comparabili mostrano mediana e minimo/massimo per comune, zona, tipologia e categoria catastale, sempre con il numero di atti nel campione.
-
-La Consultazione Valori Immobiliari Dichiarati mostra i risultati in forma anonimizzata e richiede almeno cinque atti nella ricerca; per questo NMRE non effettua scraping del servizio e non salva nominativi o indirizzi privati. Gli atti vengono registrati manualmente dopo la consultazione ufficiale. Riferimenti: [Guida al servizio](https://servizionline.agenziaentrate.gov.it/pdf/OMI_ConsultazioneValoriImmobiliariDichiarati_GUIDA_AL_SERVIZIO.pdf), [Informazioni per l'utilizzo dei dati](https://servizionline.agenziaentrate.gov.it/pdf/OMI_ConsultazioneValoriImmobiliariDichiarati_INFO_UTILIZZO_DATI.pdf), [tracciato CSV VALORI](https://telematici.agenziaentrate.gov.it/pdf/guidaFornitureOMI.pdf).
+Fonti: [Agenzia delle Entrate - Forniture dati OMI](https://www.agenziaentrate.gov.it/portale/schede/fabbricatiterreni/omi/forniture-dati-omi-cittadini), [Consultazione Valori Immobiliari Dichiarati - guida](https://servizionline.agenziaentrate.gov.it/pdf/OMI_ConsultazioneValoriImmobiliariDichiarati_GUIDA_AL_SERVIZIO.pdf), [informazioni per l'utilizzo dei dati](https://servizionline.agenziaentrate.gov.it/pdf/OMI_ConsultazioneValoriImmobiliariDichiarati_INFO_UTILIZZO_DATI.pdf), [tracciato CSV VALORI](https://telematici.agenziaentrate.gov.it/pdf/guidaFornitureOMI.pdf), [Cruscotto Italia / AgID - dati OMI](https://cruscotto-italia.dati.gov.it/data/).
 
 ## Architettura e sicurezza
 
