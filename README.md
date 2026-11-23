@@ -14,7 +14,8 @@ Applicazione web per la raccolta, la verifica e la gestione di opportunità immo
 - Acquisizione automatica di notifiche immobiliari in background.
 - Monitoraggio delle sincronizzazioni Gmail: esito, durata, annunci letti, candidati inseriti, agenzie escluse, duplicati ed errori; vengono salvati soltanto contatori operativi, non il contenuto delle email.
 - Coda di annunci privati riconosciuti e opportunità ambigue da approvare manualmente.
-- Estrazione euristica di comune, prezzo, tipologia, superficie, locali, camere e bagni quando presenti nella notifica.
+- Estrazione migliorata di comune, prezzo, tipologia, superficie, locali, camere e bagni, con gestione dei formati italiani (€, euro, mila, mq, m²) e più categorie immobiliari.
+- Versionamento dell'estrazione: le notifiche Gmail ancora in coda vengono rielaborate una sola volta quando cambia il parser; le classificazioni manuali dei venditori restano protette.
 - Deduplicazione tramite ID Gmail.
 - Esportazione CSV ed Excel dell'archivio e della coda candidati.
 
