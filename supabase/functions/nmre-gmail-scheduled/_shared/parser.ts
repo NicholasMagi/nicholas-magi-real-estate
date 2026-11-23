@@ -67,6 +67,10 @@ export function price(s:string):number|null {
   return null;
 }
 
+export function listingPrice(sourceText:string,titleText:string):number|null {
+  return price(sourceText) ?? price(titleText);
+}
+
 export function propertyType(s:string):string|null {
   const value=normalizePropertyText(s);
   const patterns:Array<[string,RegExp]>=[
