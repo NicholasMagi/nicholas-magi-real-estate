@@ -1076,7 +1076,41 @@ async function loadCandidates(){
     data.push(...(page||[]));
     if(!page||page.length<pageSize)break;
   }
-  candidateCache=data;
+  // Mantiene nel tempo lo scarto di un immobile: se una nuova email genera
+  // un altro record con lo stesso link già scartato, non deve riapparire in coda.
+  const dismissedListingUrls=new Set();
+  for(let offset=0;;offset+=pageSize){
+    const {data:page,error}=await supabase.from("annunci_candidati")
+      .select("url").eq("stato","scartato").not("url","is",null)
+      .order("created_at",{ascending:false})
+      .range(offset,offset+pageSize-1);
+    if(error){msg("candidateMsg","Impossibile verificare gli annunci già scartati: "+error.message,"error");return;}
+    for(const item of page||[]){
+      const key=canonicalCandidateUrl(item.url);
+      if(key)dismissedListingUrls.add(key);
+    }
+    if(!page||page.length<pageSize)break;
+  }
+
+  const reappearedIds=data
+    .filter(item=>{
+      const key=canonicalCandidateUrl(item.url);
+      return key&&dismissedListingUrls.has(key);
+    })
+    .map(item=>String(item.id));
+
+  if(reappearedIds.length){
+    const {error}=await supabase.from("annunci_candidati")
+      .update({stato:"scartato",updated_at:new Date().toISOString()})
+      .in("id",reappearedIds)
+      .eq("stato","da_verificare");
+    if(error){msg("candidateMsg","Impossibile completare la pulizia dei duplicati già scartati: "+error.message,"error");return;}
+  }
+
+  candidateCache=data.filter(item=>{
+    const key=canonicalCandidateUrl(item.url);
+    return !key||!dismissedListingUrls.has(key);
+  });
   renderDashboard();
   renderCandidates();
 }
