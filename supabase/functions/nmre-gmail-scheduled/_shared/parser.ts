@@ -5,76 +5,121 @@ export function municipality(s:string):string|null {
   const n=" "+String(s||"").toLocaleLowerCase("it").replace(/[^\p{L}\p{N}]+/gu," ")+" ";
   return TOWNS.find(t=>n.includes(" "+t.toLocaleLowerCase("it")+" "))||null;
 }
-export function price(s:string):number|null {
-  const patterns=[
-    /(?:€|eur)\s*([0-9][0-9\s.,]*)/i,
-    /([0-9][0-9\s.,]*)\s*(?:€|eur)/i,
-    /(?:prezzo|richiesta|in vendita(?: a)?)\s*[:\-]?\s*(?:€|eur)?\s*([0-9][0-9\s.,]*)/i
-  ];
-  for(const pattern of patterns){
-    const match=String(s||"").match(pattern);
-    if(!match)continue;
-    let raw=match[1].replace(/\s/g,"");
-    const separator=Math.max(raw.lastIndexOf(","),raw.lastIndexOf("."));
-    if(separator>=0 && /^\d{1,2}$/.test(raw.slice(separator+1)) && raw.slice(0,separator).replace(/\D/g,"").length>=2){
-      raw=raw.slice(0,separator).replace(/\D/g,"")+"."+raw.slice(separator+1);
-    }else{
-      raw=raw.replace(/\D/g,"");
-    }
-    const amount=Number(raw);
-    if(Number.isFinite(amount)&&amount>=10000&&amount<=100000000)return Math.round(amount);
+function parseItalianAmount(value:string):number|null {
+  let raw=String(value||"").trim().replace(/\s+/g,"");
+  let multiplier=1;
+  if(/(?:mila|k)$/i.test(raw)){
+    multiplier=1000;
+    raw=raw.replace(/(?:mila|k)$/i,"");
   }
-  return null;
+  if(!/^\d[\d.,]*$/.test(raw))return null;
+  const separator=Math.max(raw.lastIndexOf(","),raw.lastIndexOf("."));
+  let amount:number;
+  if(separator>=0 && /^\d{1,2}$/.test(raw.slice(separator+1)) && raw.slice(0,separator).replace(/\D/g,"").length>=1){
+    amount=Number(raw.slice(0,separator).replace(/\D/g,"")+"."+raw.slice(separator+1));
+  }else{
+    amount=Number(raw.replace(/\D/g,""));
+  }
+  amount*=multiplier;
+  return Number.isFinite(amount)&&amount>=10000&&amount<=100000000?Math.round(amount):null;
 }
-export function propertyType(s:string):string|null {
-  const patterns:Array<[string,RegExp]>=[
-    ["Casa indipendente",/\b(?:casa indipendente|casa singola)\b/i],
-    ["Villetta",/\b(?:villetta|villino)\b/i],["Villa",/\bvilla\b/i],
-    ["Monolocale",/\bmonolocale\b/i],["Bilocale",/\bbilocale\b/i],
-    ["Trilocale",/\btrilocale\b/i],["Quadrilocale",/\bquadrilocale\b/i],
-    ["Attico",/\battico\b/i],["Mansarda",/\bmansarda\b/i],
-    ["Appartamento",/\bappartamento\b/i],
-    ["Rustico",/\b(?:rustico|casale|cascina|colonica|podere)\b/i],
-    ["Terratetto",/\bterratetto\b/i],["Terreno",/\bterreno\b/i],
-    ["Garage / Box",/\b(?:garage|box auto|box)\b/i],["Negozio",/\bnegozio\b/i],
-    ["Ufficio",/\bufficio\b/i],["Capannone",/\bcapannone\b/i]
-  ];
-  for(const [label,pattern] of patterns)if(pattern.test(String(s||"")))return label;
-  return null;
-}
-export function surface(s:string):number|null {
+
+export function price(s:string):number|null {
   const value=String(s||"");
   const patterns=[
-    /(?:superficie|metratura|sup\.?)\s*[:\-]?\s*([1-9]\d{0,3}(?:[.,]\d{1,3})?)\s*(?:m²|mq|metri quadrati)?/i,
-    /\b([1-9]\d{0,3}(?:[.,]\d{1,3})?)\s*(?:m²|mq|metri quadrati)\b/i
+    /(?:€|eur)\s*([0-9][0-9\s.,]*(?:\s*(?:mila|k))?)/i,
+    /([0-9][0-9\s.,]*(?:\s*(?:mila|k))?)\s*(?:€|eur|euro)\b/i,
+    /(?:prezzo|richiesta|richiesto|in vendita(?: a)?|a partire da)\s*[:\-]?\s*(?:€|eur)?\s*([0-9][0-9\s.,]*(?:\s*(?:mila|k))?)/i
   ];
   for(const pattern of patterns){
     const match=value.match(pattern);
     if(!match)continue;
-    const raw=match[1].replace(/\s/g,"");
-    const n=/^[1-9]\d{0,2}[.,]\d{3}$/.test(raw)
-      ?Number(raw.replace(/[.,]/g,""))
-      :Math.floor(Number(raw.replace(",", ".")));
-    if(Number.isInteger(n)&&n>=15&&n<=10000)return n;
+    const amount=parseItalianAmount(match[1]);
+    if(amount!==null)return amount;
   }
   return null;
 }
-export function rooms(s:string):number|null {
-  const match=String(s||"").match(/\b([1-9]\d?(?:[.,]\d)?)\s*(?:locali|vani)\b/i);
-  if(!match)return null;
-  const value=Number(match[1].replace(",","."));
-  return Number.isFinite(value)&&value>0&&value<=100?value:null;
+
+
+export function propertyType(s:string):string|null {
+  const patterns:Array<[string,RegExp]>=[
+    ["Porzione di bifamiliare",/\bporzione\s+di\s+bifamiliare\b/i],
+    ["Bifamiliare",/\bbifamiliare\b/i],
+    ["Casa indipendente",/\b(?:casa indipendente|casa singola|casa autonoma)\b/i],
+    ["Villetta a schiera",/\b(?:villetta|casa)\s+a\s+schiera\b/i],
+    ["Villetta",/\b(?:villetta|villino)\b/i],["Villa",/\bvilla\b/i],
+    ["Monolocale",/\bmonolocale\b/i],["Bilocale",/\bbilocale\b/i],
+    ["Trilocale",/\btrilocale\b/i],["Quadrilocale",/\bquadrilocale\b/i],
+    ["Attico",/\battico\b/i],["Mansarda",/\bmansarda\b/i],
+    ["Loft",/\bloft\b/i],["Duplex",/\bduplex\b/i],
+    ["Appartamento",/\bappartamento\b/i],
+    ["Rustico",/\b(?:rustico|casale|cascina|colonica|podere)\b/i],
+    ["Terratetto",/\bterratetto\b/i],["Terreno",/\bterreno\b/i],
+    ["Garage / Box",/\b(?:garage|box auto|box|posto auto)\b/i],
+    ["Locale commerciale",/\b(?:locale commerciale|fondo commerciale)\b/i],
+    ["Negozio",/\bnegozio\b/i],["Ufficio",/\bufficio\b/i],
+    ["Laboratorio",/\blaboratorio\b/i],["Magazzino / Deposito",/\b(?:magazzino|deposito)\b/i],
+    ["Capannone",/\bcapannone\b/i]
+  ];
+  for(const [label,pattern] of patterns)if(pattern.test(String(s||"")))return label;
+  return null;
 }
+
+
+function parsePropertyMeasure(value:string):number|null {
+  const raw=String(value||"").trim().replace(/\s+/g,"");
+  if(!/^\d[\d.,]*$/.test(raw))return null;
+  const separator=Math.max(raw.lastIndexOf(","),raw.lastIndexOf("."));
+  let amount:number;
+  if(separator>=0 && /^\d{1,2}$/.test(raw.slice(separator+1))){
+    amount=Number(raw.slice(0,separator).replace(/\D/g,"")+"."+raw.slice(separator+1));
+  }else{
+    amount=Number(raw.replace(/\D/g,""));
+  }
+  return Number.isFinite(amount)&&amount>=15&&amount<=10000?Math.round(amount):null;
+}
+
+export function surface(s:string):number|null {
+  const value=String(s||"").replace(/\s+/g," ");
+  const patterns=[
+    /(?:superficie(?:\s+(?:commerciale|calpestabile|totale))?|metratura|mq\s+totali|sup\.?)\s*[:\-]?\s*(?:circa\s*|ca\.?\s*)?([1-9]\d{0,3}(?:[.,]\d{1,3})?)\s*(?:m²|m2|mq|metri quadrati|metri)?\b/i,
+    /\b([1-9]\d{0,3}(?:[.,]\d{1,3})?)\s*(?:m²|m2|mq|metri quadrati)\b/i
+  ];
+  for(const pattern of patterns){
+    const match=value.match(pattern);
+    if(!match)continue;
+    const amount=parsePropertyMeasure(match[1]);
+    if(amount!==null)return amount;
+  }
+  return null;
+}
+
+export function rooms(s:string):number|null {
+  const value=String(s||"");
+  const match=value.match(/\b([1-9]\d?(?:[.,]\d)?)\s*(?:locali|vani)\b/i)
+    ||value.match(/\b(?:locali|vani)\s*[:\-]?\s*([1-9]\d?(?:[.,]\d)?)\b/i);
+  if(!match)return null;
+  const amount=Number(match[1].replace(",","."));
+  return Number.isFinite(amount)&&amount>0&&amount<=100?amount:null;
+}
+
+
 export function bedrooms(s:string):number|null {
-  const match=String(s||"").match(/\b(\d{1,2})\s*(?:camere(?: da letto)?|camera(?: da letto)?)\b|\b(?:camere(?: da letto)?|camera(?: da letto)?)\s*[:\-]?\s*(\d{1,2})\b/i);
-  const value=match?Number(match[1]||match[2]):null;
-  return value!==null&&value>=0&&value<=20?value:null;
+  const value=String(s||"");
+  const match=value.match(/\b(\d{1,2})\s*(?:camere(?: da letto)?|camera(?: da letto)?)\b/i)
+    ||value.match(/\b(?:camere(?: da letto)?|camera(?: da letto)?)\s*[:\-]?\s*(\d{1,2})\b/i);
+  const amount=match?Number(match[1]):null;
+  return amount!==null&&amount>=0&&amount<=20?amount:null;
 }
 export function bathrooms(s:string):number|null {
-  const match=String(s||"").match(/\b(\d{1,2})\s*(?:bagni|bagno)\b|\b(?:bagni|bagno)\s*[:\-]?\s*(\d{1,2})\b/i);
-  const value=match?Number(match[1]||match[2]):null;
-  return value!==null&&value>=0&&value<=20?value:null;
+  const value=String(s||"");
+  const match=value.match(/\b(\d{1,2})\s*(?:bagni|bagno)\b/i)
+    ||value.match(/\b(?:bagni|bagno)\s*[:\-]?\s*(\d{1,2})\b/i);
+  const amount=match?Number(match[1]):null;
+  return amount!==null&&amount>=0&&amount<=20?amount:null;
 }
+
+
 function listingUrls(s:string):string[] {
   const source=String(s||"");
   const urls=source.match(/https?:\/\/[^\s<>"']+/gi)||[];
