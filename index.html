@@ -569,6 +569,15 @@ button:disabled{opacity:.55;cursor:not-allowed}
     </div>
   </section>
 
+  <section class="dash-card dash-action-plan" id="acquisitionPipelinePanel" style="margin:14px 0">
+    <div class="dash-card-head"><div><h2>NMRE Seller Acquisition Pipeline</h2><div class="dash-card-sub">Percorso dei proprietari: stato attuale del portafoglio e traguardi commerciali registrati</div></div><span class="small" id="acquisitionPipelinePeriod">Periodo selezionato</span></div>
+    <div class="seller-radar-intro">La pipeline distingue gli immobili per stato CRM attuale dagli eventi registrati nel periodo. Le fasi non vengono dedotte da telefonate non classificate e non rappresentano probabilità di acquisizione.</div>
+    <h3 style="margin:14px 0 8px">Portafoglio attuale per fase</h3>
+    <div id="acquisitionPipelineStock" class="dash-overview"></div>
+    <h3 style="margin:16px 0 8px">Traguardi commerciali registrati</h3>
+    <div id="acquisitionPipelineMilestones" class="sales-performance-funnel"></div>
+    <p class="hint" id="acquisitionPipelineNote">I conteggi sono basati su immobili e attività collegati; le attività prive di un immobile o contatto collegabile non vengono attribuite a una fase.</p>
+  </section>
   <section class="dash-card dash-action-plan" style="margin:14px 0">
     <div class="dash-card-head"><div><h2>NMRE Acquisition Command Center</h2><div class="dash-card-sub">Le 10 azioni commerciali più importanti, ordinate per urgenza e segnali verificabili</div></div><span class="small" id="dashActionPlanCount">Analisi attività</span></div>
     <div class="seller-radar-intro">Priorità operative costruite su richiami, appuntamenti, interazioni, ribassi documentati e qualità dei dati. Non sono previsioni di incarico. Le attività vengono aggiornate quando si sincronizzano CRM e opportunità.</div>
@@ -2522,6 +2531,62 @@ const nmreCrmLabels={
 function nmreCrmOption(id,rows,placeholder,label){const el=$(id),old=el.value;el.replaceChildren(new Option(placeholder,""));rows.forEach(r=>el.add(new Option(label(r),r.id)));if(rows.some(r=>r.id===old))el.value=old;}
 function nmreCrmSetTab(tab){document.querySelectorAll("[data-crm-tab]").forEach(b=>b.classList.toggle("active",b.dataset.crmTab===tab));document.querySelectorAll("[data-crm-pane]").forEach(p=>p.hidden=p.dataset.crmPane!==tab);}
 function nmreCrmPercent(value,total){return total?Math.round(value/total*100):0;}
+function renderAcquisitionPipeline(){
+ const stockBox=$("acquisitionPipelineStock"),milestoneBox=$("acquisitionPipelineMilestones");
+ if(!stockBox||!milestoneBox)return;
+ const properties=Array.isArray(nmreCrmProperties)?nmreCrmProperties:[];
+ const stages=[
+  ["da_valutare","Da valutare"],
+  ["acquisizione","In acquisizione"],
+  ["incarico","Incarico acquisito"],
+  ["in_vendita","In vendita"],
+  ["proposta","Proposta ricevuta"],
+  ["venduto","Venduto"]
+ ];
+ const counts=stages.map(([key,label])=>[label,properties.filter(item=>item.status===key).length]);
+ stockBox.innerHTML=counts.map(([label,value])=>'<div class="dash-overview-item"><strong>'+value+'</strong><span>'+safe(label)+'</span></div>').join("");
+ const range=Number($("salesPerformanceRange")?.value||30);
+ const from=new Date();from.setDate(from.getDate()-range+1);from.setHours(0,0,0,0);
+ const inRange=row=>{const t=Date.parse(row.created_at||"");return Number.isFinite(t)&&t>=from.getTime();};
+ const crmEvents=(nmreCrmInteractions||[]).filter(inRange);
+ const archiveEvents=(nmreListingInteractions||[]).filter(inRange).map(row=>({
+  interaction_type:row.tipo,outcome_code:row.outcome_code,created_at:row.created_at,
+  property_id:row.annuncio_id,contact_id:null
+ }));
+ const events=[...crmEvents,...archiveEvents];
+ const entityKey=row=>{
+  if(row.property_id)return "property:"+String(row.property_id);
+  if(row.contact_id)return "contact:"+String(row.contact_id);
+  return null;
+ };
+ const countUnique=rows=>new Set(rows.map(entityKey).filter(Boolean)).size;
+ const responseCodes=new Set(["parlato","richiamare","interessato","appuntamento_fissato","valutazione_fissata","valutazione_completata","incarico_acquisito","non_interessato"]);
+ const conversations=countUnique(events.filter(row=>row.interaction_type==="telefonata"&&responseCodes.has(row.outcome_code)));
+ const appointmentEvents=events.filter(row=>row.outcome_code==="appuntamento_fissato");
+ const agendaAppointments=(nmreCrmAppointments||[]).filter(row=>{
+  const t=Date.parse(row.starts_at||"");
+  return Number.isFinite(t)&&t>=from.getTime()&&row.status!=="annullato"&&["appuntamento","visita"].includes(row.appointment_type);
+ });
+ const appointments=countUnique(appointmentEvents)+countUnique(agendaAppointments);
+ const valuationEvents=events.filter(row=>row.outcome_code==="valutazione_completata");
+ const agendaValuations=(nmreCrmAppointments||[]).filter(row=>{
+  const t=Date.parse(row.starts_at||"");
+  return Number.isFinite(t)&&t>=from.getTime()&&row.appointment_type==="valutazione"&&row.status==="completato";
+ });
+ const valuations=countUnique(valuationEvents)+countUnique(agendaValuations);
+ const mandates=countUnique(events.filter(row=>row.outcome_code==="incarico_acquisito"));
+ const milestones=[
+  ["Conversazioni effettive",conversations,"Proprietari con almeno una risposta classificata"],
+  ["Appuntamenti fissati",appointments,"Proprietari / immobili collegati a un appuntamento"],
+  ["Valutazioni completate",valuations,"Valutazioni con esito di completamento registrato"],
+  ["Incarichi acquisiti",mandates,"Incarichi con evento esplicito registrato"]
+ ];
+ milestoneBox.innerHTML=milestones.map(([label,value,detail])=>'<div class="sales-performance-step"><div class="sales-performance-step-top"><span>'+safe(label)+'</span><strong>'+value+'</strong></div><div class="sales-performance-note">'+safe(detail)+'</div></div>').join("");
+ const period=$("acquisitionPipelinePeriod");if(period)period.textContent="Ultimi "+range+" giorni";
+ const note=$("acquisitionPipelineNote");
+ if(note)note.textContent="Portafoglio: "+properties.length+" immobili CRM. Traguardi: contano identificativi distinti collegati alle attività nel periodo; gli eventi senza property_id o contact_id sono esclusi. Appuntamenti e valutazioni da agenda sono conteggiati separatamente dagli esiti telefonici.";
+}
+
 function renderSalesPerformance(){
  const range=Number($("salesPerformanceRange")?.value||30);
  const from=new Date();from.setDate(from.getDate()-range+1);from.setHours(0,0,0,0);
@@ -2557,6 +2622,7 @@ function renderSalesPerformance(){
   {label:"Appuntamenti → Incarichi",value:appointmentMandate,detail:mandates+" incarichi su "+appointments+" appuntamenti"}
  ];
  $("salesPerformanceFunnel").innerHTML=steps.map(step=>'<div class="sales-performance-step"><div class="sales-performance-step-top"><span>'+step.label+'</span><strong>'+step.value+'%</strong></div><div class="sales-performance-track"><div class="sales-performance-fill" style="width:'+Math.min(100,step.value)+'%"></div></div><div class="sales-performance-note">'+step.detail+'</div></div>').join("");
+ renderAcquisitionPipeline();
  const unclassified=calls.filter(x=>!x.outcome_code).length;
  $("salesPerformanceNote").textContent=calls.length
   ?range+" giorni · "+(calls.length/range).toFixed(1).replace(".",",")+" telefonate registrate al giorno in media · "+unclassified+" telefonate senza esito classificato. Gli incarichi sono contati per immobile collegato, oppure per contatto se l'immobile non è specificato."
@@ -2652,7 +2718,7 @@ async function loadCrmWorkspace(){
  nmreCrmOption("nmreCrmAgendaContact",nmreCrmContacts,"Nessun contatto",x=>x.full_name);
  nmreCrmOption("nmreCrmAgendaProperty",nmreCrmProperties,"Nessun immobile",x=>x.title+" · "+x.municipality);
  nmreCrmOption("nmreCrmPropertySource",listingCache,"Nessun annuncio collegato",x=>(x.titolo||"Annuncio")+" · "+(x.comune||""));
- $("nmreCrmError").textContent="";nmreCrmRender();renderSalesPerformance();
+ $("nmreCrmError").textContent="";nmreCrmRender();renderSalesPerformance();renderAcquisitionPipeline();
 }
 function nmreCrmRenderContacts(){
  const q=$("nmreCrmContactSearch").value.toLocaleLowerCase("it"),f=$("nmreCrmContactFilter").value;
