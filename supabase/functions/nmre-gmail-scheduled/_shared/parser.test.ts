@@ -17,6 +17,9 @@ function assertEquals<T>(actual:T, expected:T, label:string):void {
 Deno.test("price parser handles Italian euro formats",()=>{
   assertEquals(price("Prezzo richiesto: € 189.000"),189000,"grouped euro value");
   assertEquals(price("Richiesta 210.000 euro"),210000,"euro suffix");
+  assertEquals(price("€ 52.523 82 m² | 3 locali"),52523,"price is not concatenated with surface");
+  assertEquals(price("€ 215.000 80 m² | 3 locali"),215000,"price before surface");
+  assertEquals(price("€ 63.000 48 m²"),63000,"price before two-digit surface");
   assertEquals(price("€ 180,5 mila"),180500,"thousands suffix");
   assertEquals(price("Prezzo: 1.250.000,00 EUR"),1250000,"decimal cents");
   assertEquals(price("Richiesta &euro; 180.000"),180000,"HTML encoded euro symbol");

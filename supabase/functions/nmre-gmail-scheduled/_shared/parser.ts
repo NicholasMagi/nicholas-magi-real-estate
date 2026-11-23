@@ -34,23 +34,29 @@ function parseItalianAmount(value:string):number|null {
     raw=raw.replace(/(?:mila|k)$/i,"");
   }
   if(!/^\d[\d.,]*$/.test(raw))return null;
-  const separator=Math.max(raw.lastIndexOf(","),raw.lastIndexOf("."));
   let amount:number;
-  if(separator>=0 && /^\d{1,2}$/.test(raw.slice(separator+1)) && raw.slice(0,separator).replace(/\D/g,"").length>=1){
-    amount=Number(raw.slice(0,separator).replace(/\D/g,"")+"."+raw.slice(separator+1));
-  }else{
-    amount=Number(raw.replace(/\D/g,""));
-  }
+  if(raw.includes(",")&&raw.includes(".")){
+    if(raw.lastIndexOf(",")>raw.lastIndexOf("."))amount=Number(raw.replace(/\./g,"").replace(",","."));
+    else amount=Number(raw.replace(/,/g,""));
+  }else if(raw.includes(",")){
+    const parts=raw.split(","),tail=parts.pop()||"",integer=parts.join("").replace(/\D/g,"");
+    amount=/^\d{1,2}$/.test(tail)?Number(integer+"."+tail):Number(integer+tail);
+  }else if(raw.includes(".")){
+    const parts=raw.split("."),tail=parts[parts.length-1],prefix=parts.slice(0,-1).join("");
+    if(/^\d{3}$/.test(tail)&&prefix.length<=3)amount=Number(prefix+tail);
+    else amount=Number(prefix+"."+tail);
+  }else amount=Number(raw);
   amount*=multiplier;
   return Number.isFinite(amount)&&amount>=10000&&amount<=100000000?Math.round(amount):null;
 }
 
 export function price(s:string):number|null {
   const value=normalizePropertyText(s);
+  const number="((?:\\d{1,3}(?:[. ]\\d{3})+|\\d+)(?:,\\d{1,2})?(?:\\s*(?:mila|k))?)";
   const patterns=[
-    /(?:€|eur)\s*([0-9][0-9\s.,]*(?:\s*(?:mila|k))?)/i,
-    /([0-9][0-9\s.,]*(?:\s*(?:mila|k))?)\s*(?:€|eur|euro)\b/i,
-    /(?:prezzo|richiesta|richiesto|in vendita(?: a)?|a partire da)\s*[:\-]?\s*(?:€|eur)?\s*([0-9][0-9\s.,]*(?:\s*(?:mila|k))?)/i
+    new RegExp("(?:€|eur)\\s*"+number,"i"),
+    new RegExp(number+"\\s*(?:€|eur|euro)\\b","i"),
+    new RegExp("(?:prezzo|richiesta|richiesto|in vendita(?: a)?|a partire da)\\s*[:-]?\\s*(?:€|eur)?\\s*"+number,"i")
   ];
   for(const pattern of patterns){
     const match=value.match(pattern);
@@ -60,7 +66,6 @@ export function price(s:string):number|null {
   }
   return null;
 }
-
 
 export function propertyType(s:string):string|null {
   const value=normalizePropertyText(s);
@@ -180,7 +185,7 @@ export async function resolveListingUrl(s:string):Promise<string|null> {
         if(isSpecificListingUrl(initial))return initial.toString();
         continue;
       }
-      const response=await fetch(candidate,{redirect:"follow",headers:{Accept:"text/html"},signal:AbortSignal.timeout(6000)});
+      const response=await fetch(candidate,{method:"GET",redirect:"follow",headers:{Accept:"text/html"},signal:AbortSignal.timeout(6000)});
       const finalUrl=new URL(response.url||candidate);
       if(isSpecificListingUrl(finalUrl))return finalUrl.toString();
     }catch{}

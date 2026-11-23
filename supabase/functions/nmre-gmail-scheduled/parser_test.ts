@@ -10,12 +10,15 @@ function assertEquals<T>(actual:T,expected:T,message:string){
 Deno.test("prezzo italiano con separatore migliaia",()=>{
   assertEquals(price("Prezzo richiesto: € 185.000"),185000,"€ 185.000");
   assertEquals(price("Richiesta 185.000,00 EUR"),185000,"185.000,00 EUR");
+  assertEquals(price("€ 52.523 82 m² | 3 locali"),52523,"non ingloba la metratura successiva");
+  assertEquals(price("€ 215.000 80 m² | 3 locali"),215000,"prezzo e superficie separati");
+  assertEquals(price("€ 63.000 48 m²"),63000,"prezzo con metratura a due cifre");
 });
 Deno.test("estrazione tipologia, metratura e vani",()=>{
   assertEquals(propertyType("Appartamento trilocale con balcone"),"Trilocale","tipologia trilocale");
   assertEquals(surface("Superficie: 95 m² commerciali"),95,"superficie 95 m²");
   assertEquals(surface("Superficie: 1.200 m²"),1200,"superficie con separatore migliaia");
-  assertEquals(surface("95,5 mq"),95,"superficie con decimale");
+  assertEquals(surface("95,5 mq"),96,"superficie con decimale arrotondata al metro quadrato");
   assertEquals(rooms("4,5 locali"),4.5,"4,5 locali");
   assertEquals(bedrooms("2 camere da letto"),2,"2 camere");
   assertEquals(bathrooms("1 bagno"),1,"1 bagno");

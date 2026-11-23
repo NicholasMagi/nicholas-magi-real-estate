@@ -204,6 +204,20 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .nmre-crm .status{display:inline-block;margin-left:8px}
 @media(max-width:650px){.nmre-crm-form{grid-template-columns:1fr}.nmre-crm-form .wide{grid-column:auto}.nmre-crm-stats{grid-template-columns:1fr 1fr 1fr}.nmre-crm-item{flex-direction:column}.nmre-crm-item-side{flex-direction:row;align-items:center;flex-wrap:wrap}.nmre-crm-stats span{font-size:10px}}
 
+
+/* NMRE workspace navigation */
+.nmre-workspace{display:grid;grid-template-columns:205px minmax(0,1fr);gap:18px;align-items:start;margin-top:16px}
+.nmre-sidebar{position:sticky;top:14px;display:grid;gap:6px;padding:13px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 6px 20px rgba(16,26,43,.04)}
+.nmre-sidebar-title{font-size:9px;font-weight:800;letter-spacing:1.7px;color:#a2824d;padding:4px 9px 8px}
+.nmre-nav-link{width:100%;text-align:left;background:transparent;color:#46536a;border:1px solid transparent;padding:10px 11px;border-radius:8px;font-size:12px;font-weight:700}
+.nmre-nav-link:hover{background:#f5f6f8}
+.nmre-nav-link.active{background:#101a2b;color:#fff;border-color:#101a2b}
+.nmre-sidebar-note{border-top:1px solid var(--line);margin-top:8px;padding:12px 9px 3px;font-size:10px;line-height:1.5;color:var(--muted)}
+.nmre-workspace-main{min-width:0}
+.nmre-workspace-main>.nmre-crm{margin-top:0}
+.nmre-workspace-main>[id]{scroll-margin-top:16px}
+@media(max-width:900px){.nmre-workspace{grid-template-columns:1fr}.nmre-sidebar{position:relative;top:auto;display:flex;gap:6px;overflow-x:auto;align-items:center;padding:9px}.nmre-sidebar-title,.nmre-sidebar-note{display:none}.nmre-nav-link{width:auto;white-space:nowrap;flex:0 0 auto;padding:9px 11px}}
+@media(max-width:560px){.nmre-workspace{gap:10px}.nmre-nav-link{font-size:11px;padding:8px 9px}}
 </style>
 </head>
 <body>
@@ -249,6 +263,19 @@ button:disabled{opacity:.55;cursor:not-allowed}
 </div>
 </div>
 
+<div class="nmre-workspace">
+  <aside class="nmre-sidebar" aria-label="Navigazione gestionale">
+    <div class="nmre-sidebar-title">MENU OPERATIVO</div>
+    <button type="button" class="nmre-nav-link active" data-nmre-nav="dashboard">Panoramica</button>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="nmreCrm">CRM · Contatti</button>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="candidateSection">Acquisizione</button>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="archiveSection">Archivio immobili</button>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="marketAnalysisSection">Analisi mercato</button>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="automationSection">Gmail e API</button>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="newListingSection">Registra immobile</button>
+    <div class="nmre-sidebar-note">Nicholas Magi<br>Real Estate</div>
+  </aside>
+  <div class="nmre-workspace-main">
 <section class="panel nmre-crm" id="nmreCrm">
   <div class="nmre-crm-head">
     <div><div class="nmre-crm-kicker">GESTIONALE</div><h2>CRM · Relazioni e portafoglio</h2><p class="hint">Contatti, immobili gestiti e attività in un unico spazio operativo.</p></div>
@@ -523,7 +550,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 La casella Gmail viene elaborata dal server in background. Qui non vengono mostrate le email: vede soltanto i dati estratti dagli annunci immobiliari, senza mittente, oggetto o testo dei messaggi.
 </p>
 <div class="topline">
-<div><span class="pill">Sincronizzazione automatica attiva</span><div class="small">Controllo della casella ogni ora; aggiornamento della lista ogni 5 minuti mentre il sito è aperto.</div></div>
+<div><span class="pill">Sincronizzazione automatica attiva</span><div class="small">Controllo automatico della casella ogni 10 minuti; aggiornamento della lista ogni 5 minuti mentre il sito è aperto.</div></div>
 <button class="secondary" id="connectGmail">Ricollega Gmail</button>
 </div>
 <div class="gmail-sync-monitor" aria-live="polite">
@@ -666,6 +693,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div id="listingList"><p class="hint">Caricamento annunci...</p></div>
 <div id="listMsg" class="status"></div>
 </section>
+</div></div>
 <p class="hint">I dati sono associati al Suo account e protetti dalle regole di sicurezza di Supabase.</p>
 </section>
 </main>
@@ -2941,6 +2969,15 @@ function exportCandidatesCsv(){
   document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
   msg("candidateMsg","Esportazione candidati completata.","success");
 }
+
+document.querySelectorAll("[data-nmre-nav]").forEach(button=>{
+  button.addEventListener("click",()=>{
+    const target=document.getElementById(button.dataset.nmreNav);
+    if(!target)return;
+    document.querySelectorAll("[data-nmre-nav]").forEach(item=>item.classList.toggle("active",item===button));
+    target.scrollIntoView({behavior:"smooth",block:"start"});
+  });
+});
 $("exportCandidatesCsv").addEventListener("click",exportCandidatesCsv);
 
 

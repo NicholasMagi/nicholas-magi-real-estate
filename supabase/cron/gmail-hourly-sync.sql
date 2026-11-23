@@ -1,4 +1,4 @@
--- Gmail hourly sync for Nicholas Magi Real Estate.
+-- Gmail sync every 10 minutes for Nicholas Magi Real Estate.
 -- The secret_key value must already exist in Supabase Vault.
 -- Never put secret values in this file or in the repository.
 
@@ -27,7 +27,7 @@ begin
   if v_job_id is null then
     perform cron.schedule(
       'nmre-gmail-hourly-sync',
-      '15 * * * *',
+      '*/10 * * * *',
       $job$
         select net.http_post(
           url := (
@@ -51,7 +51,7 @@ begin
   else
     perform cron.alter_job(
       v_job_id,
-      schedule := '15 * * * *',
+      schedule := '*/10 * * * *',
       command := $job$
         select net.http_post(
           url := (
