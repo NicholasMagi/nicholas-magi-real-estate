@@ -9,6 +9,7 @@ Applicazione web per la raccolta, la verifica e la gestione di opportunità immo
 - Dettagli strutturati: tipologia immobile, superficie, locali, camere e bagni.
 - Inserimento manuale e gestione dei contatti dei proprietari.
 - Agenda dei richiami con scadenze passate, odierne e dei prossimi sette giorni.
+- Centro operativo telefonate con richiami scaduti, attività odierne, richiami nei prossimi sette giorni, nuovi proprietari e appuntamenti in pipeline; ogni scheda consente di registrare esito, stato commerciale e prossimo contatto.
 - Storico di telefonate, WhatsApp, email, appuntamenti e note.
 - Collegamento Gmail OAuth, con token conservati cifrati lato server.
 - Acquisizione automatica di notifiche immobiliari in background.
