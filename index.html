@@ -781,7 +781,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div>
 <strong>Immobiliare.it Insights</strong>
 <div id="insightsApiStatus" class="small">Stato API non ancora verificato</div>
-<div class="small">Confronta le ricerche ufficiali Privato e Professionista con gli annunci email, riconoscendo i venditori dal link esatto.</div>
+<div class="small">Confronta le ricerche ufficiali Privato e Professionista con gli annunci email, riconoscendo i venditori dal link esatto. Il filtro sul telefono indica soltanto che il portale segnala un recapito nell’annuncio: l’API non restituisce il numero, che va verificato manualmente aprendo la scheda originale.</div>
 </div>
 <div class="actions">
 <button class="secondary" id="checkInsightsApi">Verifica accesso</button>
@@ -3084,14 +3084,14 @@ async function syncInsightsApi(){
     if(!data?.success)throw new Error(data?.error||"Importazione non riuscita.");
     $("insightsApiStatus").textContent="Ultima ricerca completata · "+data.resultsRead+" risultati analizzati";
     const resultParts=[
-      data.inserted+" nuovi annunci privati con telefono importati",
+      data.inserted+" nuovi annunci privati con indicatore di recapito presente importati (numero non restituito dall’API)",
       data.matchedEmailAsPrivate+" annunci email riconosciuti come privati",
-      data.matchedEmailAsPrivateWithPhone+" privati con telefono disponibile",
+      data.matchedEmailAsPrivateWithPhone+" annunci privati con indicatore di recapito presente (numero da verificare sull’annuncio)",
       data.matchedEmailAsProfessional+" annunci email riconosciuti come professionisti e rimossi dalla coda",
       data.alreadyPresent+" già presenti"
     ];
     if(!data.phoneFilterAvailable){
-      resultParts.push("verifica disponibilità telefono non completata");
+      resultParts.push("filtro indicatore di recapito non disponibile: la presenza del numero non è verificata");
     }
     if(!data.professionalLookupAvailable){
       resultParts.push("verifica professionisti non completata (API "+(data.professionalLookupStatus||"non disponibile")+")");
