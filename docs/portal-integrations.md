@@ -18,7 +18,7 @@ Required Supabase Edge Function secrets:
 - INSIGHTS_PASSWORD
 - NMRE_INSIGHTS_ENV (sandbox by default; production only after provider approval and entitlement)
 
-The account must be entitled to Comps Finder and the requested filters. A sandbox or production request must not be run until the provider has supplied the credentials.
+The account must be entitled to Comps Finder and the requested filters. A sandbox or production request must not be run until the provider has supplied the credentials. The server-side `INSIGHTS_LEAD_USE_APPROVED=true` gate must also remain disabled until the provider confirms in writing that using the results for real-estate prospecting/acquisition is permitted. Portal general terms prohibit unauthorized commercial exploitation of portal services/data; obtaining an API token alone does not establish permission for this purpose.
 
 ## Sources that require portal approval
 
