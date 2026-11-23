@@ -62,7 +62,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .gmail-sync-details{margin-top:10px;font-size:11px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
 @media(max-width:650px){.gmail-sync-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
-.candidate{border-top:1px solid var(--line);padding:14px 0}.candidate input{margin:5px 0}.candidate-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.candidate-priority{display:flex;align-items:center;gap:12px;padding:10px 12px;margin:10px 0;border:1px solid #e5e9ef;border-radius:10px;background:#f8f9fb}.candidate-priority-score{min-width:54px;text-align:center;color:#26364d}.candidate-priority-score strong{font-family:Georgia,serif;font-size:25px;line-height:1}.candidate-priority-score span{font-size:10px;color:var(--muted);margin-left:2px}.candidate-priority-info{display:grid;gap:3px;min-width:0}.candidate-priority-info strong{font-size:12px;color:#35435a}.candidate-priority-info>span{font-size:11px;color:#58667a}.candidate-priority-info small{font-size:10px;line-height:1.45;color:#7b8797}.candidate-priority-high{border-left:4px solid #b8955b}.candidate-priority-medium{border-left:4px solid #7890ad}.candidate-priority-low{border-left:4px solid #b9c1cc}.candidate-priority-summary{font-size:11px;color:var(--muted);margin:8px 0}.candidate-priority-legend{font-size:11px;color:var(--muted);line-height:1.5;margin:8px 0 12px}.candidate-quality{padding:10px 12px;margin:10px 0;border:1px solid #e4e8ee;border-radius:9px;background:#fafbfc;font-size:11px;line-height:1.55;color:#526075}.candidate-quality strong{color:#35435a}.candidate-quality-warning{border-left:4px solid #bd8950;background:#fffaf2}.candidate-quality-review{border-left:4px solid #8194ad}.candidate-quality-ok{border-left:4px solid #8eaa98;background:#f8fbf8}.candidate-link-warning{font-size:11px;color:#9a642f;font-weight:700;align-self:center}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.toolbar input{max-width:280px}
+.candidate{border-top:1px solid var(--line);padding:14px 0}.candidate input{margin:5px 0}.candidate-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.candidate-priority{display:flex;align-items:center;gap:12px;padding:10px 12px;margin:10px 0;border:1px solid #e5e9ef;border-radius:10px;background:#f8f9fb}.candidate-priority-score{min-width:54px;text-align:center;color:#26364d}.candidate-priority-score strong{font-family:Georgia,serif;font-size:25px;line-height:1}.candidate-priority-score span{font-size:10px;color:var(--muted);margin-left:2px}.candidate-priority-info{display:grid;gap:3px;min-width:0}.candidate-priority-info strong{font-size:12px;color:#35435a}.candidate-priority-info>span{font-size:11px;color:#58667a}.candidate-priority-info small{font-size:10px;line-height:1.45;color:#7b8797}.candidate-priority-high{border-left:4px solid #b8955b}.candidate-priority-medium{border-left:4px solid #7890ad}.candidate-priority-low{border-left:4px solid #b9c1cc}.candidate-priority-summary{font-size:11px;color:var(--muted);margin:8px 0}.candidate-priority-legend{font-size:11px;color:var(--muted);line-height:1.5;margin:8px 0 12px}.candidate-quality{padding:10px 12px;margin:10px 0;border:1px solid #e4e8ee;border-radius:9px;background:#fafbfc;font-size:11px;line-height:1.55;color:#526075}.candidate-quality strong{color:#35435a}.candidate-quality-warning{border-left:4px solid #bd8950;background:#fffaf2}.candidate-quality-review{border-left:4px solid #8194ad}.candidate-quality-ok{border-left:4px solid #8eaa98;background:#f8fbf8}.candidate-link-warning{font-size:11px;color:#9a642f;font-weight:700;align-self:center}.candidate-analysis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:9px 0}.candidate-analysis-item{border:1px solid #e4e8ee;border-radius:9px;padding:9px 11px;background:#fff;min-width:0}.candidate-analysis-item span{display:block;font-size:10px;color:var(--muted);margin-bottom:4px}.candidate-analysis-item strong{display:block;font-size:12px;color:#35435a;line-height:1.35}.candidate-analysis-item small{display:block;font-size:9px;color:var(--muted);line-height:1.4;margin-top:4px}@media(max-width:520px){.candidate-analysis{grid-template-columns:1fr}}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.toolbar input{max-width:280px}
 .dashboard{margin:0 0 18px}
 .dash-hero{background:linear-gradient(120deg,#101a2b 0%,#1a2a43 72%,#243650 100%);color:#fff;border:1px solid #263751;border-radius:18px;padding:24px 26px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:18px;box-shadow:0 10px 28px rgba(16,26,43,.10)}
 .dash-kicker{font-size:10px;letter-spacing:2.3px;color:#d7bd91;text-transform:uppercase;font-weight:700}
@@ -374,7 +374,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
   </div>
   <div class="search-filter-actions"><span id="candidateFilterCount" class="search-filter-count">Caricamento risultati…</span><button class="secondary" id="candidateResetFilters" type="button">Azzera filtri</button></div>
 </div>
-<p class="candidate-priority-legend">La priorità ordina gli annunci considerando venditore privato riconosciuto, freschezza della pubblicazione/notifica, link specifico, completezza dei dati e presenza nei comuni principali di Ancona, Osimo, Castelfidardo e Jesi. È un aiuto organizzativo: non stima il valore di mercato né la convenienza del prezzo.</p><p id="candidatePrioritySummary" class="candidate-priority-summary"></p><div id="candidateList"><p class="hint">Nessun candidato caricato.</p></div>
+<p class="candidate-priority-legend">Due indicatori separati: la priorità di acquisizione ordina il lavoro in base a venditore riconosciuto, freschezza, territorio, contatto e dati essenziali; la qualità dei dati misura la completezza della scheda. Il prezzo al m² è solo il rapporto tra richiesta e superficie: non è una valutazione di mercato e non dimostra da solo la convenienza dell'immobile.</p><p id="candidatePrioritySummary" class="candidate-priority-summary"></p><div id="candidateList"><p class="hint">Nessun candidato caricato.</p></div>
 <div id="candidateMsg" class="status"></div>
 </section>
 
@@ -1024,40 +1024,55 @@ function candidatePriority(item,now=new Date()){
   let score=0;
   const reasons=[];
   const add=(points,label)=>{score+=points;if(points>0)reasons.push(label+" +"+points);};
-  add(item.tipo_venditore==="Privato"?25:0,item.tipo_venditore==="Privato"?"Privato riconosciuto":"Venditore da verificare");
+
+  // Il punteggio misura l'ordine di lavorazione commerciale, non la qualita'
+  // economica dell'immobile e non certifica mai il venditore.
+  if(item.tipo_venditore==="Privato")add(25,"Privato riconosciuto");
+  else if(item.tipo_venditore==="Da verificare")add(7,"Venditore da qualificare");
+
   const published=item.data_pubblicazione?Date.parse(item.data_pubblicazione):NaN;
   const received=item.created_at?Date.parse(item.created_at):NaN;
   const hasPublication=Number.isFinite(published);
   const timestamp=hasPublication?published:received;
   if(Number.isFinite(timestamp)){
     const days=Math.max(0,Math.floor((now.getTime()-timestamp)/86400000));
-    let points=0;
-    if(hasPublication){
-      points=days<=2?25:days<=7?20:days<=14?14:days<=30?8:0;
-      add(points,"Pubblicazione recente ("+days+" gg)");
-    }else{
-      points=days<=2?12:days<=7?10:days<=14?7:days<=30?4:0;
-      add(points,"Notifica recente ("+days+" gg)");
-    }
+    const points=hasPublication
+      ?(days<=2?20:days<=7?16:days<=14?11:days<=30?5:0)
+      :(days<=2?10:days<=7?8:days<=14?5:days<=30?2:0);
+    add(points,hasPublication?"Pubblicazione recente ("+days+" gg)":"Notifica recente ("+days+" gg)");
   }else reasons.push("Data non disponibile");
-  if(isSpecificCandidateUrl(item.url))add(15,"Link specifico all'annuncio");
-  else reasons.push(validUrl(item.url)?"Link non verificato come scheda specifica":"Link annuncio assente");
-  add(item.comune?6:0,"Comune presente");
-  const coreTerritory=new Set(["ancona","osimo","castelfidardo","jesi"]);
+
   const municipality=normalizedMatchText(item.comune);
-  add(coreTerritory.has(municipality)?7:0,"Zona operativa principale");
-  add(Number(item.prezzo)>0?6:0,"Prezzo presente");
-  add(item.tipologia_immobile?5:0,"Tipologia presente");
-  add(Number(item.superficie_mq)>0?5:0,"Superficie presente");
-  add(Number(item.locali)>0?3:0,"Numero locali presente");
-  add(String(item.titolo||"").trim().length>=20?1:0,"Descrizione informativa");
-  add(String(item.contatto||"").trim()?3:0,"Contatto disponibile");
+  const coreTerritory=new Set(["ancona","osimo","castelfidardo","jesi"]);
+  const nearbyTerritory=new Set([
+    "porto sant elpidio","porto recanati","porto san giorgio","civitanova marche",
+    "falconara marittima","santa maria nuova","maiolati spontini","monte san vito",
+    "monte urano","monte roberto","montecassiano","morro d alba","montemarciano",
+    "loreto","recanati","camerano","numana","sirolo","macerata","fermo","senigallia",
+    "filottrano","polverigi","agugliano","offagna","chiaravalle","ostra","tolentino",
+    "staffolo","cupramontana","monsano","trecastelli","corridonia","montegranaro"
+  ]);
+  if(coreTerritory.has(municipality))add(20,"Zona operativa principale");
+  else if(nearbyTerritory.has(municipality))add(10,"Territorio operativo esteso");
+  else reasons.push(municipality?"Fuori dal nucleo territoriale principale":"Comune da verificare");
+
+  if(String(item.contatto||"").trim())add(15,"Contatto diretto inserito");
+  else reasons.push("Contatto diretto assente");
+  if(isSpecificCandidateUrl(item.url))add(10,"Link specifico all'annuncio");
+  else reasons.push(validUrl(item.url)?"Link non verificato come scheda specifica":"Link annuncio assente");
+  add(Number(item.prezzo)>0?4:0,"Prezzo presente");
+  add(Number(item.superficie_mq)>0?4:0,"Superficie presente");
+  add(String(item.tipologia_immobile||"").trim()?2:0,"Tipologia presente");
+
   score=Math.min(100,score);
-  const level=score>=75?"high":score>=50?"medium":"low";
-  const label=level==="high"?"Alta":level==="medium"?"Media":"Da completare";
-  const description=level==="high"?"Da esaminare per prima":level==="medium"?"Verifichi i dati mancanti":"Completi le informazioni essenziali";
+  const level=score>=70?"high":score>=45?"medium":"low";
+  const label=level==="high"?"Alta":level==="medium"?"Media":"Da qualificare";
+  const description=item.tipo_venditore==="Privato"
+    ?(level==="high"?"Privato da contattare per primo":level==="medium"?"Privato da completare":"Completi i dati prima del contatto")
+    :(level==="high"?"Verifichi subito chi vende":level==="medium"?"Opportunita da qualificare":"Venditore ancora da identificare");
   return {score,level,label,description,reasons};
 }
+
 
 function normalizedMatchText(value){
   return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"")
@@ -1131,7 +1146,27 @@ function candidateQuality(item,candidates,archive,now=new Date()){
   if(!(Number(item.prezzo)>0))missing.push("prezzo");
   if(!String(item.tipologia_immobile||"").trim())missing.push("tipologia");
   if(!(Number(item.superficie_mq)>0))missing.push("superficie");
+  if(!(Number(item.locali)>0))missing.push("locali");
+  if(!String(item.contatto||"").trim())missing.push("contatto");
   const duplicate=findCandidateDuplicate(item,candidates,archive);
+
+  // Il punteggio misura soltanto quanto sono completi e verificabili i dati.
+  let qualityScore=0;
+  if(String(item.comune||"").trim())qualityScore+=15;
+  if(Number(item.prezzo)>0)qualityScore+=15;
+  if(String(item.tipologia_immobile||"").trim())qualityScore+=10;
+  if(Number(item.superficie_mq)>0)qualityScore+=15;
+  if(Number(item.locali)>0)qualityScore+=5;
+  if(specificLink)qualityScore+=15;
+  if(hasPublication)qualityScore+=10;
+  if(item.tipo_venditore==="Privato"&&Number(item.seller_confidence)>=90)qualityScore+=10;
+  if(String(item.contatto||"").trim())qualityScore+=5;
+
+  const qualityLevel=qualityScore>=80?"high":qualityScore>=55?"medium":"low";
+  const pricePerSqm=Number(item.prezzo)>0&&Number(item.superficie_mq)>0
+    ?Math.round(Number(item.prezzo)/Number(item.superficie_mq))
+    :null;
+
   return {
     specificLink,
     hasValidUrl:!!validUrl(item.url||item.url_originale),
@@ -1141,9 +1176,13 @@ function candidateQuality(item,candidates,archive,now=new Date()){
     aging:hasPublication&&days>14&&days<=30,
     missing,
     incomplete:missing.length>0,
-    duplicate
+    duplicate,
+    qualityScore,
+    qualityLevel,
+    pricePerSqm
   };
 }
+
 
 function renderCandidates(){
   const box=$("candidateList");
@@ -1195,8 +1234,13 @@ function renderCandidates(){
   const linkReviewCount=allQuality.filter(x=>!x.specificLink).length;
   const staleCount=allQuality.filter(x=>x.stale).length;
   const incompleteCount=allQuality.filter(x=>x.incomplete||!x.hasPublication).length;
+  const qualityHighCount=allQuality.filter(x=>x.qualityLevel==="high").length;
+  const averageQuality=allQuality.length
+    ?Math.round(allQuality.reduce((total,item)=>total+item.qualityScore,0)/allQuality.length)
+    :0;
   $("candidatePrioritySummary").textContent=data.length
-    ?priorityCounts.high+" priorità alte · "+priorityCounts.medium+" medie · "+priorityCounts.low+" da completare. "
+    ?priorityCounts.high+" priorità alte · "+priorityCounts.medium+" medie · "+priorityCounts.low+" da qualificare. "
+      +qualityHighCount+" schede con dati solidi · qualità media "+averageQuality+"/100. "
       +duplicateCount+" possibili duplicati · "+linkReviewCount+" link da verificare · "+staleCount+" annunci oltre 30 giorni · "+incompleteCount+" incompleti."
     :"Nessuna opportunità da classificare.";
   $("candidateFilterCount").textContent=(qualityFilter==="duplicates"?uniqueRanked.length+" possibili duplicati":uniqueRanked.length+" annunci unici")+" · "+visible.length+" notifiche su "+data.length+" ricevute";
@@ -1230,11 +1274,20 @@ function renderCandidates(){
       :"Nessun duplicato evidente individuato";
     const tone=quality.duplicate||!quality.specificLink||quality.stale?"warning":quality.incomplete||!quality.hasPublication?"review":"ok";
     const qualityHtml='<div class="candidate-quality candidate-quality-'+tone+'"><strong>Controllo qualità:</strong> '+safe(linkText)+' · '+safe(ageText)+' · '+safe(missingText)+'<br>'+safe(duplicateText)+'</div>';
+    const pricePerSqmText=quality.pricePerSqm!==null
+      ?new Intl.NumberFormat("it-IT").format(quality.pricePerSqm)+" €/m² richiesti"
+      :"€/m² non calcolabile: prezzo o superficie assenti";
+    const qualityLabel=quality.qualityLevel==="high"?"Dati solidi":quality.qualityLevel==="medium"?"Dati parziali":"Dati da completare";
+    const analysisHtml='<div class="candidate-analysis">'
+      +'<div class="candidate-analysis-item"><span>Qualità dei dati</span><strong>'+quality.qualityScore+'/100 · '+safe(qualityLabel)+'</strong></div>'
+      +'<div class="candidate-analysis-item"><span>Prezzo richiesto al m²</span><strong>'+safe(pricePerSqmText)+'</strong><small>Indicatore descrittivo, non stima del valore di mercato</small></div>'
+      +'</div>';
     return '<article class="candidate" data-candidate="'+safe(c.id)+'" data-url="'+safe(c.url||"")+'" data-url-originale="'+safe(c.url_originale||"")+'" data-portal="'+safe(c.portale||"Portale non indicato")+'">'
-      +'<div class="candidate-priority candidate-priority-'+priority.level+'" aria-label="Priorità operativa '+priority.score+' su 100">'
+      +'<div class="candidate-priority candidate-priority-'+priority.level+'" aria-label="Priorità commerciale '+priority.score+' su 100">'
       +'<div class="candidate-priority-score"><strong>'+priority.score+'</strong><span>/100</span></div>'
-      +'<div class="candidate-priority-info"><strong>Priorità '+safe(priority.label)+'</strong><span>'+safe(priority.description)+'</span><small>'+safe(priority.reasons.join(" · "))+'</small></div>'
+      +'<div class="candidate-priority-info"><strong>Priorità acquisizione '+safe(priority.label)+'</strong><span>'+safe(priority.description)+'</span><small>'+safe(priority.reasons.join(" · "))+'</small></div>'
       +'</div>'
+      +analysisHtml
       +qualityHtml
       +'<div class="topline"><span class="meta">'+safe(c.portale||"Portale non indicato")+' · '+safe(published)+'</span><span class="pill">'+(isPrivate?"Privato riconosciuto":c.tipo_venditore==="Agenzia"?"Agenzia riconosciuta":"Venditore da verificare")+'</span></div>'
       +'<div class="candidate-quality"><strong>Riconoscimento venditore:</strong> '+safe(c.seller_evidence||"Nessuna prova automatica disponibile")+' · '+(Number(c.seller_confidence)>0?Number(c.seller_confidence)+"% di confidenza":"Confidenza non determinabile")+(c.seller_manual_override?" · Verifica manuale":"")+'</div>'
