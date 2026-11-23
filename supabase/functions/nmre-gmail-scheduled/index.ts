@@ -333,10 +333,13 @@ export default {
           if (typeof candidate.source_email_id !== "string" || !candidate.url) return false;
           try {
             const link = new URL(candidate.url);
-            const host = link.hostname.toLowerCase().replace(/^www\\./, "");
-            const isImmobiliare = host === "immobiliare.it" || host.endsWith(".immobiliare.it");
-            return isImmobiliare &&
-              (link.pathname === "/" || /\\/(?:ricerca|search|vendita-case)(?:\\/|$)/i.test(link.pathname));
+            const host = link.hostname.toLowerCase();
+            const normalizedHost = host.startsWith("www.") ? host.slice(4) : host;
+            const isImmobiliare = normalizedHost === "immobiliare.it" || normalizedHost.endsWith(".immobiliare.it");
+            const path = link.pathname.toLowerCase();
+            const genericPath = path === "/" ||
+              ["/ricerca", "/search", "/vendita-case"].some(prefix => path === prefix || path.startsWith(prefix + "/"));
+            return isImmobiliare && genericPath;
           } catch {
             return false;
           }
