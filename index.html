@@ -1661,7 +1661,7 @@ function runValuationIntelligence(){
 function printValuationReport(){
   if(!lastValuationReport)return;
   const r=lastValuationReport;
-  const w=window.open("","_blank","noopener,noreferrer");
+  const w=window.open("","_blank");
   if(!w){$("valuationIntelligenceResult").insertAdjacentHTML("beforeend",'<p class="small">Il browser ha bloccato la finestra di stampa. Consenta i popup per questo sito e riprovi.</p>');return;}
   const money=value=>formatOmiEuro(value);
   const html='<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rapporto di analisi immobiliare · '+safe(r.town)+'</title><style>body{font:14px Arial,sans-serif;color:#202a38;max-width:850px;margin:36px auto;padding:0 24px;line-height:1.55}h1{font:26px Georgia,serif;margin:0}h2{font-size:16px;margin:28px 0 8px}.muted{color:#687386;font-size:12px}.brand{letter-spacing:2px;font-size:11px;font-weight:bold;color:#987447;margin-bottom:8px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:22px 0}.tile{border:1px solid #d9dee6;border-radius:8px;padding:13px}.tile strong{display:block;font-size:20px;margin:5px 0}.line{border-top:1px solid #d9dee6;margin:20px 0}.notice{background:#f6f7f9;padding:14px;border-radius:8px}.foot{font-size:11px;color:#687386;margin-top:28px}@media print{body{margin:15mm auto;padding:0}.noprint{display:none}}</style></head><body>'+
