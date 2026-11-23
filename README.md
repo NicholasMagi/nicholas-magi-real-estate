@@ -70,7 +70,7 @@ Il confronto di un immobile richiede comune, zona, tipologia, prezzo, superficie
 
 ### Compravendite dichiarate
 
-Il registro consente di annotare manualmente i dati non identificativi delle schede-atto consultate presso l'Agenzia delle Entrate: mese e anno, tipologia di atto, numero di atti restituiti dalla ricerca, corrispettivo dichiarato dell'intero atto, numero di immobili coinvolti e, facoltativamente, zona OMI, categoria catastale, superficie in m² e riepilogo delle unità.
+Il registro consente di annotare manualmente i dati non identificativi delle schede-atto consultate presso l'Agenzia delle Entrate: mese e anno, tipologia di atto, numero di atti restituiti dalla ricerca, corrispettivo dichiarato dell'intero atto, numero di immobili coinvolti e, facoltativamente, zona OMI, categoria catastale, consistenza catastale originale (per esempio vani), superficie in m² e riepilogo delle unità. La consistenza catastale viene conservata come testo e non convertita in superficie.
 
 Il servizio mostra i risultati in forma anonimizzata e richiede almeno cinque atti nella ricerca. NMRE non effettua scraping del servizio e non salva nominativi, codici fiscali o indirizzi esatti.
 
