@@ -134,6 +134,20 @@ export function listingTitle(e:any):string {
   if(subjectMatch?.[1])return ("Nuovo annuncio · "+subjectMatch[1].trim()).slice(0,250);
   return (subject||"Nuovo annuncio immobiliare").slice(0,250);
 }
+function isSpecificListingUrl(value:URL):boolean {
+  const host=value.hostname.toLowerCase().replace(/^www\./,"");
+  const path=value.pathname;
+  const isImmobiliare=host==="immobiliare.it"||host.endsWith(".immobiliare.it");
+  if(isImmobiliare){
+    return /\/(?:annunci|immobile)\/[^/]*\d{5,}[^/]*(?:\/|$)/i.test(path);
+  }
+  if(path==="/"||/\/(?:search|ricerca|vendita|affitto|case-in-vendita|immobili-in-vendita)(?:\/|$)/i.test(path)){
+    return false;
+  }
+  return /\/(?:annuncio|annunci|immobile|immobili|property|listing|detail)\/[^/]+/i.test(path)
+    || /\/[^/]*\d{6,}[^/]*(?:\.html?)?\/?$/i.test(path);
+}
+
 export async function resolveListingUrl(s:string):Promise<string|null> {
   const candidate=listingUrl(s);
   if(!candidate)return null;
@@ -141,17 +155,29 @@ export async function resolveListingUrl(s:string):Promise<string|null> {
     const initial=new URL(candidate);
     const host=initial.hostname.toLowerCase().replace(/^www\./,"");
     const tracked=/^(?:click|clicks|tracking|track|redirect|links?)\./i.test(host)||/\/(?:f\/a|track|click|redirect)\//i.test(initial.pathname);
-    if(!tracked)return candidate;
+    if(!tracked)return isSpecificListingUrl(initial)?initial.toString():null;
+
+    // Some email click-tracking services return the portal homepage for HEAD requests.
+    // A lightweight GET follows the same redirect used by a normal browser navigation.
     const response=await fetch(candidate,{
-      method:"HEAD",redirect:"follow",signal:AbortSignal.timeout(3500)
+      method:"GET",
+      headers:{Range:"bytes=0-0"},
+      redirect:"follow",
+      signal:AbortSignal.timeout(5000)
     });
     const finalUrl=new URL(response.url||candidate);
     const finalHost=finalUrl.hostname.toLowerCase().replace(/^www\./,"");
-    if(PORTALS.some(d=>finalHost===d||finalHost.endsWith("."+d))&&!/^(?:click|clicks|tracking|track|redirect|links?)\./i.test(finalHost)){
-      return finalUrl.toString();
-    }
-  }catch{}
-  return candidate;
+    const isPortal=PORTALS.some(d=>finalHost===d||finalHost.endsWith("."+d));
+    if(isPortal&&isSpecificListingUrl(finalUrl))return finalUrl.toString();
+
+    // If the tracking URL did not redirect, keep it as a browser click-through.
+    // If it explicitly redirected to a generic page, do not save that page as a listing.
+    if(finalUrl.href===initial.href)return candidate;
+    return null;
+  }catch{
+    // Preserve the original click-through if the tracking endpoint cannot be resolved server-side.
+    return candidate;
+  }
 }
 export function sellerClassification(value:string):"Privato"|"Da verificare"|"Agenzia" {
   const text=String(value||"").toLocaleLowerCase("it");
