@@ -199,6 +199,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .nmre-crm-item h4{margin:0 0 5px;font-size:15px}.nmre-crm-item p{margin:4px 0;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
 .nmre-crm-item-side{display:flex;gap:7px;align-items:flex-end;flex-direction:column;min-width:150px}
 .nmre-crm-item-side select{max-width:180px;padding:7px;border:1px solid var(--line);border-radius:7px;background:white}
+.nmre-crm-history{margin-top:10px;border-top:1px solid #edf0f4;padding-top:9px}.nmre-crm-history summary{cursor:pointer;color:#7b6038;font-size:12px;font-weight:700}.nmre-crm-history-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px;padding:10px;background:#fafbfc;border:1px solid var(--line);border-radius:9px}.nmre-crm-history-form label{font-size:10px;font-weight:700;color:var(--muted)}.nmre-crm-history-form input,.nmre-crm-history-form select,.nmre-crm-history-form textarea{display:block;width:100%;margin-top:4px;padding:8px;border:1px solid #d9dfe7;border-radius:7px;background:#fff;font:inherit;font-size:12px}.nmre-crm-history-form .wide{grid-column:1/-1}.nmre-crm-history-form button{justify-self:start;padding:9px 12px;font-size:11px}.nmre-crm-history-list{margin-top:9px}.nmre-crm-history-entry{padding:9px 0;border-top:1px solid #edf0f4;font-size:11px;line-height:1.5}.nmre-crm-history-entry strong{display:block;color:#35435a}.nmre-crm-history-entry time{display:block;color:var(--muted);font-size:10px}.nmre-crm-history-entry p{font-size:11px;margin:4px 0}.nmre-crm-history-empty{padding:8px 0;color:var(--muted);font-size:11px}
 .nmre-crm-empty{padding:18px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px}
 .nmre-crm .status{display:inline-block;margin-left:8px}
 @media(max-width:650px){.nmre-crm-form{grid-template-columns:1fr}.nmre-crm-form .wide{grid-column:auto}.nmre-crm-stats{grid-template-columns:1fr 1fr 1fr}.nmre-crm-item{flex-direction:column}.nmre-crm-item-side{flex-direction:row;align-items:center;flex-wrap:wrap}.nmre-crm-stats span{font-size:10px}}
@@ -1679,8 +1680,41 @@ async function loadCrmWorkspace(){
 function nmreCrmRenderContacts(){
  const q=$("nmreCrmContactSearch").value.toLocaleLowerCase("it"),f=$("nmreCrmContactFilter").value;
  const rows=nmreCrmContacts.filter(x=>(!f||x.contact_type===f)&&(!q||[x.full_name,x.phone,x.email,x.municipality,x.notes].some(v=>String(v||"").toLocaleLowerCase("it").includes(q))));
- $("nmreCrmContactList").innerHTML=rows.length?rows.map(x=>'<article class="nmre-crm-item"><div><h4>'+safe(x.full_name)+'</h4><p>'+safe(nmreCrmLabels.contact[x.contact_type]||x.contact_type)+' · '+safe(x.municipality||"Comune non indicato")+'</p><p>'+safe(x.phone||"")+(x.phone&&x.email?" · ":"")+safe(x.email||"")+'</p>'+(x.notes?'<p>'+safe(x.notes)+'</p>':"")+'</div><div class="nmre-crm-item-side"><select data-crm-contact-status="'+safe(x.id)+'">'+Object.entries(nmreCrmLabels.contactStatus).map(([v,l])=>'<option value="'+v+'" '+(x.status===v?"selected":"")+'>'+l+'</option>').join("")+'</select></div></article>').join(""):'<div class="nmre-crm-empty">Nessun contatto registrato. Inserisca il primo contatto qui sopra.</div>';
+ $("nmreCrmContactList").innerHTML=rows.length?rows.map(x=>'<article class="nmre-crm-item"><div class="nmre-crm-contact-main"><h4>'+safe(x.full_name)+'</h4><p>'+safe(nmreCrmLabels.contact[x.contact_type]||x.contact_type)+' · '+safe(x.municipality||"Comune non indicato")+'</p><p>'+safe(x.phone||"")+(x.phone&&x.email?" · ":"")+safe(x.email||"")+'</p>'+(x.notes?'<p>'+safe(x.notes)+'</p>':"")+
+ '<details class="nmre-crm-history" data-crm-history="'+safe(x.id)+'"><summary>Storico conversazioni e interazioni</summary>'+
+ '<form class="nmre-crm-history-form" data-crm-history-form="'+safe(x.id)+'">'+
+ '<label>Tipo di interazione<select name="interaction_type"><option value="telefonata">Telefonata</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="appuntamento">Appuntamento</option><option value="visita">Visita</option><option value="valutazione">Valutazione</option><option value="follow_up">Follow-up</option><option value="altro">Altro</option></select></label>'+
+ '<label>Esito<input name="outcome" maxlength="180" placeholder="Es. richiamare venerdì"></label>'+
+ '<label class="wide">Note della conversazione<textarea name="notes" rows="2" maxlength="4000" placeholder="Cosa vi siete detti? Quali esigenze o obiezioni sono emerse?"></textarea></label>'+
+ '<label>Prossimo contatto<input name="next_contact_at" type="date"></label>'+
+ '<div class="wide"><button class="gold" type="submit">Registra interazione</button> <span class="status" data-crm-history-msg></span></div></form>'+
+ '<div class="nmre-crm-history-list" data-crm-history-list="'+safe(x.id)+'"><div class="nmre-crm-history-empty">Apertura dello storico…</div></div></details></div>'+
+ '<div class="nmre-crm-item-side"><select aria-label="Stato contatto" data-crm-contact-status="'+safe(x.id)+'">'+Object.entries(nmreCrmLabels.contactStatus).map(([v,l])=>'<option value="'+v+'" '+(x.status===v?"selected":"")+'>'+l+'</option>').join("")+'</select></div></article>').join(""):'<div class="nmre-crm-empty">Nessun contatto registrato. Inserisca il primo contatto qui sopra.</div>';
  $("nmreCrmContactList").querySelectorAll("[data-crm-contact-status]").forEach(el=>el.addEventListener("change",async()=>{const {error}=await supabase.from("nmre_contacts").update({status:el.value,updated_at:new Date().toISOString()}).eq("id",el.dataset.crmContactStatus).eq("owner_id",currentUser.id);if(error){$("nmreCrmContactMsg").textContent=error.message;return;}await loadCrmWorkspace();}));
+ $("nmreCrmContactList").querySelectorAll("[data-crm-history]").forEach(details=>details.addEventListener("toggle",()=>{if(details.open)nmreCrmLoadContactHistory(details.dataset.crmHistory);}));
+ $("nmreCrmContactList").querySelectorAll("[data-crm-history-form]").forEach(form=>form.addEventListener("submit",e=>nmreCrmSaveContactInteraction(e,form)));
+}
+async function nmreCrmLoadContactHistory(contactId){
+ const box=$("nmreCrmContactList").querySelector('[data-crm-history-list="'+CSS.escape(contactId)+'"]');
+ if(!box)return;
+ box.innerHTML='<div class="nmre-crm-history-empty">Caricamento storico…</div>';
+ const {data,error}=await supabase.from("nmre_contact_interactions").select("*").eq("owner_id",currentUser.id).eq("contact_id",contactId).order("created_at",{ascending:false}).limit(50);
+ if(error){box.innerHTML='<div class="nmre-crm-history-empty">Storico non disponibile: '+safe(error.message)+'</div>';return;}
+ if(!data?.length){box.innerHTML='<div class="nmre-crm-history-empty">Nessuna interazione ancora registrata per questo contatto.</div>';return;}
+ box.innerHTML=data.map(item=>'<article class="nmre-crm-history-entry"><strong>'+safe((item.interaction_type||"altro").replaceAll("_"," "))+(item.outcome?" · "+safe(item.outcome):"")+'</strong><time>'+safe(new Date(item.created_at).toLocaleString("it-IT",{dateStyle:"medium",timeStyle:"short"}))+'</time>'+(item.notes?'<p>'+safe(item.notes)+'</p>':"")+(item.next_contact_at?'<p class="due">Prossimo contatto: '+safe(new Date(item.next_contact_at+"T00:00:00").toLocaleDateString("it-IT"))+'</p>':"")+'</article>').join("");
+}
+async function nmreCrmSaveContactInteraction(event,form){
+ event.preventDefault();
+ const contactId=form.dataset.crmHistoryForm,fd=new FormData(form);
+ const payload={owner_id:currentUser.id,contact_id:contactId,interaction_type:String(fd.get("interaction_type")||"telefonata"),outcome:String(fd.get("outcome")||"").trim()||null,notes:String(fd.get("notes")||"").trim()||null,next_contact_at:String(fd.get("next_contact_at")||"")||null};
+ const button=form.querySelector('button[type="submit"]'),status=form.querySelector("[data-crm-history-msg]");
+ button.disabled=true;status.textContent="Salvataggio…";
+ const {error}=await supabase.from("nmre_contact_interactions").insert(payload);
+ button.disabled=false;
+ if(error){status.textContent="Errore: "+error.message;return;}
+ status.textContent="Interazione registrata.";
+ form.reset();
+ await nmreCrmLoadContactHistory(contactId);
 }
 function nmreCrmRenderProperties(){
  const q=$("nmreCrmPropertySearch").value.toLocaleLowerCase("it"),f=$("nmreCrmPropertyFilter").value;
