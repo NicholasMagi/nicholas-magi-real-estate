@@ -1755,7 +1755,7 @@ async function showApp(session){
 
 
 /* NMRE CRM workspace */
-let nmreCrmContacts=[],nmreCrmProperties=[],nmreCrmAppointments=[],nmreCrmInteractions=[];
+let nmreCrmContacts=[],nmreCrmProperties=[],nmreCrmAppointments=[],nmreCrmInteractions=[],nmreListingInteractions=[];
 const nmreCrmOutcomeLabels={
  nessuna_risposta:"Nessuna risposta",
  parlato:"Conversazione avvenuta",
@@ -1780,13 +1780,21 @@ function renderSalesPerformance(){
  const range=Number($("salesPerformanceRange")?.value||30);
  const from=new Date();from.setDate(from.getDate()-range+1);from.setHours(0,0,0,0);
  const inRange=row=>{const date=Date.parse(row.created_at||"");return Number.isFinite(date)&&date>=from.getTime();};
- const interactions=nmreCrmInteractions.filter(inRange);
- const calls=interactions.filter(x=>x.interaction_type==="telefonata");
+ const crmEvents=nmreCrmInteractions.filter(inRange);
+ const archiveEvents=nmreListingInteractions.filter(inRange).map(x=>({
+  id:x.id,interaction_type:x.tipo,outcome_code:x.outcome_code,created_at:x.created_at,
+  property_id:x.annuncio_id,contact_id:null
+ }));
+ const events=[...crmEvents,...archiveEvents];
+ const calls=events.filter(x=>x.interaction_type==="telefonata");
  const responseCodes=new Set(["parlato","richiamare","interessato","appuntamento_fissato","valutazione_fissata","valutazione_completata","incarico_acquisito","non_interessato"]);
  const responses=calls.filter(x=>responseCodes.has(x.outcome_code));
- const appointments=nmreCrmAppointments.filter(x=>inRange(x)&&["appuntamento","visita"].includes(x.appointment_type)&&x.status!=="annullato");
- const valuations=nmreCrmAppointments.filter(x=>inRange(x)&&x.appointment_type==="valutazione"&&x.status==="completato");
- const mandateEvents=interactions.filter(x=>x.outcome_code==="incarico_acquisito");
+ const scheduledFromCalls=events.filter(x=>x.outcome_code==="appuntamento_fissato").length;
+ const agendaAppointments=nmreCrmAppointments.filter(x=>inRange(x)&&["appuntamento","visita"].includes(x.appointment_type)&&x.status!=="annullato").length;
+ const appointments=scheduledFromCalls+agendaAppointments;
+ const valuations=events.filter(x=>x.outcome_code==="valutazione_completata").length
+  +nmreCrmAppointments.filter(x=>inRange(x)&&x.appointment_type==="valutazione"&&x.status==="completato").length;
+ const mandateEvents=events.filter(x=>x.outcome_code==="incarico_acquisito");
  const mandateKeys=new Set(mandateEvents.map(x=>x.property_id||x.contact_id));
  const mandates=mandateKeys.size;
  const callResponse=nmreCrmPercent(responses.length,calls.length);
@@ -1818,14 +1826,15 @@ function nmreCrmRender(){
 async function loadCrmWorkspace(){
  if(!currentUser||!supabase)return;
  const interactionSince=new Date(Date.now()-90*86400000).toISOString();
- const [c,p,a,i]=await Promise.all([
+ const [c,p,a,i,l]=await Promise.all([
   supabase.from("nmre_contacts").select("*").eq("owner_id",currentUser.id).order("full_name"),
   supabase.from("nmre_properties").select("*").eq("owner_id",currentUser.id).order("created_at",{ascending:false}),
   supabase.from("nmre_appointments").select("*").eq("owner_id",currentUser.id).order("starts_at",{ascending:true}),
-  supabase.from("nmre_contact_interactions").select("id,contact_id,property_id,interaction_type,outcome_code,created_at").eq("owner_id",currentUser.id).gte("created_at",interactionSince).order("created_at",{ascending:false}).limit(5000)
+  supabase.from("nmre_contact_interactions").select("id,contact_id,property_id,interaction_type,outcome_code,created_at").eq("owner_id",currentUser.id).gte("created_at",interactionSince).order("created_at",{ascending:false}).limit(5000),
+  supabase.from("annunci_interazioni").select("id,annuncio_id,tipo,outcome_code,created_at").eq("owner_id",currentUser.id).gte("created_at",interactionSince).order("created_at",{ascending:false}).limit(5000)
  ]);
- const err=c.error||p.error||a.error||i.error;if(err){$("nmreCrmError").textContent="Caricamento CRM non riuscito: "+err.message;return;}
- nmreCrmContacts=c.data||[];nmreCrmProperties=p.data||[];nmreCrmAppointments=a.data||[];nmreCrmInteractions=i.data||[];
+ const err=c.error||p.error||a.error||i.error||l.error;if(err){$("nmreCrmError").textContent="Caricamento CRM non riuscito: "+err.message;return;}
+ nmreCrmContacts=c.data||[];nmreCrmProperties=p.data||[];nmreCrmAppointments=a.data||[];nmreCrmInteractions=i.data||[];nmreListingInteractions=l.data||[];
  nmreCrmOption("nmreCrmPropertyContact",nmreCrmContacts,"Nessun contatto collegato",x=>x.full_name);
  nmreCrmOption("nmreCrmAgendaContact",nmreCrmContacts,"Nessun contatto",x=>x.full_name);
  nmreCrmOption("nmreCrmAgendaProperty",nmreCrmProperties,"Nessun immobile",x=>x.title+" · "+x.municipality);
@@ -3184,8 +3193,17 @@ async function saveCallTask(id,card,button){
     return;
   }
   button.disabled=true;
+  const outcomeCode=status==="incarico_acquisito"?"incarico_acquisito":({
+    "Non risponde":"nessuna_risposta",
+    "Parlato · richiamare":"richiamare",
+    "Interessato":"interessato",
+    "Non interessato":"non_interessato",
+    "Appuntamento fissato":"appuntamento_fissato",
+    "Numero errato":"numero_errato",
+    "Altro":"altro"
+  }[outcome]||"altro");
   const {error:interactionError}=await supabase.from("annunci_interazioni").insert({
-    owner_id:currentUser.id,annuncio_id:id,tipo:"telefonata",esito:outcome,note,prossimo_contatto_il:followup
+    owner_id:currentUser.id,annuncio_id:id,tipo:"telefonata",esito:outcome,outcome_code:outcomeCode,note,prossimo_contatto_il:followup
   });
   if(interactionError){
     msg("listMsg","Registrazione chiamata non riuscita: "+interactionError.message,"error");
