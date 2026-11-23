@@ -212,7 +212,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
   </div>
 </section>
 
-<section class="panel">
+<section id="automationSection" class="panel dash-section-anchor">
+<h2>Acquisizione automatica degli annunci</h2>
 <p class="hint">
 La casella Gmail viene elaborata dal server in background. Qui non vengono mostrate le email: vede soltanto i dati estratti dagli annunci immobiliari, senza mittente, oggetto o testo dei messaggi.
 </p>
@@ -244,7 +245,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div id="portalApiMsg" class="status"></div>
 </section>
 
-<section class="panel">
+<section id="candidateSection" class="panel dash-section-anchor">
 <div class="topline"><h2>Annunci privati e opportunità da valutare</h2><div class="actions"><button class="secondary" id="exportCandidatesCsv">Candidati CSV</button><button class="secondary" id="exportCandidatesXlsx">Candidati Excel</button><button class="secondary" id="refreshCandidates">Aggiorna</button></div></div>
 <p class="hint">Titolo, comune, prezzo, tipologia, superficie, locali e link vengono estratti quando presenti. Le informazioni mancanti possono essere completate prima della conferma. Gli annunci ambigui restano in sospeso finché non li approva.</p>
 <input id="candidateSearch" type="search" placeholder="Cerca per titolo, comune o portale" aria-label="Cerca annunci">
@@ -258,7 +259,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div class="stat"><strong id="verifyCount">0</strong><span>Da verificare</span></div>
 </div>
 
-<section class="panel">
+<section id="newListingSection" class="panel dash-section-anchor">
 <h2>Registra un nuovo immobile</h2>
 <form id="listingForm">
 <label>Titolo / descrizione</label>
@@ -294,13 +295,13 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 </form>
 </section>
 
-<section class="panel">
+<section id="followupSection" class="panel dash-section-anchor">
 <h2>Agenda richiami</h2>
 <p class="hint">Proprietari da ricontattare: scadenze passate, oggi e nei prossimi sette giorni.</p>
 <div id="followupList"><p class="hint">Caricamento agenda...</p></div>
 </section>
 
-<section class="panel">
+<section id="archiveSection" class="panel dash-section-anchor">
 <div class="topline"><h2>Archivio annunci</h2><div class="actions"><button class="secondary" id="exportCsv">Esporta CSV</button><button class="secondary" id="exportXlsx">Esporta Excel</button><button class="secondary" id="refresh">Aggiorna</button></div></div>
 <div class="toolbar">
 <input id="listingSearch" type="search" placeholder="Cerca per titolo, comune o fonte">
