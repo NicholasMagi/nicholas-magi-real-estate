@@ -713,6 +713,100 @@ async function syncInsightsApi(){
 $("checkInsightsApi").addEventListener("click",checkInsightsApi);
 $("syncInsightsApi").addEventListener("click",syncInsightsApi);
 
+function fillDynamicOptions(id, values, placeholder) {
+  const select=$(id);
+  const previous=select.value;
+  const unique=[...new Set(values.filter(Boolean).map(value=>String(value).trim()).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,"it"));
+  select.innerHTML='<option value="">'+safe(placeholder)+'</option>'+unique.map(value=>'<option value="'+safe(value)+'">'+safe(value)+'</option>').join("");
+  if(unique.includes(previous))select.value=previous;
+}
+
+function numberWithinRange(value,minId,maxId) {
+  const min=$(minId).value.trim();
+  const max=$(maxId).value.trim();
+  if(min===""&&max==="")return true;
+  if(value===null||value===undefined||value==="")return false;
+  const number=Number(value);
+  if(!Number.isFinite(number))return false;
+  return (min===""||number>=Number(min))&&(max===""||number<=Number(max));
+}
+
+function dateWithinRange(value,fromId,toId) {
+  const from=$(fromId).value;
+  const to=$(toId).value;
+  if(!from&&!to)return true;
+  if(!value)return false;
+  const date=new Date(value);
+  if(Number.isNaN(date.getTime()))return false;
+  const start=from?new Date(from+"T00:00:00").getTime():-Infinity;
+  const end=to?new Date(to+"T23:59:59.999").getTime():Infinity;
+  return date.getTime()>=start&&date.getTime()<=end;
+}
+
+function renderCandidates(){
+  const box=$("candidateList");
+  const data=candidateCache||[];
+  fillDynamicOptions("candidateTownFilter",data.map(item=>item.comune),"Tutti i comuni");
+  fillDynamicOptions("candidateTypeFilter",data.map(item=>item.tipologia_immobile),"Tutte le tipologie");
+  fillDynamicOptions("candidatePortalFilter",data.map(item=>item.portale),"Tutti i portali");
+  const term=$("candidateSearch").value.trim().toLocaleLowerCase("it");
+  const town=$("candidateTownFilter").value;
+  const type=$("candidateTypeFilter").value;
+  const portal=$("candidatePortalFilter").value;
+  const seller=$("candidateSellerFilter").value;
+  const visible=data.filter(item=>{
+    const haystack=[item.titolo,item.comune,item.portale,item.tipologia_immobile].filter(Boolean).join(" ").toLocaleLowerCase("it");
+    return (!term||haystack.includes(term))
+      &&(!town||item.comune===town)
+      &&(!type||item.tipologia_immobile===type)
+      &&(!portal||item.portale===portal)
+      &&(!seller||item.tipo_venditore===seller)
+      &&numberWithinRange(item.prezzo,"candidatePriceMin","candidatePriceMax")
+      &&numberWithinRange(item.superficie_mq,"candidateSurfaceMin","candidateSurfaceMax")
+      &&dateWithinRange(item.data_pubblicazione||item.created_at,"candidateFromFilter","candidateToFilter");
+  });
+  $("candidateFilterCount").textContent=visible.length+" risultati su "+data.length+" opportunità";
+  if(!data.length){
+    box.innerHTML='<p class="hint">Nessun nuovo annuncio da valutare. La ricerca automatica continua in background.</p>';
+    msg("candidateMsg","");
+    renderDashboard();
+    return;
+  }
+  if(!visible.length){
+    box.innerHTML='<p class="hint">Nessuna opportunità corrisponde ai filtri selezionati. Provi ad ampliare la ricerca o ad azzerare i filtri.</p>';
+    msg("candidateMsg","0 risultati su "+data.length+".");
+    renderDashboard();
+    return;
+  }
+  box.innerHTML=visible.map(c=>{
+    const isPrivate=c.tipo_venditore==="Privato";
+    const published=c.data_pubblicazione&&!Number.isNaN(Date.parse(c.data_pubblicazione))
+      ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data non indicata";
+    const url=validUrl(c.url);
+    return '<article class="candidate" data-candidate="'+safe(c.id)+'" data-url="'+safe(c.url||"")+'" data-portal="'+safe(c.portale||"Portale non indicato")+'">'
+      +'<div class="topline"><span class="meta">'+safe(c.portale||"Portale non indicato")+' · Notifica ricevuta: '+safe(published)+'</span><span class="pill">'+(isPrivate?"Privato riconosciuto":"Venditore da verificare")+'</span></div>'
+      +'<label>Titolo / descrizione dell\'annuncio</label><input data-field="titolo" value="'+safe(c.titolo||"Annuncio immobiliare")+'" maxlength="250">'
+      +'<div class="row"><div><label>Comune</label><input data-field="comune" value="'+safe(c.comune||"")+'" placeholder="Comune da verificare"></div>'
+      +'<div><label>Prezzo richiesto (€)</label><input data-field="prezzo" type="number" min="0" step="1" value="'+(c.prezzo??"")+'" placeholder="Non indicato"></div></div>'
+      +'<div class="row"><div><label>Tipologia immobile</label><input data-field="tipologia_immobile" value="'+safe(c.tipologia_immobile||"")+'" placeholder="Es. Trilocale, villa"></div>'
+      +'<div><label>Superficie (m²)</label><input data-field="superficie_mq" type="number" min="1" max="100000" step="1" value="'+(c.superficie_mq??"")+'" placeholder="Non indicata"></div></div>'
+      +'<div class="row"><div><label>Locali</label><input data-field="locali" type="number" min="0.5" max="100" step="0.5" value="'+(c.locali??"")+'"></div>'
+      +'<div><label>Camere da letto</label><input data-field="camere" type="number" min="0" max="100" step="1" value="'+(c.camere??"")+'"></div></div>'
+      +'<div class="row"><div><label>Bagni</label><input data-field="bagni" type="number" min="0" max="100" step="1" value="'+(c.bagni??"")+'"></div>'
+      +'<div><label>Contatto del proprietario (se disponibile)</label><input data-field="contatto" value="'+safe(c.contatto||"")+'" placeholder="Non presente nella notifica"></div></div>'
+      +'<input type="hidden" data-field="venditore" value="Privato">'
+      +'<div class="candidate-actions"><button class="gold" data-confirm="'+safe(c.id)+'">'+(isPrivate?"Inserisci nell\'archivio":"Accetta come privato e inserisci")+'</button><button class="danger" data-discard="'+safe(c.id)+'">Scarta</button>'+(url?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>':"")+'</div>'
+      +'</article>';
+  }).join("");
+  box.querySelectorAll("[data-confirm]").forEach(btn=>btn.addEventListener("click",()=>confirmCandidate(btn.dataset.confirm,btn)));
+  box.querySelectorAll("[data-discard]").forEach(btn=>btn.addEventListener("click",()=>discardCandidate(btn.dataset.discard)));
+  const recognized=visible.filter(item=>item.tipo_venditore==="Privato").length;
+  const review=visible.length-recognized;
+  msg("candidateMsg",visible.length+" annunci visualizzati · "+recognized+" privati riconosciuti · "+review+" da verificare.","success");
+  renderDashboard();
+}
+
 async function loadCandidates(){
   if(!currentUser)return;
   const box=$("candidateList");
@@ -730,39 +824,7 @@ async function loadCandidates(){
   }
   candidateCache=data;
   renderDashboard();
-  if(!data.length){
-    box.innerHTML='<p class="hint">Nessun nuovo annuncio da valutare. La ricerca automatica continua in background.</p>';
-    msg("candidateMsg","");
-    return;
-  }
-  const term=$("candidateSearch").value.trim().toLocaleLowerCase("it");
-  const visible=data.filter(c=>[c.titolo,c.comune,c.portale,c.tipologia_immobile].filter(Boolean).join(" ").toLocaleLowerCase("it").includes(term));
-  if(!visible.length){box.innerHTML='<p class="hint">Nessun annuncio corrisponde alla ricerca.</p>';msg("candidateMsg","0 risultati.");return;}
-  box.innerHTML=visible.map(c=>{
-    const isPrivate=c.tipo_venditore==="Privato";
-    const published=c.data_pubblicazione&&!Number.isNaN(Date.parse(c.data_pubblicazione))
-      ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data non indicata";
-    const url=validUrl(c.url);
-    return `<article class="candidate" data-candidate="${safe(c.id)}" data-url="${safe(c.url||"")}" data-portal="${safe(c.portale||"Portale non indicato")}">
-      <div class="topline"><span class="meta">${safe(c.portale||"Portale non indicato")} · Notifica ricevuta: ${safe(published)}</span><span class="pill">${isPrivate?"Privato riconosciuto":"Venditore da verificare"}</span></div>
-      <label>Titolo / descrizione dell'annuncio</label><input data-field="titolo" value="${safe(c.titolo||"Annuncio immobiliare")}" maxlength="250">
-      <div class="row"><div><label>Comune</label><input data-field="comune" value="${safe(c.comune||"")}" placeholder="Comune da verificare"></div>
-      <div><label>Prezzo richiesto (€)</label><input data-field="prezzo" type="number" min="0" step="1" value="${c.prezzo??""}" placeholder="Non indicato"></div></div>
-      <div class="row"><div><label>Tipologia immobile</label><input data-field="tipologia_immobile" value="${safe(c.tipologia_immobile||"")}" placeholder="Es. Trilocale, villa"></div>
-      <div><label>Superficie (m²)</label><input data-field="superficie_mq" type="number" min="1" max="100000" step="1" value="${c.superficie_mq??""}" placeholder="Non indicata"></div></div>
-      <div class="row"><div><label>Locali</label><input data-field="locali" type="number" min="0.5" max="100" step="0.5" value="${c.locali??""}"></div>
-      <div><label>Camere da letto</label><input data-field="camere" type="number" min="0" max="100" step="1" value="${c.camere??""}"></div></div>
-      <div class="row"><div><label>Bagni</label><input data-field="bagni" type="number" min="0" max="100" step="1" value="${c.bagni??""}"></div>
-      <div><label>Contatto del proprietario (se disponibile)</label><input data-field="contatto" value="${safe(c.contatto||"")}" placeholder="Non presente nella notifica"></div></div>
-      <input type="hidden" data-field="venditore" value="Privato">
-      <div class="candidate-actions"><button class="gold" data-confirm="${safe(c.id)}">${isPrivate?"Inserisci nell'archivio":"Accetta come privato e inserisci"}</button><button class="danger" data-discard="${safe(c.id)}">Scarta</button>${url?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>':""}</div>
-    </article>`;
-  }).join("");
-  box.querySelectorAll("[data-confirm]").forEach(btn=>btn.addEventListener("click",()=>confirmCandidate(btn.dataset.confirm,btn)));
-  box.querySelectorAll("[data-discard]").forEach(btn=>btn.addEventListener("click",()=>discardCandidate(btn.dataset.discard)));
-  const recognized=data.filter(c=>c.tipo_venditore==="Privato").length;
-  const review=data.length-recognized;
-  msg("candidateMsg",data.length+" annunci · "+recognized+" privati riconosciuti · "+review+" da verificare personalmente.","success");
+  renderCandidates();
 }
 
 async function confirmCandidate(id,button){
