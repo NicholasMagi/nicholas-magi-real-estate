@@ -75,33 +75,47 @@ export function bathrooms(s:string):number|null {
   const value=match?Number(match[1]||match[2]):null;
   return value!==null&&value>=0&&value<=20?value:null;
 }
-export function listingUrl(s:string):string|null {
-  const ignored=["unsubscribe","unsub","privacy","terms","cookie","pixel","newsletter","preferences","account","login","register"];
-  const urls=String(s||"").match(/https?:\/\/[^\s<>"']+/gi)||[];
+function listingUrls(s:string):string[] {
+  const source=String(s||"");
+  const urls=source.match(/https?:\/\/[^\s<>"']+/gi)||[];
   const found:Array<{url:string;score:number}>=[];
   const allowed=(h:string)=>PORTALS.some(d=>h===d||h.endsWith("."+d));
-  for(const raw of urls){try{
-    let u=new URL(raw.replace(/[),.;\]]+$/,""));
-    for(let i=0;i<3;i++){
-      const h=u.hostname.toLowerCase().replace(/^www\./,"");
-      if(allowed(h)){
-        const nested=["url","target","dest","destination","redirect","redirect_url","adurl","u"].map(k=>u.searchParams.get(k)).find(Boolean);
-        if(nested){try{const v=new URL(nested,u);if(allowed(v.hostname.toLowerCase().replace(/^www\./,""))){u=v;continue;}}catch{}}
-        if(ignored.some(w=>(h+" "+u.pathname+" "+u.search).toLowerCase().includes(w)))break;
-        if(/\.(png|jpe?g|gif|webp|svg|css|js)(\?|$)/i.test(u.pathname))break;
-        const host=u.hostname.toLowerCase().replace(/^www\./,"");
-        const tracker=/^(?:click|clicks|tracking|track|redirect|links?)\./i.test(host)||/\/(?:f\/a|track|click|redirect)\//i.test(u.pathname);
-        const detail=/\/(?:immobili?|annunci?|appartamenti?|case(?:-in-vendita)?|ville?|vendita)(?:\/|[-_0-9])/i.test(u.pathname)||/\/\d{6,}(?:\/|$)/.test(u.pathname);
-        const score=tracker?5:detail?250:u.pathname.length>1?100:50;
-        found.push({url:u.toString(),score});
-        break;
+  for(const raw of urls){
+    try{
+      const u=new URL(raw.replace(/[),.;\]]+$/,""));
+      const host=u.hostname.toLowerCase().replace(/^www\./,"");
+      const tracker=/^(?:click|clicks|tracking|track|redirect|links?)\./i.test(host)||/(?:^|\/)(?:f\/a|track|click|redirect)\//i.test(u.pathname);
+      if(!allowed(host)&&!tracker)continue;
+      const position=source.indexOf(raw);
+      const context=source.slice(Math.max(0,position-100),Math.min(source.length,position+raw.length+180)).toLowerCase();
+      const label=/(?:vai|vedi|visualizza|scopri|guarda|apri|dettagli).{0,45}(?:annuncio|immobile|casa|appartamento)|(?:annuncio|immobile|casa|appartamento).{0,45}(?:vai|vedi|visualizza|scopri|guarda|apri|dettagli)/i.test(context);
+      const detail=/\/(?:annunci|immobile)\/[^/]*\d{5,}/i.test(u.pathname)||/\/\d{6,}(?:\/|$)/.test(u.pathname);
+      found.push({url:u.toString(),score:detail?1000:tracker?(label?500:10):300});
+    }catch{}
+  }
+  const unique=new Map<string,number>();
+  for(const item of found)unique.set(item.url,Math.max(unique.get(item.url)||0,item.score));
+  return [...unique.entries()].sort((a,b)=>b[1]-a[1]).map(([url])=>url);
+}
+export function listingUrl(s:string):string|null {
+  return listingUrls(s)[0]||null;
+}
+export async function resolveListingUrl(s:string):Promise<string|null> {
+  for(const candidate of listingUrls(s).slice(0,12)){
+    try{
+      const initial=new URL(candidate);
+      const host=initial.hostname.toLowerCase().replace(/^www\./,"");
+      const tracked=/^(?:click|clicks|tracking|track|redirect|links?)\./i.test(host)||/(?:^|\/)(?:f\/a|track|click|redirect)\//i.test(initial.pathname);
+      if(!tracked){
+        if(isSpecificListingUrl(initial))return initial.toString();
+        continue;
       }
-      const nested=["url","target","dest","destination","redirect","redirect_url","adurl","u","q"].map(k=>u.searchParams.get(k)).find(Boolean);
-      if(!nested)break;try{u=new URL(nested,u);}catch{break;}
-    }
-  }catch{}}
-  found.sort((a,b)=>b.score-a.score);
-  return found[0]?.url||null;
+      const response=await fetch(candidate,{redirect:"follow",headers:{Accept:"text/html"},signal:AbortSignal.timeout(6000)});
+      const finalUrl=new URL(response.url||candidate);
+      if(isSpecificListingUrl(finalUrl))return finalUrl.toString();
+    }catch{}
+  }
+  return null;
 }
 export function propertyEmail(e:any):boolean {
   const subject=String(e.subject||"").toLocaleLowerCase("it");
@@ -148,55 +162,30 @@ function isSpecificListingUrl(value:URL):boolean {
     || /\/[^/]*\d{6,}[^/]*(?:\.html?)?\/?$/i.test(path);
 }
 
-export async function resolveListingUrl(s:string):Promise<string|null> {
-  const candidate=listingUrl(s);
-  if(!candidate)return null;
-  try{
-    const initial=new URL(candidate);
-    const host=initial.hostname.toLowerCase().replace(/^www\./,"");
-    const tracked=/^(?:click|clicks|tracking|track|redirect|links?)\./i.test(host)||/\/(?:f\/a|track|click|redirect)\//i.test(initial.pathname);
-    if(!tracked)return isSpecificListingUrl(initial)?initial.toString():null;
-
-    // Some email click-tracking services return the portal homepage for HEAD requests.
-    // A lightweight GET follows the same redirect used by a normal browser navigation.
-    const response=await fetch(candidate,{
-      method:"GET",
-      headers:{Range:"bytes=0-0"},
-      redirect:"follow",
-      signal:AbortSignal.timeout(5000)
-    });
-    const finalUrl=new URL(response.url||candidate);
-    const finalHost=finalUrl.hostname.toLowerCase().replace(/^www\./,"");
-    const isPortal=PORTALS.some(d=>finalHost===d||finalHost.endsWith("."+d));
-    if(isPortal&&isSpecificListingUrl(finalUrl))return finalUrl.toString();
-
-    // If the tracking URL did not redirect, keep it as a browser click-through.
-    // If it explicitly redirected to a generic page, do not save that page as a listing.
-    if(finalUrl.href===initial.href)return candidate;
-    return null;
-  }catch{
-    // Preserve the original click-through if the tracking endpoint cannot be resolved server-side.
-    return candidate;
-  }
+export type SellerClassification = "Privato" | "Da verificare" | "Agenzia";
+export function sellerClassificationDetails(value:string):{classification:SellerClassification;confidence:number;evidence:string} {
+  const text=String(value||"").replace(/&nbsp;|&#160;/gi," ").replace(/&amp;/gi,"&").replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim();
+  const agencySignals:Array<{pattern:RegExp;label:string;confidence:number}>=[
+    {pattern:/(?:venditore|inserzionista|proposto da|pubblicato da|annuncio di|a cura di|gestito da)\s*[:\-]?\s*(?:un[ao]?\s+)?(?:agenzia(?:\s+immobiliare)?|agente immobiliare|studio immobiliare|società immobiliare|professionista immobiliare)\b/i,label:"Venditore indicato come agenzia o professionista",confidence:98},
+    {pattern:/\b(?:contatta|rivolgiti a|referente|agenzia di riferimento|annuncio gestito da|gestito da)\b.{0,90}\b(?:agenzia(?: immobiliare)?|agente immobiliare|studio immobiliare|intermediazione immobiliare|mediazione immobiliare)\b/i,label:"Indicazione di contatto o gestione da parte di un'agenzia",confidence:94},
+    {pattern:/\b(?:proposto da|inserzionista|annuncio di|pubblicato da)\s*[:\-]?\s*[^.;,]{2,90}\b(?:immobiliare|real estate|property|re\/max|remax|tempocasa|tecnocasa|gabetti|engel\s*&\s*völkers|professionecasa|iad)\b/i,label:"Inserzionista riconducibile a un marchio immobiliare",confidence:95},
+    {pattern:/\b(?:immobiliare|real estate)\b[^.;,]{0,45}\b(?:s\.?r\.?l\.?|s\.?a\.?s\.?|s\.?n\.?c\.?|s\.?p\.?a\.?)\b/i,label:"Società immobiliare con forma societaria",confidence:93},
+    {pattern:/\b(?:proposto da|inserzionista|annuncio di|pubblicato da|gestito da)\s*[:\-]?\s*[^.;,]{0,90}\b(?:re\/max|remax|tempocasa|tecnocasa|gabetti|engel\s*&\s*völkers|professionecasa|iad)\b/i,label:"Inserzionista identificato con un marchio immobiliare",confidence:96}
+  ];
+  const privateSignals:Array<{pattern:RegExp;label:string;confidence:number}>=[
+    {pattern:/\b(?:venditore|tipo venditore|inserzionista|proprietario|pubblicato da)\s*[:\-]?\s*(?:un\s+)?privato\b/i,label:"Etichetta esplicita: venditore privato",confidence:99},
+    {pattern:/\b(?:annuncio|vendita|proposta)\s+(?:diretta\s+)?(?:da|tra)\s+privati\b/i,label:"Annuncio o vendita tra privati",confidence:97},
+    {pattern:/\b(?:senza|no)\s+(?:agenzia|intermediari[oa])\b/i,label:"Assenza dichiarata di agenzia o intermediari",confidence:96},
+    {pattern:/\b(?:privato|proprietario)\s+(?:vende|propone|mette in vendita)\b/i,label:"Vendita dichiarata direttamente dal proprietario",confidence:94},
+    {pattern:/\b(?:da|venduto da|in vendita da)\s+(?:un\s+)?proprietario\b/i,label:"Vendita indicata direttamente dal proprietario",confidence:91}
+  ];
+  const agency=agencySignals.find(signal=>signal.pattern.test(text));
+  const privateMatch=privateSignals.find(signal=>signal.pattern.test(text));
+  if(agency&&privateMatch)return {classification:"Da verificare",confidence:0,evidence:"Segnali contrastanti: controllo manuale necessario"};
+  if(agency)return {classification:"Agenzia",confidence:agency.confidence,evidence:agency.label};
+  if(privateMatch)return {classification:"Privato",confidence:privateMatch.confidence,evidence:privateMatch.label};
+  return {classification:"Da verificare",confidence:0,evidence:"Nessuna indicazione affidabile sul tipo di venditore nell'email"};
 }
-export function sellerClassification(value:string):"Privato"|"Da verificare"|"Agenzia" {
-  const text=String(value||"").toLocaleLowerCase("it");
-  const agencyPatterns=[
-    /(?:venditore|inserzionista|proposto da|pubblicato da|annuncio di|a cura di)\s*[:\-]?\s*(?:un[ao]?\s+)?(?:agenzia(?:\s+immobiliare)?|agente immobiliare|professionista)\b/i,
-    /\bda\s+(?:un[ao]?\s+)?agenzia(?:\s+immobiliare)?\b/i,
-    /\bagenzia immobiliare\b.{0,100}\bpropone\b/i,
-    /\bproposto da\s+[A-ZÀ-Ý][\wÀ-ÿ'’.-]+\s+immobiliare\b/i
-  ];
-  if(agencyPatterns.some(pattern=>pattern.test(text)))return "Agenzia";
-  const privatePatterns=[
-    /\bda\s+privato\b/i,
-    /\bvenditore\s*[:\-]?\s*privato\b/i,
-    /\binserzionista\s*[:\-]?\s*privato\b/i,
-    /\bpubblicato\s+da\s+privato\b/i,
-    /\bannuncio\s+privato\b/i,
-    /\bvendita\s+tra\s+privati\b/i,
-    /\bprivato\s+(?:vende|propone)\b/i,
-    /\bsenza\s+agenzia\b/i
-  ];
-  return privatePatterns.some(pattern=>pattern.test(text))?"Privato":"Da verificare";
+export function sellerClassification(value:string):SellerClassification {
+  return sellerClassificationDetails(value).classification;
 }
