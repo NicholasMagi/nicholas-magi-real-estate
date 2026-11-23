@@ -1343,13 +1343,16 @@ function renderTerritoryScanner(all=listingCache,candidates=candidateCache,now=n
   const town=ensure(item.comune);if(!town)return;
   const key=propertyKey(item,"crm");if(crmKeys.has(key))return;crmKeys.add(key);
   // Count each property once across lead and CRM records, while preserving CRM status.
-  if(!listingKeys.has(key)){
+  const alreadyCounted=listingKeys.has(key);
+  if(!alreadyCounted){
    listingKeys.add(key);
    if(item.tipo_venditore==="Privato")town.privateAds++;else town.otherAds++;
    if(isRecentRecord(item))town.recent++;
   }
   if(!["incarico_acquisito","non_interessato"].includes(item.stato_contatto||"da_contattare")&&item.altre_agenzie!=="esclusiva")town.crmActive++;
-  town.items.push({item,kind:"crm",isRecent:isRecentRecord(item),dropCount:0});
+  const history=priceHistoryAnalysis(item);
+  if(!alreadyCounted&&history.drops.length){town.dropProperties++;town.dropEvents+=history.drops.length;}
+  town.items.push({item,kind:"crm",isRecent:isRecentRecord(item),dropCount:history.drops.length});
  };
  (Array.isArray(candidates)?candidates:[]).forEach(addCandidate);
  (Array.isArray(all)?all:[]).forEach(addCrm);
@@ -1492,7 +1495,9 @@ $("dashboardRefresh").addEventListener("click",async()=>{
   button.disabled=true;
   button.textContent="Aggiornamento...";
   try{
-    await Promise.all([loadListings(),loadCandidates(),loadGmailSyncStatus()]);
+    await loadListings();
+    await loadCandidates();
+    await loadGmailSyncStatus();
     await checkInsightsApi();
   }finally{
     button.disabled=false;
@@ -2730,24 +2735,35 @@ function priceHistoryAnalysis(item){
 }
 function renderPriceHistoryRadar(candidates=candidateCache){
  const box=$("priceHistoryList");if(!box)return;
- const all=(Array.isArray(candidates)?candidates:[]).filter(item=>item.tipo_venditore!=="Agenzia");
- const rows=all.map(item=>({item,history:priceHistoryAnalysis(item)}))
+ const records=[
+  ...(Array.isArray(candidates)?candidates:[]).map(item=>({item,kind:"candidate"})),
+  ...(Array.isArray(listingCache)?listingCache:[]).filter(item=>Array.isArray(item.notification_history)&&item.notification_history.length).map(item=>({item,kind:"crm"}))
+ ];
+ const seen=new Set();
+ const unique=records.filter(({item})=>{
+  const key=canonicalCandidateUrl(item.url||item.url_originale)||String(item.id||"");
+  if(seen.has(key))return false;seen.add(key);return true;
+ }).filter(({item})=>item.tipo_venditore!=="Agenzia");
+ const rows=unique.map(row=>({...row,history:priceHistoryAnalysis(row.item)}))
   .filter(row=>row.history.observations.length>=2||row.history.drops.length>0)
   .sort((a,b)=>{const ad=a.history.drops[a.history.drops.length-1],bd=b.history.drops[b.history.drops.length-1];return (bd?Date.parse(bd.date):0)-(ad?Date.parse(ad.date):0)||b.history.drops.length-a.history.drops.length;}).slice(0,6);
- const totalDrops=all.reduce((sum,item)=>sum+priceHistoryAnalysis(item).drops.length,0);
+ const totalDrops=unique.reduce((sum,row)=>sum+priceHistoryAnalysis(row.item).drops.length,0);
  const metric=$("priceHistoryMetric");if(metric)metric.textContent=totalDrops+" ribassi documentati";
- if(!rows.length){box.innerHTML='<div class="dash-empty">Non ci sono ancora abbastanza notifiche con prezzi confrontabili. Quando Gmail riceverà aggiornamenti di prezzo sullo stesso annuncio, lo storico comparirà qui.</div>';return;}
- box.innerHTML=rows.map(({item,history})=>{
+ if(!rows.length){box.innerHTML='<div class="dash-empty">Non ci sono ancora abbastanza notifiche con prezzi confrontabili. Lo storico si aggiornerà anche per gli immobili già trasferiti nel CRM quando sono disponibili le notifiche originali.</div>';return;}
+ box.innerHTML=rows.map(({item,kind,history})=>{
   const latest=history.latest;
   const observations=history.observations.slice(-5).map(row=>'<span class="seller-radar-signal">'+safe(new Date(row.date).toLocaleDateString("it-IT"))+': '+safe(formatCurrency(row.price))+'</span>').join("");
   const drops=history.drops.slice(-3).reverse().map(row=>{const previous=Number(row.entry.previous_price),current=Number(row.entry.listing_price),pct=Number(row.entry.price_drop_percent);return '<div class="crm-entry"><strong>Ribasso documentato: −'+safe(pct.toLocaleString("it-IT"))+'%</strong><span>'+safe(formatCurrency(previous))+' → '+safe(formatCurrency(current))+' · −'+safe(formatCurrency(Number(row.entry.price_drop_amount)||previous-current))+'</span><span>'+safe(new Date(row.date).toLocaleDateString("it-IT"))+'</span></div>';}).join("");
   return '<article class="seller-radar-item"><div class="seller-radar-item-top"><strong>'+safe(item.titolo||"Immobile senza titolo")+'</strong><span class="seller-radar-score">'+history.drops.length+' ribassi</span></div>'
-   +'<div class="seller-radar-meta">'+safe([item.comune,item.portale].filter(Boolean).join(" · ")||"Dettagli non disponibili")+'<br>Ultimo prezzo rilevato: '+safe(latest?formatCurrency(latest.price):"Non disponibile")+' · '+history.observations.length+' rilevazioni con prezzo</div>'
+   +'<div class="seller-radar-meta">'+safe([item.comune,item.portale].filter(Boolean).join(" · ")||"Dettagli non disponibili")+'<br>Ultimo prezzo rilevato: '+safe(latest?formatCurrency(latest.price):"Non disponibile")+' · '+history.observations.length+' rilevazioni con prezzo · '+(kind==="crm"?"Nel CRM":"In verifica")+'</div>'
    +'<div class="seller-radar-signals">'+observations+'</div>'
    +(drops?'<details open><summary>Ribassi verificati nello storico</summary>'+drops+'</details>':'<div class="hint">Prezzi rilevati in notifiche successive; nessun ribasso esplicitamente documentato.</div>')
-   +'<div class="actions"><button type="button" class="gold" data-price-history-open="'+safe(item.id)+'">Apri opportunità</button></div></article>';
+   +'<div class="actions"><button type="button" class="gold" data-price-history-kind="'+kind+'" data-price-history-open="'+safe(item.id)+'">Apri opportunità</button></div></article>';
  }).join("");
- box.querySelectorAll("[data-price-history-open]").forEach(button=>button.addEventListener("click",()=>openDashboardCandidate(button.dataset.priceHistoryOpen)));
+ box.querySelectorAll("[data-price-history-open]").forEach(button=>button.addEventListener("click",()=>{
+  if(button.dataset.priceHistoryKind==="crm")openCallCrm(button.dataset.priceHistoryOpen);
+  else openDashboardCandidate(button.dataset.priceHistoryOpen);
+ }));
 }
 
 function sellerRadarPriority(item,now=new Date()){
@@ -3221,8 +3237,17 @@ async function loadCandidates(){
 
   // Carica lo storico delle email collegate a ciascun immobile, senza esporre
   // il contenuto dei messaggi: vengono mostrati solo mittente, oggetto e data.
+  const promotedCandidates=[];
+  const listingIds=(Array.isArray(listingCache)?listingCache:[]).map(item=>String(item.id)).filter(Boolean);
+  for(let batch=0;batch<listingIds.length;batch+=100){
+    const ids=listingIds.slice(batch,batch+100);
+    const {data:promoted,error}=await supabase.from("annunci_candidati")
+      .select("id,annuncio_id").eq("stato","confermato").in("annuncio_id",ids);
+    if(error){msg("candidateMsg","Storico degli immobili confermati non disponibile: "+error.message,"error");return;}
+    promotedCandidates.push(...(promoted||[]));
+  }
   const notificationHistory = new Map();
-  const candidateIds = data.map(item=>String(item.id));
+  const candidateIds = [...new Set([...data.map(item=>String(item.id)),...promotedCandidates.map(item=>String(item.id))])];
   for(let batch=0;batch<candidateIds.length;batch+=100){
     const ids=candidateIds.slice(batch,batch+100);
     for(let offset=0;;offset+=500){
@@ -3259,6 +3284,19 @@ async function loadCandidates(){
       Number(entry.price_drop_percent)>0 &&
       Number(entry.previous_price)>Number(entry.listing_price)
     );
+    item.price_drop_percent=priceDrop?Number(priceDrop.price_drop_percent):0;
+    item.previous_price=priceDrop?Number(priceDrop.previous_price):null;
+    item.price_drop_amount=priceDrop?Number(priceDrop.price_drop_amount):null;
+    item.current_price_at_drop=priceDrop?Number(priceDrop.listing_price):null;
+  });
+  const promotedByListing=new Map(promotedCandidates.map(item=>[String(item.annuncio_id),String(item.id)]));
+  (Array.isArray(listingCache)?listingCache:[]).forEach(item=>{
+    const candidateId=promotedByListing.get(String(item.id));
+    if(!candidateId)return;
+    const history=notificationHistory.get(candidateId)||[];
+    item.notification_history=history;
+    item.notification_count=history.length;
+    const priceDrop=history.find(entry=>Number(entry.price_drop_percent)>0&&Number(entry.previous_price)>Number(entry.listing_price));
     item.price_drop_percent=priceDrop?Number(priceDrop.price_drop_percent):0;
     item.previous_price=priceDrop?Number(priceDrop.previous_price):null;
     item.price_drop_amount=priceDrop?Number(priceDrop.price_drop_amount):null;
@@ -3385,7 +3423,7 @@ async function confirmCandidate(id,button){
   });
   if(error){msg("candidateMsg",error.message,"error");button.disabled=false;return;}
   msg("candidateMsg","Annuncio confermato e trasferito nell'archivio.","success");
-  await loadCandidates();await loadListings();
+  await loadListings();await loadCandidates();
 }
 
 async function discardCandidate(id,button){
@@ -3542,6 +3580,20 @@ async function loadListings(){
     data.push(...(page||[]));
     if(!page||page.length<pageSize)break;
   }
+  const retainedHistory=new Map((Array.isArray(listingCache)?listingCache:[])
+    .filter(item=>Array.isArray(item.notification_history)&&item.notification_history.length)
+    .map(item=>[String(item.id),{
+      notification_history:item.notification_history,
+      notification_count:item.notification_count,
+      price_drop_percent:item.price_drop_percent,
+      previous_price:item.previous_price,
+      price_drop_amount:item.price_drop_amount,
+      current_price_at_drop:item.current_price_at_drop
+    }]));
+  data.forEach(item=>{
+    const history=retainedHistory.get(String(item.id));
+    if(history)Object.assign(item,history);
+  });
   listingCache=data;
   renderDashboard();
   renderListings();
