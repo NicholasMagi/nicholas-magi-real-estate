@@ -534,7 +534,7 @@ export default {
 
       let inserted = 0;
       let updated = 0;
-      let notificationsSaved = 0;
+      let notificationEventsLinked = 0;
       for (const row of rows) {
         const { data: currentCandidate, error: currentError } = await ctx.supabaseAdmin
           .from("annunci_candidati")
@@ -688,7 +688,7 @@ export default {
             listing_url: row.url || row.url_originale
           }, { onConflict: "owner_id,source_email_id", ignoreDuplicates: true });
         if (notificationError) throw new Error("Salvataggio dello storico notifiche non riuscito");
-        notificationsSaved++;
+        notificationEventsLinked++;
       }
 
       await saveSyncCursor(ctx.supabaseAdmin, nextHistoryId);
@@ -736,7 +736,7 @@ export default {
         discardedExisting,
         inserted,
         updated,
-        notificationHistoryEntriesSaved: notificationsSaved,
+        notificationEventsLinked,
         reprocessedExistingListingLinks: repairIds.length,
         duplicatesOrExisting: Math.max(0, rows.length - inserted - updated),
         missingMessages: emails.filter(email => !email).length
