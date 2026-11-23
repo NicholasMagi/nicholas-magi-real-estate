@@ -1338,10 +1338,12 @@ function renderDeclaredDeeds(){
         zona:row.zona_omi||"Non indicata",
         tipologia:row.tipologia_atto||"Non indicata",
         categoria:row.categoria_catastale||"Non indicata",
-        values:[]
+        values:[],
+        months:[]
       });
     }
     groups.get(key).values.push(Number(row.prezzo_mq_unita));
+    if(row.mese_atto)groups.get(key).months.push(String(row.mese_atto).slice(0,7));
   }
   const median=values=>{
     const sorted=values.slice().sort((a,b)=>a-b);
@@ -1355,12 +1357,19 @@ function renderDeclaredDeeds(){
     a.tipologia.localeCompare(b.tipologia,"it")
   );
   comparables.innerHTML=grouped.length
-    ?'<table class="market-table"><thead><tr><th>Comune</th><th>Zona OMI</th><th>Tipologia</th><th>Categoria</th><th>Atti attribuibili</th><th>Mediana €/m²</th><th>Min–max €/m²</th></tr></thead><tbody>'+
+    ?'<table class="market-table"><thead><tr><th>Comune</th><th>Zona OMI</th><th>Tipologia</th><th>Categoria</th><th>Periodo</th><th>Atti attribuibili</th><th>Mediana €/m²</th><th>Min–max €/m²</th></tr></thead><tbody>'+
       grouped.map(group=>{
         const values=group.values;
         const med=median(values);
         const min=Math.min(...values),max=Math.max(...values);
-        return '<tr><td>'+safe(group.comune)+'</td><td>'+safe(group.zona)+'</td><td>'+safe(group.tipologia)+'</td><td>'+safe(group.categoria)+'</td><td class="number">'+values.length+'</td><td class="number"><strong>'+safe(formatOmiEuro(med))+'</strong></td><td class="number">'+safe(formatOmiEuro(min))+' – '+safe(formatOmiEuro(max))+'</td></tr>';
+        const months=group.months.slice().sort();
+        const monthLabel=value=>value
+          ?new Date(value+"-01T00:00:00").toLocaleDateString("it-IT",{month:"short",year:"numeric"})
+          :"—";
+        const period=months.length
+          ?(months[0]===months[months.length-1]?monthLabel(months[0]):monthLabel(months[0])+" – "+monthLabel(months[months.length-1]))
+          :"—";
+        return '<tr><td>'+safe(group.comune)+'</td><td>'+safe(group.zona)+'</td><td>'+safe(group.tipologia)+'</td><td>'+safe(group.categoria)+'</td><td>'+safe(period)+'</td><td class="number">'+values.length+'</td><td class="number"><strong>'+safe(formatOmiEuro(med))+'</strong></td><td class="number">'+safe(formatOmiEuro(min))+' – '+safe(formatOmiEuro(max))+'</td></tr>';
       }).join("")+'</tbody></table>'+
       '<p class="market-attribution">Confronti calcolati soltanto sugli atti verificati con una singola unità e superficie in m². La numerosità del campione è indicata per ogni gruppo: un campione ridotto non rappresenta da solo il mercato.</p>'
     :'<p class="hint">Nessun compravenduto dispone ancora di tutti i requisiti per un confronto €/m². Gli atti con più immobili restano comunque nell’archivio come corrispettivi complessivi.</p>';
