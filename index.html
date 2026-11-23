@@ -1315,12 +1315,12 @@ function renderAcquisitionPredictor(all=listingCache,candidates=candidateCache,n
 function renderTerritoryScanner(all=listingCache,candidates=candidateCache,now=new Date()){
  const box=$("territoryScannerList");if(!box)return;
  const territories=new Map();
- const seen=new Set();
+ const seen={candidate:new Set(),crm:new Set()};
  const cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-30);
  const ensure=(name)=>{
   const label=String(name||"").trim();
   if(!label)return null;
-  const key=label.normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLocaleLowerCase("it");
+  const key=label.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("it");
   if(!territories.has(key))territories.set(key,{name:label,privateAds:0,otherAds:0,crmActive:0,recent:0,items:[],score:0});
   return territories.get(key);
  };
@@ -1328,7 +1328,7 @@ function renderTerritoryScanner(all=listingCache,candidates=candidateCache,now=n
   const town=ensure(item.comune);if(!town)return;
   const url=canonicalCandidateUrl(item.url||item.url_originale);
   const key=url||((kind==="crm"?"crm:":"candidate:")+String(item.id||""));
-  if(seen.has(key))return;seen.add(key);
+  if(seen[kind].has(key))return;seen[kind].add(key);
   const created=Date.parse(item.created_at||"");
   const isRecent=Number.isFinite(created)&&created>=cutoff.getTime()&&created<=now.getTime();
   if(isRecent)town.recent++;
