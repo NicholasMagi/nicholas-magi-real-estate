@@ -565,6 +565,11 @@ button:disabled{opacity:.55;cursor:not-allowed}
     <div class="dash-card-head"><div><h2>Qualificazione proprietari</h2><div class="dash-card-sub">Priorità basata su informazioni confermate durante il contatto, non su supposizioni</div></div><span class="small" id="ownerQualificationCount">0 schede</span></div>
     <div id="ownerQualificationList"><div class="dash-empty">Caricamento qualificazioni…</div></div>
   </section>
+  <section class="dash-card dash-action-plan" id="acquisitionPredictorPanel" style="margin:14px 0">
+    <div class="dash-card-head"><div><h2>NMRE Acquisition Predictor</h2><div class="dash-card-sub">Le prossime opportunità da lavorare, combinando dati del proprietario, segnali dell'annuncio e scadenze</div></div><span class="small" id="acquisitionPredictorCount">Analisi in corso</span></div>
+    <div class="seller-radar-intro">Priorità operativa, non probabilità statistica di acquisire l'incarico. Il sistema usa soltanto informazioni registrate: identità del venditore, recapito, motivazione, tempistiche, disponibilità sul prezzo, storico dei ribassi e richiami programmati. Le esclusive in corso e i contatti chiusi vengono esclusi dalla coda di acquisizione.</div>
+    <div id="acquisitionPredictorList"><div class="dash-empty">Preparazione della coda di acquisizione…</div></div>
+  </section>
   <div class="dash-grid">
     <section class="dash-card">
       <div class="dash-card-head">
@@ -1230,6 +1235,75 @@ function renderOwnerQualificationRadar(all){
  box.querySelectorAll("[data-owner-open]").forEach(btn=>btn.addEventListener("click",()=>openCallCrm(btn.dataset.ownerOpen)));
 }
 
+
+function renderAcquisitionPredictor(all=listingCache,candidates=candidateCache,now=new Date()){
+ const box=$("acquisitionPredictorList");if(!box)return;
+ const rows=[];
+ const seen=new Set();
+ const dateToday=new Date(now);dateToday.setHours(0,0,0,0);
+ const addRow=(item,kind)=>{
+  const url=canonicalCandidateUrl(item.url);
+  if(url&&seen.has(url))return;
+  if(url)seen.add(url);
+  if(kind==="candidate"){
+   const intel=acquisitionIntelligence(item,now);
+   rows.push({item,kind,score:intel.score,signals:intel.signals.slice(0,4),next:intel.next,tag:item.tipo_venditore==="Privato"?"PRIVATO VERIFICATO":"IDENTITÀ DA VERIFICARE",level:intel.level});
+   return;
+  }
+  const status=item.stato_contatto||"da_contattare";
+  if(["incarico_acquisito","non_interessato"].includes(status)||item.altre_agenzie==="esclusiva")return;
+  const q=sellerQualification(item);
+  let score=q.score;
+  const signals=q.signals.slice();
+  const add=(n,label)=>{score+=n;signals.push(label);};
+  if(status==="interessato")add(12,"Interesse già manifestato");
+  else if(status==="primo_contatto")add(6,"Primo contatto già avviato");
+  else if(status==="appuntamento")add(8,"Appuntamento in pipeline");
+  if(String(item.contatto||"").trim())add(8,"Recapito disponibile");
+  let next="Completare la qualificazione: motivazione, tempistiche e gestione della vendita";
+  let urgency="Da pianificare";
+  if(item.prossimo_contatto_il){
+   const due=new Date(item.prossimo_contatto_il+"T00:00:00");
+   if(!Number.isNaN(due.getTime())){
+    const days=Math.round((due-dateToday)/86400000);
+    if(days<0){add(18,"Richiamo scaduto di "+Math.abs(days)+" giorni");next="Richiamare: il follow-up è scaduto";urgency="In ritardo";}
+    else if(days===0){add(14,"Richiamo previsto oggi");next="Effettuare il richiamo programmato oggi";urgency="Oggi";}
+    else if(days<=7){add(5,"Follow-up nei prossimi 7 giorni");next="Preparare il prossimo contatto del "+due.toLocaleDateString("it-IT");urgency="In programma";}
+   }
+  }else if(["da_contattare","interessato","primo_contatto"].includes(status)){
+   add(5,"Nessun prossimo contatto programmato");
+   next=status==="interessato"?"Fissare un follow-up con il proprietario interessato":"Pianificare il primo contatto o il richiamo";
+  }
+  if(status==="appuntamento")next="Confermare l'appuntamento e preparare l'analisi dell'immobile";
+  rows.push({item,kind,score:Math.min(100,score),signals:signals.slice(0,4),next,tag:"PROPRIETARIO IN CRM",level:score>=65?"high":score>=40?"medium":"low",urgency});
+ };
+ (Array.isArray(all)?all:[]).forEach(item=>addRow(item,"archive"));
+ (Array.isArray(candidates)?candidates:[]).forEach(item=>addRow(item,"candidate"));
+ const priorityDate=row=>{const value=Date.parse(row.item.prossimo_contatto_il||row.item.created_at||"");return Number.isFinite(value)?value:Number.MAX_SAFE_INTEGER;};
+ rows.sort((a,b)=>b.score-a.score||priorityDate(a)-priorityDate(b));
+ const chosen=rows.slice(0,6);
+ const count=$("acquisitionPredictorCount");if(count)count.textContent=chosen.length+" priorità operative";
+ if(!chosen.length){
+  box.innerHTML='<div class="dash-empty">Nessuna opportunità attiva da lavorare. Registri un nuovo lead o aggiorni gli esiti delle telefonate nel CRM.</div>';
+  return;
+ }
+ box.innerHTML='<div class="seller-radar-list">'+chosen.map((row,index)=>{
+  const item=row.item;
+  const signals=row.signals.map(s=>'<span class="seller-radar-signal">'+safe(s)+'</span>').join("");
+  const status=row.kind==="candidate"?"Lead da verificare":(item.stato_contatto||"da_contattare").replaceAll("_"," ");
+  const price=Number(item.prezzo)>0?formatCurrency(Number(item.prezzo)):"Prezzo non indicato";
+  const action=row.kind==="candidate"?"Verifica lead":"Apri scheda proprietario";
+  return '<article class="seller-radar-item"><div class="seller-radar-item-top"><span class="dash-lead-rank">'+(index===0?"Prima priorità":"Priorità "+(index+1))+' · '+safe(row.tag)+'</span><span class="seller-radar-score '+(row.level==="high"?"seller-radar-score-high":"")+'">'+row.score+'/100</span></div>'+
+   '<div class="seller-radar-title">'+safe(item.titolo||"Immobile senza titolo")+'</div><div class="seller-radar-meta">'+safe([item.comune,item.portale,status,price].filter(Boolean).join(" · "))+'</div>'+
+   '<div class="seller-radar-signals">'+signals+'</div><div class="hint"><strong>Prossima azione consigliata:</strong> '+safe(row.next)+'</div>'+
+   '<div class="actions"><button type="button" class="gold" data-predictor-kind="'+row.kind+'" data-predictor-id="'+safe(item.id)+'">'+action+'</button></div></article>';
+ }).join("")+'</div>';
+ box.querySelectorAll("[data-predictor-kind]").forEach(button=>button.addEventListener("click",()=>{
+  if(button.dataset.predictorKind==="candidate")openDashboardCandidate(button.dataset.predictorId);
+  else openCallCrm(button.dataset.predictorId);
+ }));
+}
+
 function renderDashboard(){
   const all=Array.isArray(listingCache)?listingCache:[];
   const candidates=Array.isArray(candidateCache)?candidateCache:[];
@@ -1261,6 +1335,7 @@ function renderDashboard(){
   const notInterested=count("non_interessato");
   renderDailyActionPlan(all,candidates,today);
   renderOwnerQualificationRadar(all);
+  renderAcquisitionPredictor(all,candidates,today);
   const privateCount=all.filter(item=>item.tipo_venditore==="Privato").length;
   const sources=new Set(all.map(item=>item.portale).filter(Boolean)).size;
   const dateEl=$("dashboardDate");
