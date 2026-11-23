@@ -2567,13 +2567,15 @@ function renderAcquisitionPipeline(){
   const t=Date.parse(row.starts_at||"");
   return Number.isFinite(t)&&t>=from.getTime()&&row.status!=="annullato"&&["appuntamento","visita"].includes(row.appointment_type);
  });
- const appointments=countUnique(appointmentEvents)+countUnique(agendaAppointments);
+ const appointmentKeys=new Set([...appointmentEvents,...agendaAppointments].map(entityKey).filter(Boolean));
+ const appointments=appointmentKeys.size;
  const valuationEvents=events.filter(row=>row.outcome_code==="valutazione_completata");
  const agendaValuations=(nmreCrmAppointments||[]).filter(row=>{
   const t=Date.parse(row.starts_at||"");
   return Number.isFinite(t)&&t>=from.getTime()&&row.appointment_type==="valutazione"&&row.status==="completato";
  });
- const valuations=countUnique(valuationEvents)+countUnique(agendaValuations);
+ const valuationKeys=new Set([...valuationEvents,...agendaValuations].map(entityKey).filter(Boolean));
+ const valuations=valuationKeys.size;
  const mandates=countUnique(events.filter(row=>row.outcome_code==="incarico_acquisito"));
  const milestones=[
   ["Conversazioni effettive",conversations,"Proprietari con almeno una risposta classificata"],
