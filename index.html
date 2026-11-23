@@ -1112,6 +1112,7 @@ async function confirmCandidate(id,button){
   const value=name=>card.querySelector('[data-field="'+name+'"]').value.trim();
   const title=value("titolo"), municipality=value("comune"), price=value("prezzo");
   const seller=value("venditore");
+  if(seller!=="Privato"){msg("candidateMsg","Prima di inserire l'immobile, verifichi e salvi la classificazione come Privato.","error");return;}
   const contact=value("contatto")||null;
   const sourceUrl=card.dataset.url||null;
   const sourcePortal=card.dataset.portal||"Portale non indicato";
