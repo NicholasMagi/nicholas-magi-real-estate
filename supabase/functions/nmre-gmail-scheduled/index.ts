@@ -424,7 +424,7 @@ export default {
           if (typeof candidate.source_email_id !== "string" || !candidate.url_originale) return false;
           if (candidate.seller_manual_override === true) return false;
           if (Number(candidate.seller_classification_version || 0) < 3) return true;
-          if (Number(candidate.data_extraction_version || 0) < 2) return true;
+          if (Number(candidate.data_extraction_version || 0) < 3) return true;
           if (!candidate.url) return true;
           try {
             const link = new URL(candidate.url);
@@ -520,7 +520,7 @@ export default {
           locali: rooms(text),
           camere: bedrooms(text),
           bagni: bathrooms(text),
-          data_extraction_version: 2,
+          data_extraction_version: 3,
           tipo_venditore: seller.classification,
           seller_confidence: seller.confidence,
           seller_evidence: seller.evidence,
