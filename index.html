@@ -642,10 +642,16 @@ button:disabled{opacity:.55;cursor:not-allowed}
     </div>
     <div class="actions"><button class="gold" id="runOmiCompare" type="button">Confronta con OMI</button></div>
     <div id="omiCompareResult" class="market-result" aria-live="polite">Completi i dati e scelga Confronta con OMI.</div>
+    <div class="market-block">
+      <div class="market-block-head"><div><h3>3. Valuation Intelligence · Rapporto per il proprietario</h3><p class="hint">Genera una scheda stampabile incrociando l'intervallo OMI più recente con i soli atti verificati e attribuibili a una singola unità nella stessa zona.</p></div><span class="pill">Analisi documentata</span></div>
+      <div class="market-notice"><strong>Metodo prudenziale:</strong> l'intervallo OMI costituisce il riferimento ufficiale. I compravenduti verificati vengono mostrati separatamente come riscontro, senza mescolare dati non omogenei o attribuire prezzi a immobili diversi.</div>
+      <div class="actions"><button class="gold" id="runValuationIntelligence" type="button">Genera rapporto di valutazione</button></div>
+      <div id="valuationIntelligenceResult" class="market-result" aria-live="polite">Compili i campi del confronto OMI qui sopra e generi il rapporto.</div>
+    </div>
   </div>
 
   <div class="market-block">
-    <div class="market-block-head"><div><h3>3. Registro dei compravenduti dichiarati</h3><p class="hint">Annoti i dati delle schede-atto consultate nel servizio dell'Agenzia delle Entrate.</p></div><button class="secondary" id="newDeedBatch" type="button">Nuova ricerca / lotto</button></div>
+    <div class="market-block-head"><div><h3>4. Registro dei compravenduti dichiarati</h3><p class="hint">Annoti i dati delle schede-atto consultate nel servizio dell'Agenzia delle Entrate.</p></div><button class="secondary" id="newDeedBatch" type="button">Nuova ricerca / lotto</button></div>
     <div class="market-notice"><strong>Attenzione al significato del prezzo:</strong> il corrispettivo dichiarato si riferisce all'intero atto e può comprendere più immobili. NMRE non lo dividerà per la superficie di una singola unità e non ricaverà prezzi individuali non pubblicati dal servizio.</div>
     <form id="declaredDeedForm">
       <div class="search-filter-grid">
@@ -1571,6 +1577,102 @@ function runOmiComparison(){
       return '<div><span>'+safe(row.destinazione||"Destinazione non indicata")+' · Stato '+safe(row.stato||row.stato_prevalente||"non indicato")+' · superficie OMI '+safe(row.sup_nl_compr||"non indicata")+'</span><strong>'+safe(formatOmiEuro(row.compr_min))+' – '+safe(formatOmiEuro(row.compr_max))+'/m²</strong><span>'+safe(relation)+(diff?' · scostamento '+safe(diff.toFixed(1))+'% dal limite':'')+'</span></div>';
     }).join("")+'</div>'+
     '<span>Confronto indicativo tra prezzo richiesto e intervallo OMI per zona, tipologia, destinazione, stato e criterio di superficie. Non sono prezzi di singole compravendite e non sostituiscono sopralluogo, comparabili e valutazione professionale.</span>';
+}
+
+
+let lastValuationReport=null;
+
+function nmreMedian(values){
+  const sorted=values.filter(Number.isFinite).slice().sort((a,b)=>a-b);
+  if(!sorted.length)return null;
+  const mid=Math.floor(sorted.length/2);
+  return sorted.length%2?sorted[mid]:(sorted[mid-1]+sorted[mid])/2;
+}
+
+function runValuationIntelligence(){
+  const town=$("omiCompareComune").value;
+  const zone=$("omiCompareZone").value;
+  const type=$("omiCompareType").value;
+  const destination=$("omiCompareDest").value;
+  const state=$("omiCompareState").value;
+  const basis=$("omiCompareSurfaceBasis").value;
+  const asking=parseOmiNumber($("omiComparePrice").value);
+  const surface=parseOmiNumber($("omiCompareSurface").value);
+  const target=$("valuationIntelligenceResult");
+  if(!town||!zone||!type||!destination||!state||!basis||!asking||!surface||surface<=0){
+    target.textContent="Per un rapporto attendibile selezioni comune, zona, tipologia, destinazione, stato conservativo e criterio di superficie; inserisca prezzo richiesto e m².";
+    return;
+  }
+  let omi=omiQuotationCache.filter(row=>row.comune===town&&row.zona===zone&&row.tipologia===type
+    &&row.destinazione===destination&&(row.stato||row.stato_prevalente)===state
+    &&row.sup_nl_compr===basis&&Number(row.compr_min)>0&&Number(row.compr_max)>=Number(row.compr_min));
+  if(!omi.length){
+    target.textContent="Non sono presenti quotazioni OMI complete per tutti i criteri selezionati. Importi il semestre ufficiale o modifichi i filtri.";
+    return;
+  }
+  const latest=Math.max(...omi.map(row=>Number(row.semestre)));
+  omi=omi.filter(row=>Number(row.semestre)===latest);
+  const lowSqm=Math.min(...omi.map(row=>Number(row.compr_min)));
+  const highSqm=Math.max(...omi.map(row=>Number(row.compr_max)));
+  const midpointSqm=(lowSqm+highSqm)/2;
+  const lowValue=lowSqm*surface, highValue=highSqm*surface, midpointValue=midpointSqm*surface;
+  const askingSqm=asking/surface;
+  const gapPct=(askingSqm-midpointSqm)/midpointSqm*100;
+  const cutoff=new Date();cutoff.setMonth(cutoff.getMonth()-36);
+  const deeds=(declaredDeedsCache||[]).filter(row=>
+    row.dati_verificati===true&&row.numero_immobili===1&&row.corrispettivo_attribuibile_unita===true
+    &&Number(row.prezzo_mq_unita)>0&&row.comune_ricerca===town&&row.zona_omi===zone
+    &&row.tipologia_atto==="Residenziale"&&row.mese_atto&&new Date(row.mese_atto+"T00:00:00")>=cutoff
+  );
+  const deedPrices=deeds.map(row=>Number(row.prezzo_mq_unita));
+  const deedMedian=nmreMedian(deedPrices);
+  const deedMonths=deeds.map(row=>String(row.mese_atto).slice(0,7)).sort();
+  const fmt=value=>formatOmiEuro(value);
+  const fmtSqm=value=>formatOmiEuro(value)+"/m²";
+  const relation=gapPct>5?"sopra":gapPct< -5?"sotto":"in linea con";
+  const period=deedMonths.length
+    ?(deedMonths[0]===deedMonths[deedMonths.length-1]?deedMonths[0]:deedMonths[0]+" – "+deedMonths[deedMonths.length-1])
+    :"—";
+  lastValuationReport={
+    town,zone,type,destination,state,basis,surface,asking,askingSqm,latest,lowSqm,highSqm,midpointSqm,
+    lowValue,highValue,midpointValue,gapPct,deedCount:deeds.length,deedMedian,deedPrices,deedPeriod:period,
+    generatedAt:new Date().toLocaleString("it-IT")
+  };
+  target.innerHTML=
+    '<div class="market-stat-grid">'+
+      '<div class="market-stat"><strong>'+safe(fmt(lowValue))+'</strong><span>Estremo inferiore OMI · totale</span></div>'+
+      '<div class="market-stat"><strong>'+safe(fmt(midpointValue))+'</strong><span>Punto centrale matematico OMI · non prezzo certo</span></div>'+
+      '<div class="market-stat"><strong>'+safe(fmt(highValue))+'</strong><span>Estremo superiore OMI · totale</span></div>'+
+    '</div>'+
+    '<div class="market-result-grid">'+
+      '<div><span>Prezzo richiesto</span><strong>'+safe(fmt(asking))+'</strong><span>'+safe(fmtSqm(askingSqm))+'</span></div>'+
+      '<div><span>Intervallo OMI €/m²</span><strong>'+safe(fmt(lowSqm))+' – '+safe(fmt(highSqm))+'</strong><span>Semestre '+safe(formatOmiSemester(latest))+'</span></div>'+
+      '<div><span>Scostamento dal punto centrale</span><strong>'+safe((gapPct>0?"+":"")+gapPct.toFixed(1).replace(".",",")+"%")+'</strong><span>Richiesta '+safe(relation)+' il riferimento centrale</span></div>'+
+    '</div>'+
+    '<p><strong>Compravenduti verificati nella stessa zona:</strong> '+(deedMedian!==null
+      ?safe(deeds.length+" atti residenziali verificati · mediana "+fmtSqm(deedMedian)+" · periodo "+period)
+      :"nessun atto verificato e attribuibile a una singola unità negli ultimi 36 mesi")+'</p>'+
+    '<p class="small">Il dato dei compravenduti è un riscontro separato: deriva esclusivamente da atti con un solo immobile, prezzo al m² attribuibile e dati verificati. La superficie catastale può non coincidere con il criterio lordo/netto selezionato per OMI; non viene quindi fusa matematicamente con l'intervallo OMI.</p>'+
+    '<p class="small">Riferimenti: Agenzia delle Entrate · OMI '+safe(formatOmiSemester(latest))+' · Comune '+safe(town)+' · Zona '+safe(zone)+' · '+safe(type)+' · '+safe(destination)+' · '+safe(state)+' · superficie '+safe(basis==="L"?"lorda":"netta")+'. Rapporto generato il '+safe(lastValuationReport.generatedAt)+'.</p>'+
+    '<div class="actions"><button class="secondary" id="printValuationReport" type="button">Stampa / salva PDF</button></div>'+
+    '<p class="market-attribution">Documento di analisi preliminare a supporto del colloquio con il proprietario. Non è una perizia, non sostituisce sopralluogo, verifica urbanistico-catastale, stato manutentivo, comparabili puntuali e valutazione professionale. Gli intervalli OMI sono indicativi e non rappresentano il prezzo certo di vendita.</p>';
+}
+
+function printValuationReport(){
+  if(!lastValuationReport)return;
+  const r=lastValuationReport;
+  const w=window.open("","_blank");
+  if(!w){$("valuationIntelligenceResult").insertAdjacentHTML("beforeend",'<p class="small">Il browser ha bloccato la finestra di stampa. Consenta i popup per questo sito e riprovi.</p>');return;}
+  const money=value=>formatOmiEuro(value);
+  const html='<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rapporto di analisi immobiliare · '+safe(r.town)+'</title><style>body{font:14px Arial,sans-serif;color:#202a38;max-width:850px;margin:36px auto;padding:0 24px;line-height:1.55}h1{font:26px Georgia,serif;margin:0}h2{font-size:16px;margin:28px 0 8px}.muted{color:#687386;font-size:12px}.brand{letter-spacing:2px;font-size:11px;font-weight:bold;color:#987447;margin-bottom:8px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:22px 0}.tile{border:1px solid #d9dee6;border-radius:8px;padding:13px}.tile strong{display:block;font-size:20px;margin:5px 0}.line{border-top:1px solid #d9dee6;margin:20px 0}.notice{background:#f6f7f9;padding:14px;border-radius:8px}.foot{font-size:11px;color:#687386;margin-top:28px}@media print{body{margin:15mm auto;padding:0}.noprint{display:none}}</style></head><body>'+
+    '<div class="brand">NICHOLAS MAGI REAL ESTATE</div><h1>Rapporto preliminare di analisi del valore</h1><p class="muted">Generato il '+safe(r.generatedAt)+'</p><div class="line"></div>'+
+    '<h2>Immobile e parametri di confronto</h2><p><strong>'+safe(r.town)+' · Zona OMI '+safe(r.zone)+'</strong><br>'+safe(r.type)+' · '+safe(r.destination)+' · '+safe(r.state)+'<br>Superficie: '+safe(r.surface)+' m² ('+safe(r.basis==="L"?"lorda":"netta")+')</p>'+
+    '<div class="grid"><div class="tile"><span class="muted">Intervallo inferiore OMI</span><strong>'+safe(money(r.lowValue))+'</strong><span>'+safe(money(r.lowSqm))+'/m²</span></div><div class="tile"><span class="muted">Punto centrale matematico</span><strong>'+safe(money(r.midpointValue))+'</strong><span>'+safe(money(r.midpointSqm))+'/m²</span></div><div class="tile"><span class="muted">Intervallo superiore OMI</span><strong>'+safe(money(r.highValue))+'</strong><span>'+safe(money(r.highSqm))+'/m²</span></div></div>'+
+    '<h2>Prezzo richiesto e posizionamento</h2><p>Prezzo richiesto: <strong>'+safe(money(r.asking))+'</strong> ('+safe(money(r.askingSqm))+'/m²). Scostamento dal punto centrale OMI: <strong>'+safe((r.gapPct>0?"+":"")+r.gapPct.toFixed(1).replace(".",",")+"%")+'</strong>.</p>'+
+    '<h2>Riscontro dai compravenduti verificati</h2><p>'+(r.deedMedian!==null?safe(r.deedCount+" atti residenziali verificati nella stessa zona · mediana "+money(r.deedMedian)+"/m² · periodo "+r.deedPeriod):"Nessun atto verificato e attribuibile a una singola unità negli ultimi 36 mesi.")+'</p>'+
+    '<div class="notice"><strong>Metodo e limiti.</strong><br>Il riferimento principale è l'intervallo OMI ufficiale del semestre '+safe(formatOmiSemester(r.latest))+'. I corrispettivi dei compravenduti sono mostrati separatamente e non vengono fusi con l'intervallo OMI, poiché la superficie catastale può differire dal criterio lordo/netto selezionato. Le quotazioni OMI sono indicative e non identificano il prezzo certo di vendita.</div>'+
+    '<p class="foot">Analisi preliminare a supporto del colloquio con il proprietario. Non è una perizia e non sostituisce sopralluogo, verifica urbanistico-catastale, stato manutentivo, comparabili puntuali e valutazione professionale. Fonte OMI: Agenzia delle Entrate. Dati dei compravenduti: schede consultate e verificate dall'operatore.</p><button class="noprint" onclick="window.print()">Stampa / salva PDF</button></body></html>';
+  w.document.open();w.document.write(html);w.document.close();
 }
 
 
@@ -3857,6 +3959,8 @@ $("omiCompareZone").addEventListener("change",updateOmiCompareOptions);
 $("omiCompareType").addEventListener("change",updateOmiCompareOptions);
 $("omiCompareDest").addEventListener("change",updateOmiCompareOptions);
 $("runOmiCompare").addEventListener("click",runOmiComparison);
+$("runValuationIntelligence").addEventListener("click",runValuationIntelligence);
+$("valuationIntelligenceResult").addEventListener("click",event=>{if(event.target.closest("#printValuationReport"))printValuationReport();});
 $("declaredDeedForm").addEventListener("submit",saveDeclaredDeed);
 $("deedPropertyCount").addEventListener("input",()=>{
   const isSingle=Number($("deedPropertyCount").value)===1;
