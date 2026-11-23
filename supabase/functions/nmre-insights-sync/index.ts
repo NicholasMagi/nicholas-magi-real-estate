@@ -106,6 +106,17 @@ Deno.serve(async (req: Request) => {
     return reply({ success: false, error: "Sessione non valida." }, 401);
   }
 
+  // Il connettore usa un account API professionale unico: soltanto il proprietario NMRE
+  // può verificare o avviare ricerche che consumano la relativa licenza.
+  const allowedUserId = Deno.env.get("NMRE_ALLOWED_USER_ID");
+  if (!allowedUserId) {
+    console.error("NMRE_ALLOWED_USER_ID non configurato.");
+    return reply({ success: false, error: "Connettore non configurato sul server." }, 503);
+  }
+  if (userData.user.id !== allowedUserId) {
+    return reply({ success: false, error: "Account non autorizzato a usare il connettore API." }, 403);
+  }
+
   const settings = requiredSettings();
   const leadUseApproved = Deno.env.get("INSIGHTS_LEAD_USE_APPROVED") === "true";
   const environment = Deno.env.get("NMRE_INSIGHTS_ENV") === "production" ? "production" : "sandbox";
