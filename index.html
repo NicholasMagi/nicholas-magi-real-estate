@@ -1018,7 +1018,7 @@ async function loadGmailSyncStatus(){
 
 async function removeSellerRegistryEntry(id){
   if(!confirm("Rimuovere questo identificativo dalla memoria venditori?"))return;
-  const {error}=await supabase.from("seller_identity_registry").delete().eq("id",id);
+  const {error}=await supabase.from("seller_identity_registry").delete().eq("id",id).eq("owner_id",currentUser.id);
   if(error){msg("candidateMsg","Impossibile rimuovere l'identificativo: "+error.message,"error");return;}
   await loadSellerRegistry();
   msg("candidateMsg","Identificativo rimosso dal registro venditori.","success");
@@ -2241,7 +2241,7 @@ async function saveDeclaredDeed(event){
 
 async function deleteDeclaredDeed(id){
   if(!confirm("Eliminare questa scheda-atto dal registro NMRE?"))return;
-  const {error}=await supabase.from("nmre_compravendite_atti").delete().eq("id",id);
+  const {error}=await supabase.from("nmre_compravendite_atti").delete().eq("id",id).eq("owner_id",currentUser.id);
   if(error){msg("deedSaveStatus","Eliminazione non riuscita: "+error.message,"error");return;}
   await loadDeclaredDeeds();
 }
@@ -3970,7 +3970,7 @@ async function addInteraction(id,details){
 async function deleteListing(id){
   if(!confirm("Vuole eliminare questo annuncio?"))return;
 
-  const {error}=await supabase.from("annunci").delete().eq("id",id);
+  const {error}=await supabase.from("annunci").delete().eq("id",id).eq("owner_id",currentUser.id);
 
   if(error){
     msg("listMsg",error.message,"error");
