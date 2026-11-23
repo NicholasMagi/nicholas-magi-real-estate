@@ -861,9 +861,91 @@ async function discardCandidate(id){
   await loadCandidates();
 }
 
+function renderListings(){
+  const data=listingCache||[];
+  $("totalCount").textContent=data.length;
+  $("privateCount").textContent=data.filter(x=>x.tipo_venditore==="Privato").length;
+  $("verifyCount").textContent=data.filter(x=>!x.tipo_venditore||x.tipo_venditore==="Da verificare").length;
+  renderFollowups(data);
+  fillDynamicOptions("listingTownFilter",data.map(item=>item.comune),"Tutti i comuni");
+  fillDynamicOptions("listingTypeFilter",data.map(item=>item.tipologia_immobile),"Tutte le tipologie");
+  fillDynamicOptions("listingPortalFilter",data.map(item=>item.portale),"Tutte le fonti");
+
+  const query=$("listingSearch").value.trim().toLocaleLowerCase("it");
+  const town=$("listingTownFilter").value;
+  const propertyType=$("listingTypeFilter").value;
+  const portal=$("listingPortalFilter").value;
+  const seller=$("sellerFilter").value;
+  const contactStatus=$("contactFilter").value;
+  const filtered=data.filter(item=>{
+    const haystack=[item.titolo,item.comune,item.portale,item.contatto,item.tipologia_immobile].filter(Boolean).join(" ").toLocaleLowerCase("it");
+    return (!query||haystack.includes(query))
+      &&(!town||item.comune===town)
+      &&(!propertyType||item.tipologia_immobile===propertyType)
+      &&(!portal||item.portale===portal)
+      &&(!seller||((item.tipo_venditore||"Da verificare")===seller))
+      &&(!contactStatus||((item.stato_contatto||"da_contattare")===contactStatus))
+      &&numberWithinRange(item.prezzo,"listingPriceMin","listingPriceMax")
+      &&numberWithinRange(item.superficie_mq,"listingSurfaceMin","listingSurfaceMax")
+      &&numberWithinRange(item.locali,"listingRoomsMin","listingRoomsMax");
+  });
+  $("listingFilterCount").textContent=filtered.length+" risultati su "+data.length+" immobili in archivio";
+
+  if(!data.length){
+    $("listingList").innerHTML='<p class="hint">Non ci sono ancora annunci. Inserisca il primo.</p>';
+    msg("listMsg","");
+    return;
+  }
+
+  if(!filtered.length){
+    $("listingList").innerHTML='<p class="hint">Nessun immobile corrisponde ai filtri selezionati. Provi ad ampliare i criteri o ad azzerare i filtri.</p>';
+    msg("listMsg","0 risultati su "+data.length+".");
+    return;
+  }
+
+  $("listingList").innerHTML=filtered.map(item=>{
+    const url=validUrl(item.url);
+    const linkHtml=url
+      ? '<a href="' + safe(url) + '" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
+      : "";
+    const detailText=[item.tipologia_immobile,item.superficie_mq?item.superficie_mq+" m²":null,item.locali?item.locali+" locali":null,item.camere?item.camere+" camere":null,item.bagni?item.bagni+" bagni":null].filter(Boolean).join(" · ")||"Dettagli dimensionali non disponibili";
+    return '<article class="listing"><div>'
+      +'<h3>'+safe(item.titolo)+'</h3>'
+      +'<div class="meta">'+safe(item.comune)+' · '+safe(item.contatto||"Contatto non inserito")+'<br>'+safe(item.portale||"Fonte non indicata")+'</div>'
+      +'<div class="price">'+euro(item.prezzo)+'</div>'
+      +'<div class="meta">'+safe(detailText)+'</div>'
+      +'<span class="pill">'+safe(item.tipo_venditore||"Da verificare")+'</span>'
+      +'<span class="pill">'+safe(item.stato_contatto||"da_contattare")+'</span>'
+      +linkHtml
+      +'<details class="crm" data-crm-id="'+safe(item.id)+'">'
+      +'<summary>Gestione contatto, note e telefonate</summary>'
+      +'<label>Stato del contatto</label><select data-crm-field="stato_contatto"><option value="da_contattare">Da contattare</option><option value="primo_contatto">Primo contatto</option><option value="interessato">Interessato</option><option value="appuntamento">Appuntamento</option><option value="incarico_acquisito">Incarico acquisito</option><option value="non_interessato">Non interessato</option></select>'
+      +'<label>Note personali</label><textarea data-crm-field="note_personali" maxlength="10000">'+safe(item.note_personali||"")+'</textarea>'
+      +'<label>Prossimo contatto</label><input type="date" data-crm-field="prossimo_contatto_il" value="'+safe(item.prossimo_contatto_il||"")+'">'
+      +'<div class="actions"><button class="gold" data-save-crm>Salva scheda</button></div>'
+      +'<hr><b>Registra una nuova interazione</b>'
+      +'<div class="row"><div><label>Tipo</label><select data-new-type><option value="telefonata">Telefonata</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="appuntamento">Appuntamento</option><option value="nota">Nota</option><option value="altro">Altro</option></select></div><div><label>Esito</label><input data-new-outcome maxlength="180" placeholder="Es. Non risponde, interessato..."></div></div>'
+      +'<label>Dettagli</label><textarea data-new-note maxlength="5000" placeholder="Riassunto della conversazione"></textarea>'
+      +'<label>Richiamare il</label><input type="date" data-new-followup>'
+      +'<div class="actions"><button class="secondary" data-add-interaction>Registra interazione</button></div>'
+      +'<div class="crm-history" data-interaction-history>Aprire la scheda per caricare lo storico.</div>'
+      +'</details></div><button class="danger" data-delete="'+safe(item.id)+'">Elimina</button></article>';
+  }).join("");
+
+  $("listingList").querySelectorAll("[data-delete]").forEach(btn=>{btn.addEventListener("click",()=>deleteListing(btn.dataset.delete));});
+  $("listingList").querySelectorAll("[data-crm-id]").forEach(details=>{
+    const id=details.dataset.crmId, item=data.find(row=>row.id===id);
+    details.querySelector('[data-crm-field="stato_contatto"]').value=item?.stato_contatto||"da_contattare";
+    details.querySelector('[data-crm-field="prossimo_contatto_il"]').value=item?.prossimo_contatto_il||"";
+    details.addEventListener("toggle",()=>{if(details.open&&!details.dataset.loaded){details.dataset.loaded="1";loadInteractions(id,details);}});
+    details.querySelector("[data-save-crm]").addEventListener("click",()=>saveCrm(id,details));
+    details.querySelector("[data-add-interaction]").addEventListener("click",()=>addInteraction(id,details));
+  });
+  msg("listMsg",filtered.length+" annunci visualizzati su "+data.length+".","success");
+}
+
 async function loadListings(){
   if(!currentUser)return;
-
   msg("listMsg","Caricamento...");
   const data=[];
   const pageSize=500;
@@ -879,73 +961,9 @@ async function loadListings(){
     data.push(...(page||[]));
     if(!page||page.length<pageSize)break;
   }
-
   listingCache=data;
   renderDashboard();
-  $("totalCount").textContent=data.length;
-  $("privateCount").textContent=data.filter(x=>x.tipo_venditore==="Privato").length;
-  $("verifyCount").textContent=data.filter(x=>!x.tipo_venditore||x.tipo_venditore==="Da verificare").length;
-  renderFollowups(data);
-  const query=$("listingSearch").value.trim().toLocaleLowerCase("it");
-  const seller=$("sellerFilter").value;
-  const contactStatus=$("contactFilter").value;
-  const filtered=data.filter(x=>{
-    const haystack=[x.titolo,x.comune,x.portale,x.contatto].filter(Boolean).join(" ").toLocaleLowerCase("it");
-    return (!query||haystack.includes(query))&&(!seller||((x.tipo_venditore||"Da verificare")===seller))&&(!contactStatus||((x.stato_contatto||"da_contattare")===contactStatus));
-  });
-
-  if(!data.length){
-    $("listingList").innerHTML='<p class="hint">Non ci sono ancora annunci. Inserisca il primo.</p>';
-    msg("listMsg","");
-    return;
-  }
-
-  if(!filtered.length){
-    $("listingList").innerHTML='<p class="hint">Nessun annuncio corrisponde ai filtri.</p>';
-    msg("listMsg","Nessun risultato.");
-    return;
-  }
-
-  $("listingList").innerHTML=filtered.map(item=>{
-    const url=validUrl(item.url);
-    const linkHtml=url
-      ? '<a href="' + safe(url) + '" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
-      : "";
-
-    return `<article class="listing"><div>
-    <h3>${safe(item.titolo)}</h3>
-    <div class="meta">${safe(item.comune)} · ${safe(item.contatto||"Contatto non inserito")}<br>${safe(item.portale||"Fonte non indicata")}</div>
-    <div class="price">${euro(item.prezzo)}</div>
-    <div class="meta">${safe([item.tipologia_immobile,item.superficie_mq?item.superficie_mq+" m²":null,item.locali?item.locali+" locali":null,item.camere?item.camere+" camere":null,item.bagni?item.bagni+" bagni":null].filter(Boolean).join(" · ")||"Dettagli dimensionali non disponibili")}</div>
-    <span class="pill">${safe(item.tipo_venditore||"Da verificare")}</span>
-    <span class="pill">${safe(item.stato_contatto||"da_contattare")}</span>
-    ${linkHtml}
-    <details class="crm" data-crm-id="${safe(item.id)}">
-      <summary>Gestione contatto, note e telefonate</summary>
-      <label>Stato del contatto</label><select data-crm-field="stato_contatto"><option value="da_contattare">Da contattare</option><option value="primo_contatto">Primo contatto</option><option value="interessato">Interessato</option><option value="appuntamento">Appuntamento</option><option value="incarico_acquisito">Incarico acquisito</option><option value="non_interessato">Non interessato</option></select>
-      <label>Note personali</label><textarea data-crm-field="note_personali" maxlength="10000">${safe(item.note_personali||"")}</textarea>
-      <label>Prossimo contatto</label><input type="date" data-crm-field="prossimo_contatto_il" value="${safe(item.prossimo_contatto_il||"")}">
-      <div class="actions"><button class="gold" data-save-crm>Salva scheda</button></div>
-      <hr><b>Registra una nuova interazione</b>
-      <div class="row"><div><label>Tipo</label><select data-new-type><option value="telefonata">Telefonata</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="appuntamento">Appuntamento</option><option value="nota">Nota</option><option value="altro">Altro</option></select></div><div><label>Esito</label><input data-new-outcome maxlength="180" placeholder="Es. Non risponde, interessato..."></div></div>
-      <label>Dettagli</label><textarea data-new-note maxlength="5000" placeholder="Riassunto della conversazione"></textarea>
-      <label>Richiamare il</label><input type="date" data-new-followup>
-      <div class="actions"><button class="secondary" data-add-interaction>Registra interazione</button></div>
-      <div class="crm-history" data-interaction-history>Aprire la scheda per caricare lo storico.</div>
-    </details>
-    </div><button class="danger" data-delete="${safe(item.id)}">Elimina</button></article>`;
-  }).join("");
-
-  $("listingList").querySelectorAll("[data-delete]").forEach(btn=>{btn.addEventListener("click",()=>deleteListing(btn.dataset.delete));});
-  $("listingList").querySelectorAll("[data-crm-id]").forEach(details=>{
-    const id=details.dataset.crmId, item=data.find(row=>row.id===id);
-    details.querySelector('[data-crm-field="stato_contatto"]').value=item?.stato_contatto||"da_contattare";
-    details.querySelector('[data-crm-field="prossimo_contatto_il"]').value=item?.prossimo_contatto_il||"";
-    details.addEventListener("toggle",()=>{if(details.open&&!details.dataset.loaded){details.dataset.loaded="1";loadInteractions(id,details);}});
-    details.querySelector("[data-save-crm]").addEventListener("click",()=>saveCrm(id,details));
-    details.querySelector("[data-add-interaction]").addEventListener("click",()=>addInteraction(id,details));
-  });
-  msg("listMsg",filtered.length+" annunci visualizzati su "+data.length+".","success");
+  renderListings();
 }
 
 $("listingForm").addEventListener("submit",async event=>{
