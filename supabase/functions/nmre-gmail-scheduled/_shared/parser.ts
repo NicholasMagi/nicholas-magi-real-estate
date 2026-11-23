@@ -52,7 +52,7 @@ function parseItalianAmount(value:string):number|null {
 
 export function price(s:string):number|null {
   const value=normalizePropertyText(s);
-  const number="((?:\\d{1,3}(?:[. ]\\d{3})+|\\d+)(?:,\\d{1,2})?(?:\\s*(?:mila|k))?)";
+  const number="((?:\\d{1,3}(?:\\.\\d{3})+|\\d+)(?:,\\d{1,2})?(?:\\s*(?:mila|k))?)";
   const patterns=[
     new RegExp("(?:€|eur)\\s*"+number,"i"),
     new RegExp(number+"\\s*(?:€|eur|euro)\\b","i"),
