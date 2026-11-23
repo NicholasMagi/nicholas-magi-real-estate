@@ -349,6 +349,119 @@ function euro(value){
   return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(Number(value));
 }
 
+function dashboardScroll(id){
+  const target=$(id);
+  if(target)target.scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function renderDashboard(){
+  const all=Array.isArray(listingCache)?listingCache:[];
+  const candidates=Array.isArray(candidateCache)?candidateCache:[];
+  const today=new Date();
+  today.setHours(0,0,0,0);
+  const weekEnd=new Date(today);
+  weekEnd.setDate(weekEnd.getDate()+7);
+  const active=item=>!["incarico_acquisito","non_interessato"].includes(item.stato_contatto||"da_contattare");
+  const dueItems=all.filter(item=>{
+    if(!item.prossimo_contatto_il||!active(item))return false;
+    const date=new Date(item.prossimo_contatto_il+"T00:00:00");
+    return !Number.isNaN(date.getTime())&&date<=today;
+  });
+  const overdue=dueItems.filter(item=>new Date(item.prossimo_contatto_il+"T00:00:00")<today);
+  const upcoming=all.filter(item=>{
+    if(!item.prossimo_contatto_il||!active(item))return false;
+    const date=new Date(item.prossimo_contatto_il+"T00:00:00");
+    return !Number.isNaN(date.getTime())&&date>today&&date<=weekEnd;
+  });
+  const count=status=>all.filter(item=>(item.stato_contatto||"da_contattare")===status).length;
+  const toCall=count("da_contattare");
+  const firstContact=count("primo_contatto");
+  const interested=count("interessato");
+  const appointments=count("appuntamento");
+  const mandates=count("incarico_acquisito");
+  const privateCount=all.filter(item=>item.tipo_venditore==="Privato").length;
+  const sources=new Set(all.map(item=>item.portale).filter(Boolean)).size;
+  const dateEl=$("dashboardDate");
+  if(dateEl)dateEl.textContent=new Intl.DateTimeFormat("it-IT",{weekday:"long",day:"numeric",month:"long",year:"numeric"}).format(new Date());
+
+  $("dashCandidates").textContent=String(candidates.length);
+  $("dashCandidatesNote").textContent=candidates.filter(item=>item.tipo_venditore==="Privato").length+" privati riconosciuti · "+candidates.length+" da valutare";
+  $("dashToCall").textContent=String(toCall);
+  $("dashDue").textContent=String(dueItems.length);
+  $("dashDueNote").textContent=overdue.length+" in ritardo · "+(dueItems.length-overdue.length)+" previsti oggi";
+  $("dashMandates").textContent=String(mandates);
+
+  const stages=[
+    ["Da contattare",toCall],
+    ["Primo contatto",firstContact],
+    ["Interessato",interested],
+    ["Appuntamento",appointments],
+    ["Incarico acquisito",mandates]
+  ];
+  const denominator=Math.max(all.length,1);
+  $("dashPipeline").innerHTML=stages.map(stage=>{
+    const width=Math.round(stage[1]/denominator*100);
+    return '<div class="dash-pipeline-row"><div class="dash-pipeline-label">'+stage[0]+'</div><div class="dash-track"><div class="dash-fill" style="width:'+width+'%"></div></div><div class="dash-pipeline-count">'+stage[1]+'</div></div>';
+  }).join("");
+  $("dashPipelineTotal").textContent=all.length+" immobili in archivio";
+  $("dashPipelineProgress").textContent=(all.length?Math.round(mandates/all.length*100):0)+"% trasformati in incarichi";
+
+  const priorities=[];
+  if(candidates.length)priorities.push({mark:"＋",title:"Valutare le nuove opportunità",detail:candidates.length+" annunci in attesa di verifica; "+candidates.filter(item=>item.tipo_venditore==="Privato").length+" riconosciuti come privati.",button:"Apri candidati",target:"candidateSection"});
+  if(dueItems.length)priorities.push({mark:"◷",title:"Gestire i richiami",detail:overdue.length+" richiami in ritardo e "+(dueItems.length-overdue.length)+" previsti oggi.",button:"Apri agenda",target:"followupSection"});
+  if(toCall)priorities.push({mark:"↗",title:"Avviare i primi contatti",detail:toCall+" immobili sono ancora nella fase iniziale.",button:"Vedi da contattare",filter:"da_contattare"});
+  if(appointments)priorities.push({mark:"◇",title:"Preparare gli appuntamenti",detail:appointments+" immobili hanno un appuntamento in pipeline.",button:"Vedi appuntamenti",filter:"appuntamento"});
+  if(!priorities.length)priorities.push({mark:"✓",title:"Nessuna urgenza registrata",detail:"Può dedicare il tempo alla ricerca di nuove opportunità o all'aggiornamento dell'archivio.",button:"Apri archivio",target:"archiveSection"});
+  $("dashPriorities").innerHTML=priorities.slice(0,4).map(item=>{
+    const action=item.filter?'data-dash-filter="'+item.filter+'"':'data-dash-scroll="'+item.target+'"';
+    return '<div class="dash-priority"><div class="dash-priority-mark">'+item.mark+'</div><div class="dash-priority-copy"><strong>'+item.title+'</strong><span>'+item.detail+'</span></div><button class="secondary" '+action+'>'+item.button+'</button></div>';
+  }).join("");
+
+  const latest=candidates.slice(0,4);
+  $("dashLatest").innerHTML=latest.length?latest.map(item=>{
+    const title=safe(item.titolo||"Annuncio immobiliare");
+    const meta=safe([item.comune,item.portale,item.tipologia_immobile].filter(Boolean).join(" · ")||"Dettagli da completare");
+    const price=item.prezzo!==null&&item.prezzo!==undefined?euro(item.prezzo):"Prezzo non indicato";
+    return '<article class="dash-opportunity"><div class="dash-opportunity-title">'+title+'</div><div class="dash-opportunity-meta">'+meta+'</div><div class="dash-opportunity-price">'+price+'</div></article>';
+  }).join(""):'<div class="dash-empty">Non ci sono nuove opportunità da valutare al momento. La sincronizzazione continua in background.</div>';
+
+  const overview=[
+    [all.length,"Annunci in archivio"],
+    [privateCount,"Venditori privati"],
+    [upcoming.length,"Richiami nei prossimi 7 giorni"],
+    [sources,"Fonti presenti"],
+    [interested,"Proprietari interessati"],
+    [appointments,"Appuntamenti in pipeline"]
+  ];
+  $("dashOverview").innerHTML=overview.map(item=>'<div class="dash-overview-item"><strong>'+item[0]+'</strong><span>'+item[1]+'</span></div>').join("");
+}
+
+$("dashboardRefresh").addEventListener("click",async()=>{
+  const button=$("dashboardRefresh");
+  button.disabled=true;
+  button.textContent="Aggiornamento...";
+  try{
+    await Promise.all([loadListings(),loadCandidates()]);
+    await checkInsightsApi();
+  }finally{
+    button.disabled=false;
+    button.textContent="Aggiorna dati";
+  }
+});
+$("dashboardNewListing").addEventListener("click",()=>dashboardScroll("newListingSection"));
+$("dashOpenArchive").addEventListener("click",()=>dashboardScroll("archiveSection"));
+$("dashOpenCandidates").addEventListener("click",()=>dashboardScroll("candidateSection"));
+$("dashPriorities").addEventListener("click",event=>{
+  const button=event.target.closest("button");
+  if(!button)return;
+  if(button.dataset.dashScroll)dashboardScroll(button.dataset.dashScroll);
+  if(button.dataset.dashFilter){
+    $("contactFilter").value=button.dataset.dashFilter;
+    dashboardScroll("archiveSection");
+    loadListings();
+  }
+});
+
 function connect(url,key){
   if(!/^https:\/\/[a-zA-Z0-9.-]+\.supabase\.co\/?$/.test(url)||!key.startsWith("sb_publishable_")){
     throw new Error("Controlli il Project URL e la Publishable Key di Supabase.");
@@ -570,6 +683,7 @@ async function loadCandidates(){
     if(!page||page.length<pageSize)break;
   }
   candidateCache=data;
+  renderDashboard();
   if(!data.length){
     box.innerHTML='<p class="hint">Nessun nuovo annuncio da valutare. La ricerca automatica continua in background.</p>';
     msg("candidateMsg","");
@@ -659,6 +773,7 @@ async function loadListings(){
   }
 
   listingCache=data;
+  renderDashboard();
   $("totalCount").textContent=data.length;
   $("privateCount").textContent=data.filter(x=>x.tipo_venditore==="Privato").length;
   $("verifyCount").textContent=data.filter(x=>!x.tipo_venditore||x.tipo_venditore==="Da verificare").length;
