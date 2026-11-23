@@ -316,6 +316,35 @@ export default {
         }
       }
 
+      // Reprocess pending Immobiliare.it alerts whose saved URL was resolved to the
+      // portal homepage instead of an individual listing.
+      const { data: candidatesToRepair, error: repairQueryError } = await ctx.supabaseAdmin
+        .from("annunci_candidati")
+        .select("source_email_id,url")
+        .eq("owner_id", owner)
+        .eq("stato", "da_verificare")
+        .in("portale", ["immobiliare.it", "www.immobiliare.it"])
+        .not("source_email_id", "is", null)
+        .limit(200);
+
+      if (repairQueryError) throw new Error("Lettura dei link da correggere non riuscita");
+      const repairIds = (candidatesToRepair || [])
+        .filter((candidate: any) => {
+          if (typeof candidate.source_email_id !== "string" || !candidate.url) return false;
+          try {
+            const link = new URL(candidate.url);
+            const host = link.hostname.toLowerCase().replace(/^www\\./, "");
+            const isImmobiliare = host === "immobiliare.it" || host.endsWith(".immobiliare.it");
+            return isImmobiliare &&
+              (link.pathname === "/" || /\\/(?:ricerca|search|vendita-case)(?:\\/|$)/i.test(link.pathname));
+          } catch {
+            return false;
+          }
+        })
+        .map((candidate: any) => candidate.source_email_id as string);
+
+      messageIds = [...new Set([...messageIds, ...repairIds])];
+
       const emails: Array<any | null> = [];
       for (let index = 0; index < messageIds.length; index += 5) {
         emails.push(
@@ -451,6 +480,7 @@ export default {
         discardedExisting,
         inserted,
         updated,
+        reprocessedExistingListingLinks: repairIds.length,
         duplicatesOrExisting: Math.max(0, rows.length - inserted - updated),
         missingMessages: emails.filter(email => !email).length
       });
