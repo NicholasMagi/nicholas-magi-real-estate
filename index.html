@@ -1081,7 +1081,7 @@ function renderDailyActionPlan(all,candidates,today){
   if(!row.id||seen.has(key))return;
   seen.add(key);actions.push(row);
  };
- const due=all.filter(item=>active(item)&&dateOnly(item.prossimo_contatto_il)&&dateOnly(item.prossimo_contatto_il)<=today)
+ const due=all.filter(item=>active(item)&&item.stato_contatto!=="appuntamento"&&dateOnly(item.prossimo_contatto_il)&&dateOnly(item.prossimo_contatto_il)<=today)
   .sort((a,b)=>String(a.prossimo_contatto_il).localeCompare(String(b.prossimo_contatto_il)));
  due.forEach(item=>{
   const d=dateOnly(item.prossimo_contatto_il),days=dayGap(d);
