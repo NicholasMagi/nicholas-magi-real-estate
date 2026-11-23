@@ -300,7 +300,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div>
 <strong>Immobiliare.it Insights</strong>
 <div id="insightsApiStatus" class="small">Stato API non ancora verificato</div>
-<div class="small">Ricerca di offerte in vendita pubblicate da privati, con disponibilità del numero telefonico.</div>
+<div class="small">Confronta le ricerche ufficiali Privato e Professionista con gli annunci email, riconoscendo i venditori dal link esatto.</div>
 </div>
 <div class="actions">
 <button class="secondary" id="checkInsightsApi">Verifica accesso</button>
@@ -758,7 +758,19 @@ async function syncInsightsApi(){
     }
     if(!data?.success)throw new Error(data?.error||"Importazione non riuscita.");
     $("insightsApiStatus").textContent="Ultima ricerca completata · "+data.resultsRead+" risultati analizzati";
-    msg("portalApiMsg",data.inserted+" nuovi candidati importati · "+data.alreadyPresent+" già presenti · "+data.privateCandidatesMatched+" privati riconosciuti. "+data.note,"success");
+    const resultParts=[
+      data.inserted+" nuovi annunci privati importati",
+      data.matchedEmailAsPrivate+" annunci email riconosciuti come privati",
+      data.matchedEmailAsProfessional+" annunci email riconosciuti come professionisti e rimossi dalla coda",
+      data.alreadyPresent+" già presenti"
+    ];
+    if(!data.professionalLookupAvailable){
+      resultParts.push("verifica professionisti non completata (API "+(data.professionalLookupStatus||"non disponibile")+")");
+    }
+    if(data.conflictingProviderTypes>0){
+      resultParts.push(data.conflictingProviderTypes+" casi discordanti lasciati da verificare");
+    }
+    msg("portalApiMsg",resultParts.join(" · ")+". "+data.note,"success");
     await loadCandidates();
   }catch(error){
     msg("portalApiMsg",error.message||"Errore durante l'importazione.","error");
