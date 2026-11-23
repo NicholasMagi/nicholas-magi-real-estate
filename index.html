@@ -262,6 +262,23 @@ button:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:800px){.sales-performance-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.sales-performance-funnel{grid-template-columns:1fr}}
 @media(max-width:520px){.sales-performance-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.sales-performance-metric strong{font-size:21px}.nmre-crm-outcome-grid{grid-template-columns:1fr}}
 
+.sales-goals{margin-top:16px;padding-top:15px;border-top:1px solid var(--line)}
+.sales-goals-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.sales-goals-head h3{font-size:14px;margin:0 0 4px}
+.sales-goals-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}
+.sales-goal{background:#fafbfc;border:1px solid var(--line);border-radius:10px;padding:11px;min-width:0}
+.sales-goal-top{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:11px;color:#4d5a6e}
+.sales-goal-top strong{font-size:12px;color:var(--ink);white-space:nowrap}
+.sales-goal-track{height:7px;border-radius:20px;background:#e8ebef;overflow:hidden;margin:9px 0 6px}
+.sales-goal-fill{height:100%;border-radius:20px;background:#b28d53}
+.sales-goal-caption{font-size:10px;color:var(--muted);line-height:1.4}
+.sales-goal-editor{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:12px}
+.sales-goal-editor label{margin:0;font-size:10px}
+.sales-goal-editor input{padding:8px;font-size:12px;margin-top:5px}
+.sales-goal-status{font-size:10px;color:var(--muted);margin-top:8px;min-height:14px}
+@media(max-width:850px){.sales-goals-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.sales-goal-editor{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:520px){.sales-goals-grid,.sales-goal-editor{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
 </style>
 </head>
 <body>
@@ -505,6 +522,18 @@ button:disabled{opacity:.55;cursor:not-allowed}
     </div>
     <div class="sales-performance-funnel" id="salesPerformanceFunnel"></div>
     <div class="sales-performance-note" id="salesPerformanceNote" aria-live="polite">Registri l'esito delle telefonate nello storico del contatto per iniziare a misurare i tassi di conversione.</div>
+    <div class="sales-goals">
+      <div class="sales-goals-head"><div><h3>Obiettivi e ritmo di lavoro</h3><div class="dash-card-sub">Avanzamento di oggi e della settimana · obiettivi modificabili</div></div><button type="button" class="secondary" id="salesGoalsToggle">Modifica obiettivi</button></div>
+      <div class="sales-goals-grid" id="salesGoalsProgress"><div class="dash-empty">Caricamento obiettivi…</div></div>
+      <form class="sales-goal-editor" id="salesGoalsForm" hidden>
+        <label>Telefonate al giorno<input type="number" min="0" max="1000" step="1" name="daily_calls_target" value="15"></label>
+        <label>Conversazioni / settimana<input type="number" min="0" max="1000" step="1" name="weekly_conversations_target" value="10"></label>
+        <label>Appuntamenti / settimana<input type="number" min="0" max="1000" step="1" name="weekly_appointments_target" value="3"></label>
+        <label>Valutazioni / settimana<input type="number" min="0" max="1000" step="1" name="weekly_valuations_target" value="2"></label>
+        <label>Incarichi / settimana<input type="number" min="0" max="1000" step="1" name="weekly_mandates_target" value="1"></label>
+        <div style="grid-column:1/-1"><button type="submit" class="gold">Salva obiettivi</button><span class="sales-goal-status" id="salesGoalsStatus" aria-live="polite"></span></div>
+      </form>
+    </div>
   </section>
 
   <div class="dash-grid">
@@ -1816,6 +1845,70 @@ function renderSalesPerformance(){
   ?range+" giorni · "+(calls.length/range).toFixed(1).replace(".",",")+" telefonate registrate al giorno in media · "+unclassified+" telefonate senza esito classificato. Gli incarichi sono contati per immobile collegato, oppure per contatto se l'immobile non è specificato."
   :"Nessuna telefonata registrata nel periodo. Registri ogni chiamata nello storico del contatto e selezioni il relativo esito: il cruscotto inizierà a misurare le conversioni.";
 }
+let nmreSalesGoals={daily_calls_target:15,weekly_conversations_target:10,weekly_appointments_target:3,weekly_valuations_target:2,weekly_mandates_target:1};
+function nmreLocalDayStart(date=new Date()){const d=new Date(date);d.setHours(0,0,0,0);return d;}
+function nmreWeekStart(date=new Date()){const d=nmreLocalDayStart(date);d.setDate(d.getDate()-(d.getDay()+6)%7);return d;}
+function nmreDateInWindow(value,start){const t=Date.parse(value||"");return Number.isFinite(t)&&t>=start.getTime();}
+function nmreSalesGoalCounts(){
+ const today=nmreLocalDayStart(),week=nmreWeekStart();
+ const crm=nmreCrmInteractions;
+ const archive=nmreListingInteractions.map(x=>({interaction_type:x.tipo,outcome_code:x.outcome_code,created_at:x.created_at,property_id:x.annuncio_id,contact_id:null}));
+ const events=[...crm,...archive];
+ const calls=events.filter(x=>x.interaction_type==="telefonata");
+ const responseCodes=new Set(["parlato","richiamare","interessato","appuntamento_fissato","valutazione_fissata","valutazione_completata","incarico_acquisito","non_interessato"]);
+ const weeklyAppointmentsFromCalls=events.filter(x=>x.outcome_code==="appuntamento_fissato"&&nmreDateInWindow(x.created_at,week)).length;
+ const agenda=nmreCrmAppointments.filter(x=>x.status!=="annullato"&&nmreDateInWindow(x.starts_at,week));
+ const appointmentCount=weeklyAppointmentsFromCalls+agenda.filter(x=>["appuntamento","visita"].includes(x.appointment_type)).length;
+ const valuationCount=events.filter(x=>x.outcome_code==="valutazione_completata"&&nmreDateInWindow(x.created_at,week)).length+agenda.filter(x=>x.appointment_type==="valutazione"&&x.status==="completato").length;
+ const mandates=events.filter(x=>x.outcome_code==="incarico_acquisito"&&nmreDateInWindow(x.created_at,week));
+ return {
+  callsToday:calls.filter(x=>nmreDateInWindow(x.created_at,today)).length,
+  conversationsWeek:calls.filter(x=>nmreDateInWindow(x.created_at,week)&&responseCodes.has(x.outcome_code)).length,
+  appointmentsWeek:appointmentCount,valuationsWeek:valuationCount,
+  mandatesWeek:new Set(mandates.map(x=>x.property_id||x.contact_id||("event:"+x.id))).size
+ };
+}
+function renderSalesGoals(){
+ const c=nmreSalesGoalCounts();
+ const rows=[
+  ["Telefonate oggi",c.callsToday,nmreSalesGoals.daily_calls_target],
+  ["Conversazioni",c.conversationsWeek,nmreSalesGoals.weekly_conversations_target],
+  ["Appuntamenti",c.appointmentsWeek,nmreSalesGoals.weekly_appointments_target],
+  ["Valutazioni",c.valuationsWeek,nmreSalesGoals.weekly_valuations_target],
+  ["Incarichi",c.mandatesWeek,nmreSalesGoals.weekly_mandates_target]
+ ];
+ $("salesGoalsProgress").innerHTML=rows.map(([label,value,target])=>{
+  const pct=target>0?Math.min(100,Math.round(value/target*100)):0;
+  const status=target>0?(value>=target?"Obiettivo raggiunto":value+" / "+target):value+" registrati · obiettivo non impostato";
+  return '<div class="sales-goal"><div class="sales-goal-top"><span>'+label+'</span><strong>'+pct+'%</strong></div><div class="sales-goal-track"><div class="sales-goal-fill" style="width:'+pct+'%"></div></div><div class="sales-goal-caption">'+status+'</div></div>';
+ }).join("");
+}
+async function loadSalesGoals(){
+ if(!currentUser||!supabase)return;
+ const {data,error}=await supabase.from("nmre_sales_goals").select("*").eq("owner_id",currentUser.id).maybeSingle();
+ if(error){$("salesGoalsStatus").textContent="Obiettivi non caricati: "+error.message;renderSalesGoals();return;}
+ if(data)nmreSalesGoals={daily_calls_target:data.daily_calls_target,weekly_conversations_target:data.weekly_conversations_target,weekly_appointments_target:data.weekly_appointments_target,weekly_valuations_target:data.weekly_valuations_target,weekly_mandates_target:data.weekly_mandates_target};
+ const form=$("salesGoalsForm");
+ Object.entries(nmreSalesGoals).forEach(([key,value])=>{if(form.elements[key])form.elements[key].value=String(value);});
+ renderSalesGoals();
+}
+async function saveSalesGoals(event){
+ event.preventDefault();
+ const form=event.currentTarget,button=form.querySelector('button[type="submit"]');
+ const payload={owner_id:currentUser.id,updated_at:new Date().toISOString()};
+ for(const key of Object.keys(nmreSalesGoals)){
+  const value=Number(form.elements[key].value);
+  if(!Number.isInteger(value)||value<0||value>1000){$("salesGoalsStatus").textContent="Inserisca valori interi tra 0 e 1.000.";return;}
+  payload[key]=value;
+ }
+ button.disabled=true;$("salesGoalsStatus").textContent="Salvataggio…";
+ const {error}=await supabase.from("nmre_sales_goals").upsert(payload,{onConflict:"owner_id"});
+ button.disabled=false;
+ if(error){$("salesGoalsStatus").textContent="Salvataggio non riuscito: "+error.message;return;}
+ nmreSalesGoals={...payload};renderSalesGoals();$("salesGoalsStatus").textContent="Obiettivi salvati correttamente.";
+ $("salesGoalsForm").hidden=true;$("salesGoalsToggle").textContent="Modifica obiettivi";
+}
+
 function nmreCrmRender(){
  $("nmreCrmContactCount").textContent=nmreCrmContacts.length;$("nmreCrmPropertyCount").textContent=nmreCrmProperties.length;$("nmreCrmAgendaCount").textContent=nmreCrmAppointments.length;
  $("nmreCrmStatContacts").textContent=nmreCrmContacts.length;
@@ -1835,6 +1928,7 @@ async function loadCrmWorkspace(){
  ]);
  const err=c.error||p.error||a.error||i.error||l.error;if(err){$("nmreCrmError").textContent="Caricamento CRM non riuscito: "+err.message;return;}
  nmreCrmContacts=c.data||[];nmreCrmProperties=p.data||[];nmreCrmAppointments=a.data||[];nmreCrmInteractions=i.data||[];nmreListingInteractions=l.data||[];
+ await loadSalesGoals();
  nmreCrmOption("nmreCrmPropertyContact",nmreCrmContacts,"Nessun contatto collegato",x=>x.full_name);
  nmreCrmOption("nmreCrmAgendaContact",nmreCrmContacts,"Nessun contatto",x=>x.full_name);
  nmreCrmOption("nmreCrmAgendaProperty",nmreCrmProperties,"Nessun immobile",x=>x.title+" · "+x.municipality);
@@ -1881,6 +1975,7 @@ async function nmreCrmSaveContactInteraction(event,form){
  status.textContent="Interazione registrata.";
  if(data)nmreCrmInteractions=[data,...nmreCrmInteractions].filter(item=>Date.now()-Date.parse(item.created_at)<=90*86400000);
  renderSalesPerformance();
+ renderSalesGoals();
  form.reset();
  await nmreCrmLoadContactHistory(contactId);
 }
@@ -1904,6 +1999,8 @@ $("nmreCrmContactSearch").addEventListener("input",nmreCrmRenderContacts);$("nmr
 $("nmreCrmPropertySearch").addEventListener("input",nmreCrmRenderProperties);$("nmreCrmPropertyFilter").addEventListener("change",nmreCrmRenderProperties);
 $("nmreCrmAgendaFilter").addEventListener("change",nmreCrmRenderAgenda);
 $("salesPerformanceRange").addEventListener("change",renderSalesPerformance);
+$("salesGoalsToggle").addEventListener("click",()=>{const form=$("salesGoalsForm");form.hidden=!form.hidden;$("salesGoalsToggle").textContent=form.hidden?"Modifica obiettivi":"Chiudi modifica";});
+$("salesGoalsForm").addEventListener("submit",saveSalesGoals);
 
 async function boot(){
   loadConfig();
