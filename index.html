@@ -1427,7 +1427,7 @@ async function saveDeclaredDeed(event){
   $("deedMonth").value="";$("deedType").value="";$("deedSearchCount").value="";
   $("deedDeclaredAmount").value="";$("deedPropertyCount").value="";
   $("deedOmiZone").value="";$("deedCadastralCategory").value="";
-  $("deedCadastralSurface").value="";$("deedUnitAttribution").checked=false;
+  $("deedCadastralSurface").value="";$("deedUnitAttribution").checked=false;$("deedUnitAttribution").disabled=true;
   $("deedDataVerified").checked=false;$("deedUnitSummary").value="";$("deedNote").value="";
   await loadDeclaredDeeds();
   button.disabled=false;
