@@ -382,7 +382,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
         <div class="search-filter-field"><label for="deedPropertyCount">Numero immobili nell'atto</label><input id="deedPropertyCount" type="number" min="1" max="100" step="1" required placeholder="Es. 2"></div>
         <div class="search-filter-field"><label for="deedOmiZone">Zona OMI (facoltativa)</label><input id="deedOmiZone" maxlength="12" placeholder="Es. B1"></div>
         <div class="search-filter-field"><label for="deedCadastralCategory">Categoria catastale (facoltativa)</label><input id="deedCadastralCategory" maxlength="10" placeholder="Es. A/2"></div>
-        <div class="search-filter-field"><label for="deedCadastralSurface">Superficie catastale (m²)</label><input id="deedCadastralSurface" type="number" min="1" max="100000" step="0.01" placeholder="Solo quando la fonte riporta m²"></div>
+        <div class="search-filter-field"><label for="deedCadastralSurface">Superficie catastale (m²)</label><input id="deedCadastralSurface" type="number" min="5" max="100000" step="0.01" placeholder="Solo quando la fonte riporta m²"></div>
         <div class="search-filter-field"><label for="deedUnitSummary">Riepilogo unità / categorie (facoltativo)</label><input id="deedUnitSummary" maxlength="500" placeholder="Es. A/2, 95 m²; C/6, 18 m²"></div>
       </div>
       <div class="search-filter-field"><label for="deedNote">Note di consultazione (facoltative)</label><textarea id="deedNote" rows="2" maxlength="1000" placeholder="Solo informazioni non identificative; non inserisca nomi o indirizzi esatti."></textarea></div>
@@ -1302,10 +1302,17 @@ async function importOmiCsv(){
 
 async function loadDeclaredDeeds(){
   if(!currentUser||!supabase)return;
-  const {data,error}=await supabase.from("nmre_compravendite_atti").select("*")
-    .order("mese_atto",{ascending:false}).limit(100);
-  if(error){msg("deedSaveStatus","Impossibile caricare il registro compravendite: "+error.message,"error");return;}
-  declaredDeedsCache=data||[];
+  const rows=[];
+  const pageSize=500;
+  for(let offset=0;;offset+=pageSize){
+    const {data,error}=await supabase.from("nmre_compravendite_atti").select("*")
+      .order("mese_atto",{ascending:false}).order("id",{ascending:true})
+      .range(offset,offset+pageSize-1);
+    if(error){msg("deedSaveStatus","Impossibile caricare il registro compravendite: "+error.message,"error");return;}
+    rows.push(...(data||[]));
+    if(!data||data.length<pageSize)break;
+  }
+  declaredDeedsCache=rows;
   renderDeclaredDeeds();
 }
 
