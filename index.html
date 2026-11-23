@@ -204,6 +204,7 @@ textarea{width:100%;border:1px solid #d9dfe8;border-radius:9px;padding:12px;font
       <div><label for="crmPropertyTown">Comune *</label><input id="crmPropertyTown" required maxlength="100" list="municipalityOptions" placeholder="Castelfidardo"></div>
       <div><label for="crmPropertyAddress">Indirizzo</label><input id="crmPropertyAddress" maxlength="220" placeholder="Via ..."></div>
       <div><label for="crmPropertyContact">Proprietario / referente</label><select id="crmPropertyContact"><option value="">Nessun contatto collegato</option></select></div>
+      <div class="crm-wide"><label for="crmPropertySourceListing">Collega un annuncio già presente nell'archivio (facoltativo)</label><select id="crmPropertySourceListing"><option value="">Nessun annuncio di origine</option></select></div>
       <div><label for="crmPropertyType">Tipologia</label><select id="crmPropertyType"><option value="">Da specificare</option><option>Appartamento</option><option>Villa</option><option>Casa indipendente</option><option>Rustico</option><option>Terreno</option><option>Commerciale</option><option>Altro</option></select></div>
       <div><label for="crmPropertyStatus">Fase gestionale</label><select id="crmPropertyStatus"><option value="da_valutare">Da valutare</option><option value="acquisizione">In acquisizione</option><option value="incarico">Incarico acquisito</option><option value="in_vendita">In vendita</option><option value="proposta">Proposta ricevuta</option><option value="venduto">Venduto</option><option value="locato">Locato</option><option value="archiviato">Archiviato</option></select></div>
       <div><label for="crmPropertyPrice">Prezzo richiesto (€)</label><input id="crmPropertyPrice" type="number" min="0" step="0.01" placeholder="185000"></div>
@@ -243,6 +244,7 @@ textarea{width:100%;border:1px solid #d9dfe8;border-radius:9px;padding:12px;font
 <div class="actions">
 <button class="secondary" id="editConfig">Configurazione</button>
 <button class="secondary" id="signOut">Esci</button>
+</div>
 </div>
 </div>
 
@@ -757,6 +759,7 @@ async function loadCrmWorkspace(){
   crmProperties=properties.data||[];
   crmAppointments=appointments.data||[];
   crmOptionList("crmPropertyContact",crmContacts,"Nessun contatto collegato",x=>x.full_name+" · "+(crmLabels.contact[x.contact_type]||x.contact_type));
+  crmOptionList("crmPropertySourceListing",cachedListings,"Nessun annuncio di origine",x=>(x.titolo||"Senza titolo")+" · "+(x.comune||"Comune n.d."));
   crmOptionList("crmAppointmentContact",crmContacts,"Selezioni un contatto",x=>x.full_name);
   crmOptionList("crmAppointmentProperty",crmProperties,"Nessun immobile",x=>x.title+" · "+x.municipality);
   renderCrmWorkspace();
@@ -815,7 +818,7 @@ function renderCrmProperties(){
 }
 function renderCrmAgenda(){
   const filter=$("crmAgendaFilter").value,now=new Date();
-  const rows=crmAppointments.filter(x=>filter==="upcoming"?x.status==="programmato"&&new Date(x.starts_at)>=now:!filter||x.status===filter);
+  const rows=crmAppointments.filter(x=>filter==="upcoming"?x.status==="programmato":!filter||x.status===filter);
   $("crmAgendaList").innerHTML=rows.length?rows.map(x=>{
     const contact=crmContacts.find(c=>c.id===x.contact_id),property=crmProperties.find(p=>p.id===x.property_id);
     const date=new Date(x.starts_at).toLocaleString("it-IT",{dateStyle:"medium",timeStyle:"short"});
@@ -843,7 +846,7 @@ $("crmContactForm").addEventListener("submit",async event=>{
 $("crmPropertyForm").addEventListener("submit",async event=>{
   event.preventDefault();if(!currentUser)return;
   const rawPrice=$("crmPropertyPrice").value,rawSurface=$("crmPropertySurface").value,rawRooms=$("crmPropertyRooms").value;
-  const row={title:$("crmPropertyTitle").value.trim(),municipality:canonicalMunicipalityName($("crmPropertyTown").value),address:$("crmPropertyAddress").value.trim()||null,contact_id:$("crmPropertyContact").value||null,property_type:$("crmPropertyType").value||null,status:$("crmPropertyStatus").value,asking_price:rawPrice===""?null:Number(rawPrice),surface_sqm:rawSurface===""?null:Number(rawSurface),rooms:rawRooms===""?null:Number(rawRooms),notes:$("crmPropertyNotes").value.trim()||null};
+  const row={title:$("crmPropertyTitle").value.trim(),municipality:canonicalMunicipalityName($("crmPropertyTown").value),address:$("crmPropertyAddress").value.trim()||null,contact_id:$("crmPropertyContact").value||null,source_listing_id:$("crmPropertySourceListing").value||null,property_type:$("crmPropertyType").value||null,status:$("crmPropertyStatus").value,asking_price:rawPrice===""?null:Number(rawPrice),surface_sqm:rawSurface===""?null:Number(rawSurface),rooms:rawRooms===""?null:Number(rawRooms),notes:$("crmPropertyNotes").value.trim()||null};
   const {error}=await supabase.from("nmre_properties").insert(row);
   if(error){msg("crmPropertyMsg",error.message,"error");return;}
   $("crmPropertyForm").reset();await loadCrmWorkspace();msg("crmPropertyMsg","Scheda immobile creata.","success");
