@@ -71,6 +71,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .gmail-sync-last-run{font-size:11px;color:var(--muted);margin-top:4px}
 .gmail-sync-title-success{color:#267447!important}
 .gmail-sync-title-error{color:#a12b27!important}
+.gmail-sync-title-stale{color:#9a642f!important}
 .gmail-sync-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
 .gmail-sync-stat{padding:10px;border:1px solid var(--line);border-radius:9px;background:white;min-width:0}
 .gmail-sync-stat strong{display:block;font-size:20px;font-variant-numeric:tabular-nums;color:var(--ink)}
@@ -749,7 +750,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 La casella Gmail viene elaborata dal server in background. Qui non vengono mostrate le email: vede soltanto i dati estratti dagli annunci immobiliari, senza mittente, oggetto o testo dei messaggi.
 </p>
 <div class="topline">
-<div><span class="pill">Sincronizzazione automatica attiva</span><div class="small">Controllo automatico della casella ogni 10 minuti; aggiornamento della lista ogni 5 minuti mentre il sito è aperto.</div></div>
+<div><span class="pill">Sincronizzazione automatica attiva</span><div class="small">Controllo server-side ogni 10 minuti, anche a sito chiuso; la lista si aggiorna ogni 5 minuti quando il sito è aperto.</div></div>
 <button class="secondary" id="connectGmail">Ricollega Gmail</button>
 </div>
 <div class="gmail-sync-monitor" aria-live="polite">
@@ -764,6 +765,9 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
     <div class="gmail-sync-stat"><strong id="gmailSyncReview">—</strong><span>Da verificare</span></div>
     <div class="gmail-sync-stat"><strong id="gmailSyncAgencies">—</strong><span>Agenzie escluse</span></div>
     <div class="gmail-sync-stat"><strong id="gmailSyncDuplicates">—</strong><span>Già presenti / duplicati</span></div>
+    <div class="gmail-sync-stat"><strong id="gmailSyncRuns24h">—</strong><span>Esecuzioni ultime 24h</span></div>
+    <div class="gmail-sync-stat"><strong id="gmailSyncErrors24h">—</strong><span>Errori ultime 24h</span></div>
+    <div class="gmail-sync-stat"><strong id="gmailSyncSuccessStreak">—</strong><span>Ultimi esiti riusciti consecutivi</span></div>
   </div>
   <div id="gmailSyncDetails" class="gmail-sync-details">Il sistema registrerà il riepilogo della prossima esecuzione automatica.</div>
 </div>
@@ -1018,46 +1022,71 @@ async function loadGmailSyncStatus(){
   const {data,error}=await supabase.from("nmre_gmail_sync_runs")
     .select("status,sync_mode,started_at,completed_at,duration_ms,read_count,property_notifications_count,inserted_count,needs_user_review_count,excluded_agencies_count,duplicates_or_existing_count,error_message")
     .order("completed_at",{ascending:false})
-    .limit(1)
-    .maybeSingle();
-  title.classList.remove("gmail-sync-title-success","gmail-sync-title-error");
+    .limit(200);
+  title.classList.remove("gmail-sync-title-success","gmail-sync-title-error","gmail-sync-title-stale");
   if(error){
     title.textContent="Monitor sincronizzazione non disponibile";
     lastRun.textContent="Non è stato possibile leggere lo stato dal database.";
     details.textContent=error.message||"Errore di lettura del monitor.";
     return;
   }
-  if(!data){
+  const runs=Array.isArray(data)?data:[];
+  if(!runs.length){
     title.textContent="In attesa della prima esecuzione registrata";
     lastRun.textContent="Non esiste ancora uno storico: il monitor si popolerà alla prossima sincronizzazione pianificata.";
-    ["gmailSyncRead","gmailSyncProperty","gmailSyncInserted","gmailSyncReview","gmailSyncAgencies","gmailSyncDuplicates"].forEach(id=>$(id).textContent="—");
-    details.textContent="La raccolta Gmail continua secondo la pianificazione. Nessun dato storico è stato ricostruito o inventato.";
+    ["gmailSyncRead","gmailSyncProperty","gmailSyncInserted","gmailSyncReview","gmailSyncAgencies","gmailSyncDuplicates","gmailSyncRuns24h","gmailSyncErrors24h","gmailSyncSuccessStreak"].forEach(id=>$(id).textContent="—");
+    details.textContent="La raccolta Gmail è configurata per un controllo server-side ogni 10 minuti. Nessun dato storico è stato ricostruito o inventato.";
     return;
   }
-  const completed=new Date(data.completed_at);
-  const dateLabel=Number.isNaN(completed.getTime())
-    ?"Data non disponibile"
-    :new Intl.DateTimeFormat("it-IT",{dateStyle:"medium",timeStyle:"short"}).format(completed);
-  const success=data.status==="success";
-  title.textContent=success?"Ultima sincronizzazione completata":"Ultima sincronizzazione non riuscita";
-  title.classList.add(success?"gmail-sync-title-success":"gmail-sync-title-error");
-  lastRun.textContent="Ultimo controllo: "+dateLabel;
-  setCount("gmailSyncRead",data.read_count);
-  setCount("gmailSyncProperty",data.property_notifications_count);
-  setCount("gmailSyncInserted",data.inserted_count);
-  setCount("gmailSyncReview",data.needs_user_review_count);
-  setCount("gmailSyncAgencies",data.excluded_agencies_count);
-  setCount("gmailSyncDuplicates",data.duplicates_or_existing_count);
+  const latest=runs[0];
+  const completed=Date.parse(latest.completed_at||latest.started_at||"");
+  const now=Date.now();
+  const ageMinutes=Number.isFinite(completed)?Math.max(0,Math.floor((now-completed)/60000)):null;
+  const dateLabel=Number.isFinite(completed)
+    ?new Intl.DateTimeFormat("it-IT",{dateStyle:"medium",timeStyle:"short"}).format(new Date(completed))
+    :"Data non disponibile";
+  const recent=runs.filter(row=>{
+    const timestamp=Date.parse(row.completed_at||row.started_at||"");
+    return Number.isFinite(timestamp)&&timestamp>=now-86400000;
+  });
+  const failures=recent.filter(row=>row.status!=="success").length;
+  const successes=recent.length-failures;
+  let successStreak=0;
+  for(const row of runs){if(row.status!=="success")break;successStreak++;}
+  const success=latest.status==="success";
+  const stale=success&&ageMinutes!==null&&ageMinutes>20;
+  title.textContent=!success?"Ultima sincronizzazione non riuscita":stale?"Sincronizzazione da verificare":"Sincronizzazione regolare";
+  title.classList.add(!success?"gmail-sync-title-error":stale?"gmail-sync-title-stale":"gmail-sync-title-success");
+  const lastSuccessful=runs.find(row=>row.status==="success"&&row.completed_at);
+  const lastSuccessfulAt=lastSuccessful?Date.parse(lastSuccessful.completed_at):NaN;
+  const successLabel=Number.isFinite(lastSuccessfulAt)
+    ?new Intl.DateTimeFormat("it-IT",{dateStyle:"medium",timeStyle:"short"}).format(new Date(lastSuccessfulAt))
+    :"nessuna esecuzione riuscita registrata";
+  lastRun.textContent="Ultimo controllo: "+dateLabel+(ageMinutes!==null?" · "+(ageMinutes===0?"meno di un minuto fa":ageMinutes+" minuti fa"):"")+" · Ultimo successo: "+successLabel;
+  setCount("gmailSyncRead",latest.read_count);
+  setCount("gmailSyncProperty",latest.property_notifications_count);
+  setCount("gmailSyncInserted",latest.inserted_count);
+  setCount("gmailSyncReview",latest.needs_user_review_count);
+  setCount("gmailSyncAgencies",latest.excluded_agencies_count);
+  setCount("gmailSyncDuplicates",latest.duplicates_or_existing_count);
+  setCount("gmailSyncRuns24h",recent.length);
+  setCount("gmailSyncErrors24h",failures);
+  setCount("gmailSyncSuccessStreak",successStreak);
   const mode={
     full_initial:"prima sincronizzazione completa",
     full_recovery:"sincronizzazione completa di recupero",
     incremental:"aggiornamento incrementale"
-  }[data.sync_mode]||"modalità non disponibile";
-  const duration=Number.isFinite(Number(data.duration_ms))
-    ?(Number(data.duration_ms)/1000).toLocaleString("it-IT",{maximumFractionDigits:1})+" secondi"
+  }[latest.sync_mode]||"modalità non disponibile";
+  const duration=Number.isFinite(Number(latest.duration_ms))
+    ?(Number(latest.duration_ms)/1000).toLocaleString("it-IT",{maximumFractionDigits:1})+" secondi"
     :"non disponibile";
-  details.textContent="Modalità: "+mode+" · Durata: "+duration
-    +(success?"":" · Dettaglio: "+(data.error_message||"Errore non specificato"));
+  let activity="";
+  if(success&&Number(latest.read_count||0)===0)activity="Nessun nuovo messaggio Gmail da elaborare in questo controllo.";
+  else if(success&&Number(latest.property_notifications_count||0)===0)activity="Messaggi controllati, ma nessuna nuova notifica immobiliare riconosciuta.";
+  else if(success)activity=Number(latest.inserted_count||0)+" nuovi candidati inseriti; "+Number(latest.needs_user_review_count||0)+" da verificare.";
+  details.textContent="Modalità: "+mode+" · Durata: "+duration+" · Ultime 24 ore: "+successes+" esecuzioni riuscite e "+failures+" errori. "+activity
+    +(stale?" Controllo oltre 20 minuti fa: verifichi il job pianificato.":"")
+    +(!success?" Dettaglio: "+(latest.error_message||"Errore non specificato"):"");
 }
 
 async function removeSellerRegistryEntry(id){
