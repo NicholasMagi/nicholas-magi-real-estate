@@ -8,6 +8,272 @@ import { withSupabase } from "npm:@supabase/server@^1";
 const ACCOUNT = "nicholasmagirealestate@gmail.com";
 const PORTALS = ["idealista.it","immobiliare.it","casa.it","subito.it","green-acres.it","green-acres.com","gate-away.com","trovacasa.it","wikicasa.it"];
 
+function b64(bytes: Uint8Array): string {
+  let value = "";
+  for (const byte of bytes) value += String.fromCharCode(byte);
+  return btoa(value);
+}
+
+function unb64(value: string): Uint8Array {
+  return Uint8Array.from(atob(value), character => character.charCodeAt(0));
+}
+
+async function encryptionKey(secret: string): Promise<CryptoKey> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  return crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+async function decrypt(value: string, secret: string): Promise<Record<string, unknown>> {
+  const parts = value.split(".");
+  if (parts.length !== 3 || parts[0] !== "v1") throw new Error("Formato token cifrato non valido");
+  const plain = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: unb64(parts[1]) },
+    await encryptionKey(secret),
+    unb64(parts[2])
+  );
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+async function encrypt(value: Record<string, unknown>, secret: string): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipher = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    await encryptionKey(secret),
+    new TextEncoder().encode(JSON.stringify(value))
+  );
+  return "v1." + b64(iv) + "." + b64(new Uint8Array(cipher));
+}
+
+async function accessToken(
+  tokens: Record<string, unknown>,
+  expiresAt: string,
+  secret: string,
+  admin: any
+): Promise<string> {
+  const refresh = tokens.refresh_token;
+  if (typeof refresh !== "string" || !refresh) throw new Error("Refresh token non disponibile");
+  if (new Date(expiresAt).getTime() > Date.now() + 60000 && typeof tokens.access_token === "string") {
+    return tokens.access_token;
+  }
+
+  const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
+  if (!clientId || !clientSecret) throw new Error("Configurazione Google incompleta");
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refresh,
+      grant_type: "refresh_token"
+    }),
+    signal: AbortSignal.timeout(20000)
+  });
+
+  if (!response.ok) throw new Error("Rinnovo del token Google non riuscito (" + response.status + ")");
+  const fresh = await response.json();
+  if (typeof fresh.access_token !== "string" || !fresh.access_token) {
+    throw new Error("Token Google mancante");
+  }
+
+  const updated = {
+    ...tokens,
+    access_token: fresh.access_token,
+    refresh_token: refresh,
+    token_type: fresh.token_type || "Bearer",
+    scope: fresh.scope || tokens.scope || ""
+  };
+  const expiry = new Date(Date.now() + Number(fresh.expires_in || 3600) * 1000).toISOString();
+  const ciphertext = await encrypt(updated, secret);
+  const { error } = await admin.rpc("nmre_save_gmail_tokens", {
+    p_email: ACCOUNT,
+    p_token_ciphertext: ciphertext,
+    p_scope: String(updated.scope || ""),
+    p_expires_at: expiry
+  });
+  if (error) throw new Error("Aggiornamento token Gmail non riuscito");
+  return fresh.access_token;
+}
+
+async function gmailProfile(token: string): Promise<string> {
+  const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+    headers: { Authorization: "Bearer " + token },
+    signal: AbortSignal.timeout(20000)
+  });
+  if (!response.ok) throw new Error("Lettura profilo Gmail non riuscita (" + response.status + ")");
+  const profile = await response.json();
+
+  if (String(profile.emailAddress || "").toLowerCase() !== ACCOUNT) {
+    throw new Error("La casella Gmail autorizzata non corrisponde");
+  }
+  const historyId = String(profile.historyId || "");
+  if (!/^[0-9]{1,30}$/.test(historyId)) throw new Error("Cronologia Gmail non disponibile");
+  return historyId;
+}
+
+async function readSyncCursor(admin: any): Promise<string | null> {
+  const { data, error } = await admin.rpc("nmre_get_gmail_sync_state");
+  if (error) throw new Error("Lettura dello stato di sincronizzazione Gmail non riuscita");
+  const row = Array.isArray(data) ? data[0] : data;
+  const value = String(row?.history_id || "");
+  return /^[0-9]{1,30}$/.test(value) ? value : null;
+}
+
+async function saveSyncCursor(admin: any, historyId: string): Promise<void> {
+  const { error } = await admin.rpc("nmre_save_gmail_sync_state", { p_history_id: historyId });
+  if (error) throw new Error("Salvataggio dello stato di sincronizzazione Gmail non riuscito");
+}
+
+async function listFullSyncMessageIds(token: string): Promise<string[]> {
+  const ids = new Set<string>();
+  let pageToken: string | undefined;
+  let pages = 0;
+
+  do {
+    const params = new URLSearchParams({ maxResults: "100", q: "newer_than:30d" });
+    if (pageToken) params.set("pageToken", pageToken);
+
+    const response = await fetch(
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages?" + params.toString(),
+      {
+        headers: { Authorization: "Bearer " + token },
+        signal: AbortSignal.timeout(20000)
+      }
+    );
+    if (!response.ok) throw new Error("Ricerca Gmail non riuscita (" + response.status + ")");
+
+    const result = await response.json();
+    for (const message of Array.isArray(result.messages) ? result.messages : []) {
+      if (typeof message?.id === "string" && message.id) ids.add(message.id);
+    }
+
+    pageToken = typeof result.nextPageToken === "string" ? result.nextPageToken : undefined;
+    pages++;
+    if (pageToken && pages >= 100) {
+      throw new Error("La sincronizzazione completa supera il limite di sicurezza di 10.000 messaggi; il cursore non è stato aggiornato");
+    }
+  } while (pageToken);
+
+  return [...ids];
+}
+
+type HistorySyncResult = {
+  ids: string[];
+  historyId: string;
+  historyRecords: number;
+};
+
+async function listHistoryMessageIds(
+  token: string,
+  startHistoryId: string
+): Promise<HistorySyncResult | null> {
+  const ids = new Set<string>();
+  let pageToken: string | undefined;
+  let latestHistoryId: string | null = null;
+  let historyRecords = 0;
+  let pages = 0;
+
+  do {
+    const params = new URLSearchParams({
+      startHistoryId,
+      maxResults: "500"
+    });
+    params.append("historyTypes", "messageAdded");
+    params.append("historyTypes", "labelAdded");
+    if (pageToken) params.set("pageToken", pageToken);
+
+    const response = await fetch(
+      "https://gmail.googleapis.com/gmail/v1/users/me/history?" + params.toString(),
+      {
+        headers: { Authorization: "Bearer " + token },
+        signal: AbortSignal.timeout(20000)
+      }
+    );
+
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error("Lettura della cronologia Gmail non riuscita (" + response.status + ")");
+
+    const result = await response.json();
+    const history = Array.isArray(result.history) ? result.history : [];
+    historyRecords += history.length;
+    for (const id of collectHistoryMessageIds(history)) ids.add(id);
+
+    if (typeof result.historyId === "string" && /^[0-9]{1,30}$/.test(result.historyId)) {
+      latestHistoryId = result.historyId;
+    }
+
+    pageToken = typeof result.nextPageToken === "string" ? result.nextPageToken : undefined;
+    pages++;
+    if (pageToken && pages >= 20) {
+      throw new Error("La cronologia Gmail supera il limite di sicurezza di 10.000 record; il cursore non è stato aggiornato");
+    }
+  } while (pageToken);
+
+  if (!latestHistoryId) throw new Error("Gmail non ha restituito il nuovo identificativo della cronologia");
+  return { ids: [...ids], historyId: latestHistoryId, historyRecords };
+}
+
+function decode(value: string): string {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+  const binary = atob(padded);
+  return new TextDecoder("utf-8", { fatal: false }).decode(
+    Uint8Array.from(binary, character => character.charCodeAt(0))
+  );
+}
+
+function bodyParts(part: any): string[] {
+  const output: string[] = [];
+  if (part?.body?.data && part.mimeType === "text/plain") {
+    output.push(decode(part.body.data));
+  } else if (part?.body?.data && part.mimeType === "text/html") {
+    const html = decode(part.body.data)
+      .replace(/<\s*(script|style)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, " ")
+      .replace(/<\s*a\b[^>]*href=["']([^"']+)["'][^>]*>/gi, " $1 ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&quot;/gi, "\"")
+      .replace(/&#39;/gi, "'")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">");
+    output.push(html);
+  }
+  for (const child of part?.parts || []) output.push(...bodyParts(child));
+  return output;
+}
+
+async function readEmail(messageId: string, token: string): Promise<any | null> {
+  const response = await fetch(
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages/" + encodeURIComponent(messageId) + "?format=full",
+    {
+      headers: { Authorization: "Bearer " + token },
+      signal: AbortSignal.timeout(20000)
+    }
+  );
+
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error("Lettura del messaggio Gmail non riuscita (" + response.status + ")");
+
+  const email = await response.json();
+  const headers = email.payload?.headers || [];
+  const get = (name: string) =>
+    headers.find((header: any) => header.name?.toLowerCase() === name.toLowerCase())?.value || "";
+
+  return {
+    id: email.id,
+    labels: Array.isArray(email.labelIds) ? email.labelIds : [],
+    from: get("From"),
+    subject: get("Subject"),
+    date: get("Date"),
+    snippet: (email.snippet || "").slice(0, 500),
+    bodyText: bodyParts(email.payload).join("\n").slice(0, 8000)
+  };
+}
+
+
 type SellerRegistryEntry = {
   seller_type: "Privato" | "Agenzia";
   identifier_type: "identity" | "email" | "phone";
