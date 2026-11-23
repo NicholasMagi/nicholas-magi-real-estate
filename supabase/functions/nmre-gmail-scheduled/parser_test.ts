@@ -1,5 +1,5 @@
 import {
-  municipality,price,listingPrice,listingUrl,propertyEmail,propertyType,surface,rooms,
+  municipality,price,listingPrice,priceReduction,listingUrl,propertyEmail,propertyType,surface,rooms,
   bedrooms,bathrooms,sellerClassification,resolveListingUrl,canonicalListingKey
 } from "./_shared/parser.ts";
 
@@ -17,6 +17,13 @@ Deno.test("prezzo italiano con separatore migliaia",()=>{
   assertEquals(price("€ 112.950 214 m²"),112950,"prezzo prima di superficie a tre cifre");
   assertEquals(listingPrice("notifica senza importo","Quadrilocale € 246.000 118 m²"),246000,"recupera prezzo dal titolo dell’annuncio");
   assertEquals(listingPrice("notifica senza importo","Appartamento in vendita 118 m²"),null,"non inventa il prezzo mancante");
+  assertEquals(priceReduction("€ 167.000 € 179.000 (-6,7%)"),{
+    currentPrice:167000,previousPrice:179000,reductionAmount:12000,reductionPercent:6.7
+  },"legge il ribasso esplicito del portale");
+  assertEquals(priceReduction("€ 85.000 € 105.000 (-19,0%)")?.reductionPercent,19,"legge un ribasso del 19%");
+  assertEquals(priceReduction("€ 179.000"),null,"non inventa il prezzo precedente");
+  assertEquals(priceReduction("€ 180.000 € 179.000 (-6,7%)"),null,"rifiuta coppie prezzo incoerenti");
+  assertEquals(priceReduction("€ 167.000 € 179.000 (-20,0%)"),null,"rifiuta percentuali discordanti");
 });
 Deno.test("estrazione tipologia, metratura e vani",()=>{
   assertEquals(propertyType("Appartamento trilocale con balcone"),"Trilocale","tipologia trilocale");
