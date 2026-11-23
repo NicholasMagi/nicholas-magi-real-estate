@@ -89,6 +89,20 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .dash-overview-item strong{display:block;font-size:18px;font-variant-numeric:tabular-nums}
 .dash-overview-item span{display:block;color:var(--muted);font-size:10px;line-height:1.4;margin-top:4px}
 .dash-link{border:0;background:transparent;color:#785d35;padding:0;font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+
+.search-filter-panel{background:#fbfcfd;border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0 14px}
+.search-filter-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.search-filter-title{font-size:12px;font-weight:700;color:#35435a}
+.search-filter-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.search-filter-field{min-width:0}
+.search-filter-field label{margin:0 0 5px;font-size:10px;letter-spacing:.25px;text-transform:uppercase;color:#718096}
+.search-filter-field input,.search-filter-field select{padding:9px 10px;border-radius:8px;font-size:12px;min-width:0}
+.search-filter-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:11px}
+.search-filter-count{font-size:11px;color:var(--muted)}
+.search-filter-actions button{padding:8px 11px;font-size:11px}
+@media(max-width:900px){.search-filter-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:600px){.search-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.search-filter-panel{padding:11px}.search-filter-head{align-items:flex-start;flex-direction:column}}
+
 .dash-section-anchor{scroll-margin-top:16px}
 @media(max-width:900px){.dash-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-grid{grid-template-columns:1fr}}
 @media(max-width:650px){.dash-hero{padding:20px;align-items:flex-start;flex-direction:column}.dash-title{font-size:24px}.dash-hero-actions{width:100%}.dash-hero-actions button{flex:1}.dash-metrics{gap:8px}.dash-metric{padding:13px}.dash-metric-value{font-size:26px}.dash-latest{grid-template-columns:1fr}.dash-overview{grid-template-columns:repeat(3,minmax(0,1fr))}.dash-pipeline-row{grid-template-columns:100px minmax(35px,1fr) 24px;gap:7px}.dash-pipeline-label{font-size:11px}.dash-priority button{padding:7px 8px}}
@@ -248,7 +262,23 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <section id="candidateSection" class="panel dash-section-anchor">
 <div class="topline"><h2>Annunci privati e opportunità da valutare</h2><div class="actions"><button class="secondary" id="exportCandidatesCsv">Candidati CSV</button><button class="secondary" id="exportCandidatesXlsx">Candidati Excel</button><button class="secondary" id="refreshCandidates">Aggiorna</button></div></div>
 <p class="hint">Titolo, comune, prezzo, tipologia, superficie, locali e link vengono estratti quando presenti. Le informazioni mancanti possono essere completate prima della conferma. Gli annunci ambigui restano in sospeso finché non li approva.</p>
-<input id="candidateSearch" type="search" placeholder="Cerca per titolo, comune o portale" aria-label="Cerca annunci">
+<div class="search-filter-panel">
+  <div class="search-filter-head"><div class="search-filter-title">Ricerca opportunità · Filtri avanzati</div><span class="small">I risultati si aggiornano mentre modifica i filtri</span></div>
+  <div class="search-filter-grid">
+    <div class="search-filter-field"><label for="candidateSearch">Parola chiave</label><input id="candidateSearch" type="search" placeholder="Titolo, via, comune, portale"></div>
+    <div class="search-filter-field"><label for="candidateTownFilter">Comune</label><select id="candidateTownFilter"><option value="">Tutti i comuni</option></select></div>
+    <div class="search-filter-field"><label for="candidateTypeFilter">Tipologia</label><select id="candidateTypeFilter"><option value="">Tutte le tipologie</option></select></div>
+    <div class="search-filter-field"><label for="candidatePortalFilter">Portale</label><select id="candidatePortalFilter"><option value="">Tutti i portali</option></select></div>
+    <div class="search-filter-field"><label for="candidateSellerFilter">Venditore</label><select id="candidateSellerFilter"><option value="">Tutti</option><option value="Privato">Privato riconosciuto</option><option value="Da verificare">Da verificare</option></select></div>
+    <div class="search-filter-field"><label for="candidatePriceMin">Prezzo minimo (€)</label><input id="candidatePriceMin" type="number" min="0" step="1000" placeholder="Nessun minimo"></div>
+    <div class="search-filter-field"><label for="candidatePriceMax">Prezzo massimo (€)</label><input id="candidatePriceMax" type="number" min="0" step="1000" placeholder="Nessun massimo"></div>
+    <div class="search-filter-field"><label for="candidateSurfaceMin">Superficie minima (m²)</label><input id="candidateSurfaceMin" type="number" min="0" step="5" placeholder="Qualsiasi"></div>
+    <div class="search-filter-field"><label for="candidateSurfaceMax">Superficie massima (m²)</label><input id="candidateSurfaceMax" type="number" min="0" step="5" placeholder="Qualsiasi"></div>
+    <div class="search-filter-field"><label for="candidateFromFilter">Pubblicato dal</label><input id="candidateFromFilter" type="date"></div>
+    <div class="search-filter-field"><label for="candidateToFilter">Pubblicato al</label><input id="candidateToFilter" type="date"></div>
+  </div>
+  <div class="search-filter-actions"><span id="candidateFilterCount" class="search-filter-count">Caricamento risultati…</span><button class="secondary" id="candidateResetFilters" type="button">Azzera filtri</button></div>
+</div>
 <div id="candidateList"><p class="hint">Nessun candidato caricato.</p></div>
 <div id="candidateMsg" class="status"></div>
 </section>
@@ -303,9 +333,23 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 
 <section id="archiveSection" class="panel dash-section-anchor">
 <div class="topline"><h2>Archivio annunci</h2><div class="actions"><button class="secondary" id="exportCsv">Esporta CSV</button><button class="secondary" id="exportXlsx">Esporta Excel</button><button class="secondary" id="refresh">Aggiorna</button></div></div>
-<div class="toolbar">
-<input id="listingSearch" type="search" placeholder="Cerca per titolo, comune o fonte">
-<select id="sellerFilter" aria-label="Filtra per venditore"><option value="">Tutti i venditori</option><option value="Privato">Privato</option><option value="Agenzia">Agenzia</option><option value="Da verificare">Da verificare</option></select><select id="contactFilter" aria-label="Filtra per stato contatto"><option value="">Tutti gli stati</option><option value="da_contattare">Da contattare</option><option value="primo_contatto">Primo contatto</option><option value="interessato">Interessato</option><option value="appuntamento">Appuntamento</option><option value="incarico_acquisito">Incarico acquisito</option><option value="non_interessato">Non interessato</option></select>
+<div class="search-filter-panel">
+  <div class="search-filter-head"><div class="search-filter-title">Ricerca archivio · Filtri commerciali e immobiliari</div><span class="small">Combinabili tra loro</span></div>
+  <div class="search-filter-grid">
+    <div class="search-filter-field"><label for="listingSearch">Parola chiave</label><input id="listingSearch" type="search" placeholder="Titolo, via, comune, contatto"></div>
+    <div class="search-filter-field"><label for="listingTownFilter">Comune</label><select id="listingTownFilter"><option value="">Tutti i comuni</option></select></div>
+    <div class="search-filter-field"><label for="listingTypeFilter">Tipologia</label><select id="listingTypeFilter"><option value="">Tutte le tipologie</option></select></div>
+    <div class="search-filter-field"><label for="listingPortalFilter">Portale / fonte</label><select id="listingPortalFilter"><option value="">Tutte le fonti</option></select></div>
+    <div class="search-filter-field"><label for="sellerFilter">Venditore</label><select id="sellerFilter"><option value="">Tutti i venditori</option><option value="Privato">Privato</option><option value="Agenzia">Agenzia</option><option value="Da verificare">Da verificare</option></select></div>
+    <div class="search-filter-field"><label for="contactFilter">Stato commerciale</label><select id="contactFilter"><option value="">Tutti gli stati</option><option value="da_contattare">Da contattare</option><option value="primo_contatto">Primo contatto</option><option value="interessato">Interessato</option><option value="appuntamento">Appuntamento</option><option value="incarico_acquisito">Incarico acquisito</option><option value="non_interessato">Non interessato</option></select></div>
+    <div class="search-filter-field"><label for="listingPriceMin">Prezzo minimo (€)</label><input id="listingPriceMin" type="number" min="0" step="1000" placeholder="Nessun minimo"></div>
+    <div class="search-filter-field"><label for="listingPriceMax">Prezzo massimo (€)</label><input id="listingPriceMax" type="number" min="0" step="1000" placeholder="Nessun massimo"></div>
+    <div class="search-filter-field"><label for="listingSurfaceMin">Superficie minima (m²)</label><input id="listingSurfaceMin" type="number" min="0" step="5" placeholder="Qualsiasi"></div>
+    <div class="search-filter-field"><label for="listingSurfaceMax">Superficie massima (m²)</label><input id="listingSurfaceMax" type="number" min="0" step="5" placeholder="Qualsiasi"></div>
+    <div class="search-filter-field"><label for="listingRoomsMin">Locali minimi</label><input id="listingRoomsMin" type="number" min="0" step="0.5" placeholder="Qualsiasi"></div>
+    <div class="search-filter-field"><label for="listingRoomsMax">Locali massimi</label><input id="listingRoomsMax" type="number" min="0" step="0.5" placeholder="Qualsiasi"></div>
+  </div>
+  <div class="search-filter-actions"><span id="listingFilterCount" class="search-filter-count">Caricamento risultati…</span><button class="secondary" id="listingResetFilters" type="button">Azzera filtri</button></div>
 </div>
 <div id="listingList"><p class="hint">Caricamento annunci...</p></div>
 <div id="listMsg" class="status"></div>
