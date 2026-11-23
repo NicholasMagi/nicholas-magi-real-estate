@@ -323,14 +323,14 @@ button:disabled{opacity:.55;cursor:not-allowed}
   </div>
 
   <div class="market-block">
-    <div class="market-block-head"><div><h3>1. Quotazioni ufficiali OMI</h3><p class="hint">Importi semestrali per zona OMI, tipologia e stato conservativo.</p></div></div>
+    <div class="market-block-head"><div><h3>1. Quotazioni ufficiali OMI</h3><p class="hint">Importi semestrali per zona OMI, tipologia e stato conservativo.</p></div><button class="gold" id="syncOmiOpenData" type="button">Aggiorna OMI automatico</button></div>
     <div class="market-import">
       <div class="market-import-field"><label for="omiCsvFile">File CSV ufficiale OMI · VALORI</label><input id="omiCsvFile" type="file" accept=".csv,text/csv"></div>
       <div class="market-import-field"><label for="omiImportSemester">Anno e semestre (es. 20252)</label><input id="omiImportSemester" inputmode="numeric" maxlength="5" placeholder="Rilevato dal nome file o inserisca 20252"></div>
       <div class="market-import-field"><label>Province incluse</label><div class="market-import-static">AN · MC · FM · AP</div></div>
       <div class="market-import-action"><button class="gold" id="importOmiCsv" type="button">Importa quotazioni CSV</button></div>
     </div>
-    <p class="small">Carichi il file VALORI scaricato dall'Agenzia delle Entrate. NMRE riconosce il tracciato ufficiale, conserva la fonte e importa solo le province marchigiane AN, MC, FM e AP. Il file ZONE non contiene gli intervalli di prezzo e non è quello da caricare.</p>
+    <p class="small">Il pulsante automatico importa l'ultimo semestre pubblico disponibile per Ancona, Osimo, Castelfidardo e Jesi. Il CSV VALORI ufficiale permette invece di aggiungere lo storico dei semestri e altre località delle Marche. Il file ZONE non contiene gli intervalli di prezzo.</p>
     <div id="omiImportStatus" class="status"></div>
 
     <div class="market-stat-grid">
@@ -359,7 +359,9 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div class="search-filter-field"><label for="omiCompareComune">Comune</label><select id="omiCompareComune"><option value="">Selezioni un comune</option></select></div>
       <div class="search-filter-field"><label for="omiCompareZone">Zona OMI</label><select id="omiCompareZone"><option value="">Selezioni una zona</option></select></div>
       <div class="search-filter-field"><label for="omiCompareType">Tipologia OMI</label><select id="omiCompareType"><option value="">Selezioni una tipologia</option></select></div>
+      <div class="search-filter-field"><label for="omiCompareDest">Destinazione OMI</label><select id="omiCompareDest"><option value="">Tutte le destinazioni</option></select></div>
       <div class="search-filter-field"><label for="omiCompareState">Stato conservativo</label><select id="omiCompareState"><option value="">Tutti gli stati</option></select></div>
+      <div class="search-filter-field"><label for="omiCompareSurfaceBasis">Superficie dell'immobile</label><select id="omiCompareSurfaceBasis"><option value="">Selezioni il criterio</option><option value="L">Lorda (L)</option><option value="N">Netta (N)</option></select></div>
       <div class="search-filter-field"><label for="omiComparePrice">Prezzo richiesto (€)</label><input id="omiComparePrice" type="number" min="0" step="1000" placeholder="Es. 180000"></div>
       <div class="search-filter-field"><label for="omiCompareSurface">Superficie (m²)</label><input id="omiCompareSurface" type="number" min="1" step="1" placeholder="Es. 100"></div>
     </div>
@@ -991,7 +993,7 @@ function renderOmiQuotations(){
     return;
   }
   const display=filtered.slice(0,150);
-  box.innerHTML='<table class="market-table"><thead><tr><th>Semestre</th><th>Comune</th><th>Zona</th><th>Tipologia</th><th>Stato</th><th>Compravendita €/m²</th><th>Locazione €/m²/mese</th><th>Sup.</th></tr></thead><tbody>'+
+  box.innerHTML='<table class="market-table"><thead><tr><th>Semestre</th><th>Comune</th><th>Zona</th><th>Destinazione</th><th>Tipologia</th><th>Stato</th><th>Compravendita €/m²</th><th>Locazione €/m²/mese</th><th>Sup.</th></tr></thead><tbody>'+
     display.map(row=>{
       const purchase=row.compr_min!==null&&row.compr_max!==null
         ?formatOmiEuro(row.compr_min)+" – "+formatOmiEuro(row.compr_max)
@@ -999,7 +1001,7 @@ function renderOmiQuotations(){
       const rental=row.loc_min!==null&&row.loc_max!==null
         ?formatOmiEuro(row.loc_min,2)+" – "+formatOmiEuro(row.loc_max,2)
         :"—";
-      return '<tr><td>'+safe(formatOmiSemester(row.semestre))+'</td><td>'+safe(row.comune)+'</td><td><strong>'+safe(row.zona)+'</strong></td><td>'+safe(row.tipologia)+'</td><td>'+safe(row.stato||row.stato_prevalente||"—")+'</td><td>'+safe(purchase)+'</td><td>'+safe(rental)+'</td><td>'+safe(row.sup_nl_compr||"—")+'</td></tr>';
+      return '<tr><td>'+safe(formatOmiSemester(row.semestre))+'</td><td>'+safe(row.comune)+'</td><td><strong>'+safe(row.zona)+'</strong>'+(row.dizione?'<br><span class="small">'+safe(row.dizione)+'</span>':"")+'</td><td>'+safe(row.destinazione||"—")+'</td><td>'+safe(row.tipologia)+'</td><td>'+safe(row.stato||row.stato_prevalente||"—")+'</td><td>'+safe(purchase)+'</td><td>'+safe(rental)+'</td><td>'+safe(row.sup_nl_compr||"—")+'</td></tr>';
     }).join("")+'</tbody></table>'+
     (filtered.length>display.length?'<p class="small">Mostrate le prime '+display.length+' righe. Raffini i filtri per consultare gli altri risultati.</p>':"");
   updateOmiCompareOptions();
@@ -1014,26 +1016,35 @@ function updateOmiCompareOptions(){
   marketFillSelect("omiCompareType",zoneRows.map(row=>row.tipologia),"Selezioni una tipologia");
   const type=$("omiCompareType").value;
   const typeRows=zoneRows.filter(row=>!type||row.tipologia===type);
-  marketFillSelect("omiCompareState",typeRows.map(row=>row.stato||row.stato_prevalente),"Tutti gli stati");
+  marketFillSelect("omiCompareDest",typeRows.map(row=>row.destinazione),"Tutte le destinazioni");
+  const destination=$("omiCompareDest").value;
+  const destinationRows=typeRows.filter(row=>!destination||row.destinazione===destination);
+  marketFillSelect("omiCompareState",destinationRows.map(row=>row.stato||row.stato_prevalente),"Tutti gli stati");
 }
+
 
 function runOmiComparison(){
   const town=$("omiCompareComune").value;
   const zone=$("omiCompareZone").value;
   const type=$("omiCompareType").value;
+  const destination=$("omiCompareDest").value;
   const state=$("omiCompareState").value;
+  const surfaceBasis=$("omiCompareSurfaceBasis").value;
   const asking=parseOmiNumber($("omiComparePrice").value);
   const surface=parseOmiNumber($("omiCompareSurface").value);
   const target=$("omiCompareResult");
-  if(!town||!zone||!type||!asking||!surface||surface<=0){
-    target.textContent="Selezioni comune, zona e tipologia e inserisca prezzo e superficie.";
+  if(!town||!zone||!type||!surfaceBasis||!asking||!surface||surface<=0){
+    target.textContent="Selezioni comune, zona, tipologia e criterio di superficie; inserisca prezzo e superficie.";
     return;
   }
   const pricePerSqm=asking/surface;
   let matches=omiQuotationCache.filter(row=>row.comune===town&&row.zona===zone&&row.tipologia===type&&
-    (!state||(row.stato||row.stato_prevalente)===state)&&row.compr_min!==null&&row.compr_max!==null);
+    (!destination||row.destinazione===destination)&&
+    (!state||(row.stato||row.stato_prevalente)===state)&&
+    (!row.sup_nl_compr||row.sup_nl_compr===surfaceBasis)&&
+    row.compr_min!==null&&row.compr_max!==null);
   if(!matches.length){
-    target.textContent="Non ci sono intervalli OMI di compravendita importati per questa combinazione. Verifichi il semestre e lo stato conservativo.";
+    target.textContent="Non ci sono intervalli OMI di compravendita importati per questa combinazione e per la superficie selezionata. Verifichi destinazione e stato conservativo.";
     return;
   }
   const latest=Math.max(...matches.map(row=>Number(row.semestre)));
@@ -1045,10 +1056,11 @@ function runOmiComparison(){
         ?((Number(row.compr_min)/pricePerSqm)-1)*100
         :pricePerSqm>Number(row.compr_max)
           ?((pricePerSqm/Number(row.compr_max))-1)*100:0;
-      return '<div><span>Stato '+safe(row.stato||row.stato_prevalente||"non indicato")+' · superficie OMI '+safe(row.sup_nl_compr||"non indicata")+'</span><strong>'+safe(formatOmiEuro(row.compr_min))+' – '+safe(formatOmiEuro(row.compr_max))+'/m²</strong><span>'+safe(relation)+(diff?' · scostamento '+safe(diff.toFixed(1))+'% dal limite':'')+'</span></div>';
+      return '<div><span>'+safe(row.destinazione||"Destinazione non indicata")+' · Stato '+safe(row.stato||row.stato_prevalente||"non indicato")+' · superficie OMI '+safe(row.sup_nl_compr||"non indicata")+'</span><strong>'+safe(formatOmiEuro(row.compr_min))+' – '+safe(formatOmiEuro(row.compr_max))+'/m²</strong><span>'+safe(relation)+(diff?' · scostamento '+safe(diff.toFixed(1))+'% dal limite':'')+'</span></div>';
     }).join("")+'</div>'+
-    '<span>Confronto indicativo tra prezzo richiesto e intervallo OMI per zona e tipologia. Le quotazioni OMI non sono prezzi di singole compravendite e non sostituiscono sopralluogo, comparabili e valutazione professionale.</span>';
+    '<span>Confronto indicativo tra prezzo richiesto e intervallo OMI per zona, tipologia, destinazione, stato e criterio di superficie. Non sono prezzi di singole compravendite e non sostituiscono sopralluogo, comparabili e valutazione professionale.</span>';
 }
+
 
 async function loadOmiQuotations(){
   if(!currentUser||!supabase)return;
@@ -1074,6 +1086,126 @@ async function loadOmiQuotations(){
   ],"Selezioni un comune");
   updateOmiCompareOptions();
   renderOmiQuotations();
+}
+
+const OMI_OPEN_DATA_BASE="https://cruscotto-italia.dati.gov.it/data";
+const OMI_CORE_MUNICIPALITIES=[
+  {istat:"042002",name:"Ancona",province:"AN"},
+  {istat:"042010",name:"Castelfidardo",province:"AN"},
+  {istat:"042021",name:"Jesi",province:"AN"},
+  {istat:"042034",name:"Osimo",province:"AN"}
+];
+
+function finiteOmiValue(value){
+  if(value===null||value===undefined||value==="")return null;
+  const number=Number(value);
+  return Number.isFinite(number)?number:null;
+}
+
+async function syncOmiOpenData(){
+  if(omiImportBusy||!currentUser||!supabase)return;
+  const button=$("syncOmiOpenData");
+  button.disabled=true;omiImportBusy=true;
+  const allRows=[],loaded=[],failed=[];
+  try{
+    msg("omiImportStatus","Collegamento all'archivio pubblico OMI di Cruscotto Italia / AgID...");
+    for(const municipality of OMI_CORE_MUNICIPALITIES){
+      try{
+        const url=OMI_OPEN_DATA_BASE+"/omi/"+municipality.istat+".json";
+        const response=await fetch(url,{
+          headers:{Accept:"application/json"},
+          cache:"no-store",
+          signal:AbortSignal.timeout(25000)
+        });
+        if(!response.ok)throw new Error("HTTP "+response.status);
+        const shard=await response.json();
+        if(String(shard.istat_code||"")!==municipality.istat)throw new Error("Codice ISTAT non corrispondente");
+        const period=String(shard._data_period||"").match(/^(20\d{2})\/([12])$/);
+        if(!period)throw new Error("Semestre OMI non riconosciuto");
+        if(!Array.isArray(shard.zone))throw new Error("Tracciato OMI privo dell'elenco zone");
+        const semester=Number(period[1]+period[2]);
+        let municipalityRows=0;
+        for(const zone of shard.zone){
+          const destinations=zone.destinazioni||{};
+          for(const [destination,items] of Object.entries(destinations)){
+            if(!Array.isArray(items))continue;
+            for(const item of items){
+              const typology=String(item.tipologia||"Non indicata").trim();
+              const state=String(item.stato||"").trim();
+              const buyMin=finiteOmiValue(item.cv_min);
+              const buyMax=finiteOmiValue(item.cv_max);
+              const rentMin=finiteOmiValue(item.loc_min);
+              const rentMax=finiteOmiValue(item.loc_max);
+              if(![buyMin,buyMax,rentMin,rentMax].some(value=>value!==null))continue;
+              allRows.push({
+                owner_id:currentUser.id,
+                semestre:semester,
+                provincia:municipality.province,
+                comune_istat:municipality.istat,
+                comune:String(shard.comune||municipality.name),
+                fascia:String(zone.fascia||""),
+                zona:String(zone.zona||""),
+                dizione:String(zone.dizione||""),
+                link_zona:String(zone.link_zona||zone.url_omi||""),
+                destinazione:String(destination),
+                cod_tip:String(destination)+"|"+typology,
+                tipologia:typology,
+                stato:state,
+                stato_prevalente:state,
+                compr_min:buyMin,
+                compr_max:buyMax,
+                sup_nl_compr:String(item.sup_cv||""),
+                loc_min:rentMin,
+                loc_max:rentMax,
+                sup_nl_loc:String(item.sup_loc||""),
+                source_file:"Cruscotto Italia / data/omi/"+municipality.istat+".json",
+                source_label:"Agenzia delle Entrate - OMI · dataset pubblico Cruscotto Italia (AgID)",
+                source_license:"CC BY 4.0",
+                raw_data:{
+                  data_period:String(shard._data_period||""),
+                  attribution:String(shard._attribution||"Agenzia delle Entrate - OMI"),
+                  source_url:String(shard._source_url||""),
+                  url_omi:String(zone.url_omi||""),
+                  kpi:shard.kpi||{},
+                  destinazione:String(destination),
+                  original:item
+                }
+              });
+              municipalityRows++;
+            }
+          }
+        }
+        if(!municipalityRows)throw new Error("Nessuna quotazione disponibile nello shard");
+        loaded.push(municipality.name+" ("+municipalityRows+")");
+        button.textContent="Letti "+loaded.length+" / "+OMI_CORE_MUNICIPALITIES.length+" comuni";
+      }catch(error){
+        failed.push(municipality.name+": "+(error instanceof Error?error.message:"errore di lettura"));
+      }
+    }
+    if(!allRows.length)throw new Error("Nessuna quotazione raggiungibile. Può usare in alternativa il CSV VALORI ufficiale.");
+    const deduplicated=new Map();
+    for(const row of allRows){
+      const key=[row.semestre,row.comune_istat,row.zona,row.cod_tip,row.stato].join("|");
+      deduplicated.set(key,row);
+    }
+    const rows=[...deduplicated.values()];
+    let saved=0;
+    for(let offset=0;offset<rows.length;offset+=200){
+      const chunk=rows.slice(offset,offset+200);
+      const {error}=await supabase.from("nmre_omi_quotazioni")
+        .upsert(chunk,{onConflict:"owner_id,semestre,comune_istat,zona,cod_tip,stato"});
+      if(error)throw new Error("Salvataggio OMI non riuscito: "+error.message);
+      saved+=chunk.length;
+      button.textContent="Salvati "+saved.toLocaleString("it-IT")+" / "+rows.length.toLocaleString("it-IT");
+    }
+    await loadOmiQuotations();
+    const statusText="Aggiornamento completato: "+saved.toLocaleString("it-IT")+" righe OMI del semestre "+formatOmiSemester(rows[0].semestre)+". Comuni caricati: "+loaded.join(", ")+".";
+    msg("omiImportStatus",statusText+(failed.length?" Non disponibili: "+failed.join("; "):"")+" Fonte dati: Agenzia delle Entrate - OMI; diffusione open data Cruscotto Italia / AgID, licenza CC BY 4.0.",failed.length?"":"success");
+  }catch(error){
+    msg("omiImportStatus",error instanceof Error?error.message:"Aggiornamento OMI automatico non riuscito.","error");
+  }finally{
+    button.disabled=false;button.textContent="Aggiorna OMI automatico";omiImportBusy=false;
+  }
 }
 
 async function importOmiCsv(){
@@ -1124,7 +1256,9 @@ async function importOmiCsv(){
       if(!commune||!communeIstat||!zone||!tipCode||(![buyMin,buyMax,rentMin,rentMax].some(value=>value!==null)))continue;
       rows.push({
         owner_id:currentUser.id,semestre:Number(semester),provincia:province,comune_istat:communeIstat,
-        comune,fascia:get("FASCIA"),zona,link_zona:get("LINK_ZONA")||communeIstat+":"+zone,
+        comune,fascia:get("FASCIA"),zona,dizione:get("DIZIONE")||get("DESCRIZIONE_ZONA")||"",
+        destinazione:get("DESTINAZIONE")||get("DESCR_DESTINAZIONE")||"",
+        link_zona:get("LINK_ZONA")||communeIstat+":"+zone,
         cod_tip:tipCode,tipologia:tipology||"Non indicata",stato:get("STATO"),
         stato_prevalente:get("STATO_PREVALENTE"),compr_min:buyMin,compr_max:buyMax,
         sup_nl_compr:get("SUP_NL_COMPR"),loc_min:rentMin,loc_max:rentMax,
@@ -2575,12 +2709,14 @@ $("connectGmail").addEventListener("click",async()=>{
 
 
 $("importOmiCsv").addEventListener("click",importOmiCsv);
+$("syncOmiOpenData").addEventListener("click",syncOmiOpenData);
 $("refreshMarketData").addEventListener("click",loadMarketData);
 ["omiComuneFilter","omiSemesterFilter","omiTypeFilter"].forEach(id=>$(id).addEventListener("change",renderOmiQuotations));
 $("omiZoneSearch").addEventListener("input",renderOmiQuotations);
 $("omiCompareComune").addEventListener("change",updateOmiCompareOptions);
 $("omiCompareZone").addEventListener("change",updateOmiCompareOptions);
 $("omiCompareType").addEventListener("change",updateOmiCompareOptions);
+$("omiCompareDest").addEventListener("change",updateOmiCompareOptions);
 $("runOmiCompare").addEventListener("click",runOmiComparison);
 $("declaredDeedForm").addEventListener("submit",saveDeclaredDeed);
 $("deedPropertyCount").addEventListener("input",()=>{
