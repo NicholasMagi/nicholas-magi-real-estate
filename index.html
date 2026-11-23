@@ -3444,13 +3444,52 @@ function syncCallTaskFields(card,changedField){
   dateLabel.textContent=status.value==="appuntamento"?"Data appuntamento":"Prossimo richiamo";
 }
 
+function followUpIntelligence(item,entry){
+ const status=item?.stato_contatto||"da_contattare";
+ const due=item?.prossimo_contatto_il?new Date(item.prossimo_contatto_il+"T00:00:00"):null;
+ const validDue=due&&!Number.isNaN(due.getTime());
+ const dateLabel=validDue?due.toLocaleDateString("it-IT"):"";
+ const last=item?.ultimo_contatto_il&&Number.isFinite(Date.parse(item.ultimo_contatto_il))
+  ?new Date(item.ultimo_contatto_il).toLocaleDateString("it-IT"):"";
+ if(status==="appuntamento")return {
+  title:"Confermare e preparare l'appuntamento",
+  detail:validDue?"Incontro previsto il "+dateLabel+". Confermi orario, luogo e documenti utili.":"Appuntamento in pipeline: verifichi data, orario e luogo.",
+  channel:"Conferma appuntamento"
+ };
+ if(status==="interessato")return {
+  title:"Trasformare l'interesse in un incontro",
+  detail:validDue?"Richiamo concordato per "+dateLabel+". Riprenda il filo e proponga un confronto concreto.":"Interesse registrato"+(last?" il "+last:"")+". Proponga un incontro conoscitivo e concordi il prossimo passo.",
+  channel:"Follow-up interessato"
+ };
+ if(status==="primo_contatto")return {
+  title:"Riprendere il contatto senza ricominciare da zero",
+  detail:validDue?"Ricontatto previsto per "+dateLabel+". Richiami facendo riferimento alla conversazione precedente.":"Primo contatto già avviato. Verifichi disponibilità e concordi una data precisa per risentirvi.",
+  channel:"Secondo contatto"
+ };
+ if(status==="da_contattare")return {
+  title:"Avviare il primo contatto",
+  detail:"Nessuna conversazione registrata: presenti il motivo della chiamata e chieda se sta gestendo direttamente la vendita.",
+  channel:"Primo contatto"
+ };
+ return {
+  title:"Verificare il prossimo passo",
+  detail:"Controlli lo storico e concordi con il proprietario un'azione e una data precise.",
+  channel:"Contatto"
+ };
+}
 function buildWhatsappMessage(item){
-  const title=String(item?.titolo||"l'immobile").trim();
-  const town=String(item?.comune||"").trim();
-  const portal=String(item?.portale||"").trim();
-  const property="«"+title+"»"+(town?" a "+town:"");
-  const source=portal?" che ho visto su "+portal:"";
-  return "Buongiorno, sono Nicholas Magi, consulente immobiliare. La contatto per il Suo annuncio relativo a "+property+source+". Vorrei chiederLe qualche informazione e capire se posso esserLe utile nella vendita. Quando Le sarebbe più comodo sentirci? La ringrazio e Le auguro una buona giornata.";
+ const title=String(item?.titolo||"l'immobile").trim();
+ const town=String(item?.comune||"").trim();
+ const portal=String(item?.portale||"").trim();
+ const property="«"+title+"»"+(town?" a "+town:"");
+ const source=portal?" che ho visto su "+portal:"";
+ const status=item?.stato_contatto||"da_contattare";
+ const date=item?.prossimo_contatto_il?new Date(item.prossimo_contatto_il+"T00:00:00"):null;
+ const dateLabel=date&&!Number.isNaN(date.getTime())?date.toLocaleDateString("it-IT"):"";
+ if(status==="appuntamento")return "Buongiorno, sono Nicholas Magi. Le scrivo per confermare il nostro appuntamento relativo a "+property+(dateLabel?" previsto per il "+dateLabel:"")+". Mi conferma cortesemente che sia tutto confermato? La ringrazio e Le auguro una buona giornata.";
+ if(status==="interessato")return "Buongiorno, sono Nicholas Magi, consulente immobiliare. La ricontatto in merito a "+property+". Come anticipato, mi farebbe piacere approfondire la situazione e illustrarLe un possibile percorso di vendita. Possiamo concordare un breve incontro? La ringrazio.";
+ if(status==="primo_contatto")return "Buongiorno, sono Nicholas Magi, consulente immobiliare. La ricontatto in merito al nostro precedente contatto relativo a "+property+". Se per Lei è ancora attuale, possiamo sentirci "+(dateLabel?"il "+dateLabel:"nei prossimi giorni") +" per aggiornarci sulla vendita. La ringrazio.";
+ return "Buongiorno, sono Nicholas Magi, consulente immobiliare. La contatto per il Suo annuncio relativo a "+property+source+". Vorrei chiederLe qualche informazione e capire se posso esserLe utile nella vendita. Quando Le sarebbe più comodo sentirci? La ringrazio e Le auguro una buona giornata.";
 }
 
 function renderCallCenter(){
@@ -3501,6 +3540,7 @@ function renderCallCenter(){
       +'<div class="call-task-meta">'+safe([item.comune,item.tipologia_immobile,item.portale].filter(Boolean).join(" · "))+'<br>'+safe(euro(item.prezzo))+' · '+safe(item.tipo_venditore||"Venditore da verificare")+'<br>'+safe(last)+'<br>'+safe(nextContact)+'</div></div>'
       +'<span class="call-task-status">'+safe(callQueueDateLabel(entry))+'</span></div>'
       +'<div class="call-task-contact">'+phone+whatsapp+email+noContact+'<button type="button" class="secondary" data-open-call-crm="'+safe(item.id)+'">Apri scheda CRM</button></div>'
+      +'<div class="hint call-followup-advice"><strong>Prossima mossa · '+safe(followUpIntelligence(item,entry).title)+'</strong><br>'+safe(followUpIntelligence(item,entry).detail)+'</div>'
       +'<div class="call-task-form">'
       +'<div><label>Stato commerciale</label><select data-call-status>'
       +'<option value="da_contattare"'+(item.stato_contatto==="da_contattare"||!item.stato_contatto?" selected":"")+'>Da contattare</option>'
