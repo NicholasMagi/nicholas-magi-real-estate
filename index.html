@@ -117,7 +117,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .dash-overview-item strong{display:block;font-size:18px;font-variant-numeric:tabular-nums}
 .dash-overview-item span{display:block;color:var(--muted);font-size:10px;line-height:1.4;margin-top:4px}
 .call-center{margin:0 0 14px}
-.call-center-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-bottom:13px}
+.call-center-metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px;margin-bottom:13px}
 .call-center-stat{border:1px solid var(--line);background:#fafbfc;border-radius:10px;padding:10px 12px;min-width:0}
 .call-center-stat strong{display:block;font-family:Georgia,serif;font-size:23px;color:var(--ink);font-variant-numeric:tabular-nums}
 .call-center-stat span{display:block;font-size:10px;color:var(--muted);margin-top:3px}
@@ -130,6 +130,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .call-task-today{border-left:4px solid #bd995b}
 .call-task-new{border-left:4px solid #718ca9}
 .call-task-plan{border-left:4px solid #a3aab5}
+.call-task-upcoming{border-left:4px solid #709b87}
+.call-task-appointment{border-left:4px solid #9b83b5}
 .call-task-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .call-task-title{font-size:13px;font-weight:700;color:var(--ink);line-height:1.4}
 .call-task-meta{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.55}
@@ -256,7 +258,9 @@ button:disabled{opacity:.55;cursor:not-allowed}
     <div class="call-center-metrics">
       <div class="call-center-stat"><strong id="callStatOverdue">0</strong><span>Richiami scaduti</span></div>
       <div class="call-center-stat"><strong id="callStatToday">0</strong><span>Da fare oggi</span></div>
+      <div class="call-center-stat"><strong id="callStatUpcoming">0</strong><span>Richiami nei prossimi 7 giorni</span></div>
       <div class="call-center-stat"><strong id="callStatNew">0</strong><span>Nuovi proprietari</span></div>
+      <div class="call-center-stat"><strong id="callStatAppointments">0</strong><span>Appuntamenti in pipeline</span></div>
       <div class="call-center-stat"><strong id="callStatReachable">0</strong><span>Con recapito telefonico</span></div>
     </div>
     <div class="call-center-toolbar">
@@ -265,7 +269,9 @@ button:disabled{opacity:.55;cursor:not-allowed}
         <option value="all">Tutte le attività</option>
         <option value="overdue">Richiami scaduti</option>
         <option value="today">Da fare oggi</option>
+        <option value="upcoming">Richiami nei prossimi 7 giorni</option>
         <option value="new">Nuovi proprietari</option>
+        <option value="appointment">Appuntamenti in pipeline</option>
         <option value="plan">Da pianificare</option>
       </select>
     </div>
@@ -2405,6 +2411,8 @@ function parseContactDetails(value){
 function callQueueModel(data,now=new Date()){
   const today=new Date(now);
   today.setHours(0,0,0,0);
+  const weekEnd=new Date(today);
+  weekEnd.setDate(weekEnd.getDate()+7);
   return (data||[]).map(item=>{
     const status=item.stato_contatto||"da_contattare";
     if(["incarico_acquisito","non_interessato"].includes(status)||item.tipo_venditore==="Agenzia")return null;
@@ -2414,9 +2422,13 @@ function callQueueModel(data,now=new Date()){
     let kind=null,sort=9;
     if(due&&due<today){kind="overdue";sort=0;}
     else if(due&&due.getTime()===today.getTime()){kind="today";sort=1;}
-    else if(due&&due>today){return null;}
-    else if(status==="da_contattare"){kind="new";sort=2;}
-    else if(["primo_contatto","interessato"].includes(status)){kind="plan";sort=3;}
+    else if(status==="appuntamento"){kind="appointment";sort=2;}
+    else if(due&&due>today){
+      if(due<=weekEnd){kind="upcoming";sort=3;}
+      else return null;
+    }
+    else if(status==="da_contattare"){kind="new";sort=4;}
+    else if(["primo_contatto","interessato"].includes(status)){kind="plan";sort=5;}
     else return null;
     const contact=parseContactDetails(item.contatto);
     const days=due?Math.round((due-today)/86400000):null;
@@ -2424,6 +2436,7 @@ function callQueueModel(data,now=new Date()){
   }).filter(Boolean).sort((a,b)=>{
     if(a.sort!==b.sort)return a.sort-b.sort;
     if(a.kind==="overdue"&&a.days!==b.days)return a.days-b.days;
+    if(a.kind==="upcoming"&&a.days!==b.days)return a.days-b.days;
     const aDate=a.item.created_at?Date.parse(a.item.created_at):0;
     const bDate=b.item.created_at?Date.parse(b.item.created_at):0;
     return aDate-bDate;
@@ -2433,6 +2446,8 @@ function callQueueModel(data,now=new Date()){
 function callQueueDateLabel(entry){
   if(entry.kind==="overdue")return "In ritardo di "+Math.abs(entry.days)+" "+(Math.abs(entry.days)===1?"giorno":"giorni");
   if(entry.kind==="today")return "Da fare oggi";
+  if(entry.kind==="upcoming")return "Richiamo tra "+entry.days+" "+(entry.days===1?"giorno":"giorni");
+  if(entry.kind==="appointment")return "Appuntamento in pipeline";
   if(entry.kind==="new")return "Primo contatto da avviare";
   return "Nessun richiamo programmato";
 }
@@ -2442,10 +2457,14 @@ function renderCallCenter(){
   const count=kind=>all.filter(entry=>entry.kind===kind).length;
   $("callStatOverdue").textContent=String(count("overdue"));
   $("callStatToday").textContent=String(count("today"));
+  $("callStatUpcoming").textContent=String(count("upcoming"));
   $("callStatNew").textContent=String(count("new"));
+  $("callStatAppointments").textContent=String(all.filter(entry=>entry.item.stato_contatto==="appuntamento").length);
   $("callStatReachable").textContent=String(all.filter(entry=>entry.contact.phone).length);
   const filter=$("callQueueFilter").value||"all";
-  const visible=filter==="all"?all:all.filter(entry=>entry.kind===filter);
+  const visible=filter==="all"?all:filter==="appointment"
+    ?all.filter(entry=>entry.item.stato_contatto==="appuntamento")
+    :all.filter(entry=>entry.kind===filter);
   $("callQueueCount").textContent=visible.length+" attività visualizzate · "+all.length+" attività da gestire";
   const box=$("callQueueList");
   if(!visible.length){
@@ -2461,6 +2480,9 @@ function renderCallCenter(){
     const last=item.ultimo_contatto_il&&Number.isFinite(Date.parse(item.ultimo_contatto_il))
       ?"Ultimo contatto: "+new Date(item.ultimo_contatto_il).toLocaleDateString("it-IT")
       :"Nessun contatto registrato";
+    const nextContact=item.prossimo_contatto_il
+      ?"Prossimo richiamo: "+new Date(item.prossimo_contatto_il+"T00:00:00").toLocaleDateString("it-IT")
+      :"Nessun richiamo fissato";
     const phone=contact.phone
       ?'<a class="call-link" href="tel:'+safe(contact.phone.tel)+'">Chiama '+safe(contact.phone.raw)+'</a>'
       :'';
@@ -2475,7 +2497,7 @@ function renderCallCenter(){
       :'';
     return '<article class="call-task call-task-'+entry.kind+'" data-call-task="'+safe(item.id)+'">'
       +'<div class="call-task-head"><div><div class="call-task-title">'+safe(item.titolo||"Immobile senza titolo")+'</div>'
-      +'<div class="call-task-meta">'+safe([item.comune,item.tipologia_immobile,item.portale].filter(Boolean).join(" · "))+'<br>'+safe(euro(item.prezzo))+' · '+safe(item.tipo_venditore||"Venditore da verificare")+'<br>'+safe(last)+'</div></div>'
+      +'<div class="call-task-meta">'+safe([item.comune,item.tipologia_immobile,item.portale].filter(Boolean).join(" · "))+'<br>'+safe(euro(item.prezzo))+' · '+safe(item.tipo_venditore||"Venditore da verificare")+'<br>'+safe(last)+'<br>'+safe(nextContact)+'</div></div>'
       +'<span class="call-task-status">'+safe(callQueueDateLabel(entry))+'</span></div>'
       +'<div class="call-task-contact">'+phone+whatsapp+email+noContact+'<button type="button" class="secondary" data-open-call-crm="'+safe(item.id)+'">Apri scheda CRM</button></div>'
       +'<div class="call-task-form">'
