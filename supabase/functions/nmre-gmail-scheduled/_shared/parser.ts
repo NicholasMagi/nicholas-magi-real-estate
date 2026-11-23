@@ -71,6 +71,36 @@ export function listingPrice(sourceText:string,titleText:string):number|null {
   return price(sourceText) ?? price(titleText);
 }
 
+export type ListingPriceReduction = {
+  currentPrice:number;
+  previousPrice:number;
+  reductionAmount:number;
+  reductionPercent:number;
+};
+
+/** Reads only explicit portal price-reduction notation. */
+export function priceReduction(value:string):ListingPriceReduction|null {
+  const text=normalizePropertyText(value);
+  const amount="((?:\\d{1,3}(?:\\.\\d{3})+|\\d+)(?:,\\d{1,2})?)";
+  const pattern=new RegExp(
+    "(?:€|eur)\\s*"+amount+
+    "\\s*(?:€|eur)\\s*"+amount+
+    "\\s*\\(\\s*[-−]\\s*(\\d{1,2}(?:[.,]\\d{1,2})?)\\s*%\\s*\\)",
+    "i"
+  );
+  const match=text.match(pattern);
+  if(!match)return null;
+  const currentPrice=parseItalianAmount(match[1]);
+  const previousPrice=parseItalianAmount(match[2]);
+  const declaredPercent=Number(match[3].replace(",","."));
+  if(currentPrice===null||previousPrice===null||previousPrice<=currentPrice)return null;
+  if(!Number.isFinite(declaredPercent)||declaredPercent<=0||declaredPercent>90)return null;
+  const reductionAmount=previousPrice-currentPrice;
+  const calculatedPercent=(reductionAmount/previousPrice)*100;
+  if(Math.abs(calculatedPercent-declaredPercent)>0.75)return null;
+  return {currentPrice,previousPrice,reductionAmount,reductionPercent:Math.round(calculatedPercent*100)/100};
+}
+
 export function propertyType(s:string):string|null {
   const value=normalizePropertyText(s);
   const patterns:Array<[string,RegExp]>=[
