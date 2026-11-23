@@ -1055,9 +1055,9 @@ function runOmiComparison(){
     '<div class="market-result-grid">'+matches.map(row=>{
       const relation=pricePerSqm<Number(row.compr_min)?"Sotto l'intervallo OMI":pricePerSqm>Number(row.compr_max)?"Sopra l'intervallo OMI":"Dentro l'intervallo OMI";
       const diff=pricePerSqm<Number(row.compr_min)
-        ?((Number(row.compr_min)/pricePerSqm)-1)*100
+        ?((Number(row.compr_min)-pricePerSqm)/Number(row.compr_min))*100
         :pricePerSqm>Number(row.compr_max)
-          ?((pricePerSqm/Number(row.compr_max))-1)*100:0;
+          ?((pricePerSqm-Number(row.compr_max))/Number(row.compr_max))*100:0;
       return '<div><span>'+safe(row.destinazione||"Destinazione non indicata")+' · Stato '+safe(row.stato||row.stato_prevalente||"non indicato")+' · superficie OMI '+safe(row.sup_nl_compr||"non indicata")+'</span><strong>'+safe(formatOmiEuro(row.compr_min))+' – '+safe(formatOmiEuro(row.compr_max))+'/m²</strong><span>'+safe(relation)+(diff?' · scostamento '+safe(diff.toFixed(1))+'% dal limite':'')+'</span></div>';
     }).join("")+'</div>'+
     '<span>Confronto indicativo tra prezzo richiesto e intervallo OMI per zona, tipologia, destinazione, stato e criterio di superficie. Non sono prezzi di singole compravendite e non sostituiscono sopralluogo, comparabili e valutazione professionale.</span>';
