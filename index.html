@@ -335,7 +335,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
   </div>
   <div class="search-filter-actions"><span id="candidateFilterCount" class="search-filter-count">Caricamento risultati…</span><button class="secondary" id="candidateResetFilters" type="button">Azzera filtri</button></div>
 </div>
-<p class="candidate-priority-legend">La priorità ordina gli annunci considerando venditore privato riconosciuto, freschezza della pubblicazione/notifica, link specifico e completezza dei dati. È un aiuto organizzativo: non stima il valore di mercato né la convenienza del prezzo.</p><p id="candidatePrioritySummary" class="candidate-priority-summary"></p><div id="candidateList"><p class="hint">Nessun candidato caricato.</p></div>
+<p class="candidate-priority-legend">La priorità ordina gli annunci considerando venditore privato riconosciuto, freschezza della pubblicazione/notifica, link specifico, completezza dei dati e presenza nei comuni principali di Ancona, Osimo, Castelfidardo e Jesi. È un aiuto organizzativo: non stima il valore di mercato né la convenienza del prezzo.</p><p id="candidatePrioritySummary" class="candidate-priority-summary"></p><div id="candidateList"><p class="hint">Nessun candidato caricato.</p></div>
 <div id="candidateMsg" class="status"></div>
 </section>
 
@@ -843,12 +843,15 @@ function candidatePriority(item,now=new Date()){
   }else reasons.push("Data non disponibile");
   if(isSpecificCandidateUrl(item.url))add(15,"Link specifico all'annuncio");
   else reasons.push(validUrl(item.url)?"Link non verificato come scheda specifica":"Link annuncio assente");
-  add(item.comune?8:0,"Comune presente");
-  add(Number(item.prezzo)>0?8:0,"Prezzo presente");
+  add(item.comune?6:0,"Comune presente");
+  const coreTerritory=new Set(["ancona","osimo","castelfidardo","jesi"]);
+  const municipality=normalizedMatchText(item.comune);
+  add(coreTerritory.has(municipality)?7:0,"Zona operativa principale");
+  add(Number(item.prezzo)>0?6:0,"Prezzo presente");
   add(item.tipologia_immobile?5:0,"Tipologia presente");
-  add(Number(item.superficie_mq)>0?6:0,"Superficie presente");
+  add(Number(item.superficie_mq)>0?5:0,"Superficie presente");
   add(Number(item.locali)>0?3:0,"Numero locali presente");
-  add(String(item.titolo||"").trim().length>=20?2:0,"Descrizione informativa");
+  add(String(item.titolo||"").trim().length>=20?1:0,"Descrizione informativa");
   add(String(item.contatto||"").trim()?3:0,"Contatto disponibile");
   score=Math.min(100,score);
   const level=score>=75?"high":score>=50?"medium":"low";
