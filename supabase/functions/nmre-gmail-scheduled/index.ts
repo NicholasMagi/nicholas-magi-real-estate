@@ -474,10 +474,11 @@ export default {
             stato: "scartato",
             notification_sender: null,
             email_subject: null,
+            deduplication_version: 1,
             updated_at: new Date().toISOString()
           })
           .eq("owner_id", owner)
-          .eq("stato", "da_verificare")
+          .in("stato", ["da_verificare","scartato"])
           .eq("seller_manual_override", false)
           .in("dedup_key", discardedKeys)
           .select("id");
