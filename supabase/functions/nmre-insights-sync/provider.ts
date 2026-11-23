@@ -39,8 +39,9 @@ export function buildInsightsSearchPayload(now: Date, lookbackDays = 30, page = 
   const minDate = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
   return {
     Filters: {
+      comparableTypeID: 1,
       contractTypeID: 1,
-      categoryTypeID: null,
+      categoryTypeID: 1,
       propertyTypeID: null,
       propertyQualityID: null,
       boundingBox: NMRE_BOUNDING_BOX,
