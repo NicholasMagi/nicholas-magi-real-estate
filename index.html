@@ -203,6 +203,7 @@ let currentUser = null;
 let candidateRefreshTimer = null;
 let listingCache = [];
 let candidateCache = [];
+let insightsCanImport = false;
 
 function msg(id,text,type=""){
   $(id).textContent=text;
@@ -379,13 +380,15 @@ async function checkInsightsApi(){
         :"Credenziali presenti · in attesa di autorizzazione scritta all'uso per acquisizione")
       :"In attesa di accesso API · "+(data.missingSecrets||[]).length+" credenziali server mancanti";
     $("insightsApiStatus").textContent=status;
-    $("syncInsightsApi").disabled=!data.canImport;
+    insightsCanImport=!!data.canImport;
+    $("syncInsightsApi").disabled=!insightsCanImport;
     msg("portalApiMsg",data.canImport
       ?"Collegamento autorizzato. Può avviare la ricerca degli ultimi 30 giorni."
       :(data.configured
         ?"Prima di importare, occorre la conferma scritta di Immobiliare.it Insights sull'uso dei risultati per acquisizione immobiliare."
         :"Connettore pronto, ma accesso professionale e autorizzazione non sono ancora configurati su Supabase."),"");
   }catch(error){
+    insightsCanImport=false;
     $("insightsApiStatus").textContent="Servizio non raggiungibile";
     $("syncInsightsApi").disabled=true;
     msg("portalApiMsg",error.message||"Impossibile verificare il connettore.","error");
@@ -421,7 +424,7 @@ async function syncInsightsApi(){
   }catch(error){
     msg("portalApiMsg",error.message||"Errore durante l'importazione.","error");
   }finally{
-    $("syncInsightsApi").disabled=false;
+    $("syncInsightsApi").disabled=!insightsCanImport;
     $("checkInsightsApi").disabled=false;
   }
 }
