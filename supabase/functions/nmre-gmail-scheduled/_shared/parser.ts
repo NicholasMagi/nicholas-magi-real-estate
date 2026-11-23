@@ -1,10 +1,27 @@
 const PORTALS = ["idealista.it","immobiliare.it","casa.it","subito.it","green-acres.it","green-acres.com","gate-away.com","trovacasa.it","wikicasa.it"];
 const TOWNS = ["Porto Sant'Elpidio","Porto Recanati","Porto San Giorgio","Civitanova Marche","Falconara Marittima","Santa Maria Nuova","Maiolati Spontini","Monte San Vito","Monte Urano","Monte Roberto","Montecassiano","Morro d'Alba","Montemarciano","Castelfidardo","Ancona","Osimo","Loreto","Recanati","Camerano","Numana","Sirolo","Jesi","Macerata","Fermo","Senigallia","Filottrano","Polverigi","Agugliano","Offagna","Chiaravalle","Ostra","Tolentino","Staffolo","Cupramontana","Monsano","Trecastelli","Corridonia","Montegranaro"];
 
+function normalizePropertyText(value:string):string {
+  return String(value||"")
+    .replace(/&amp;/gi,"&")
+    .replace(/&nbsp;|&#0*160;|&#x0*a0;/gi," ")
+    .replace(/&euro;|&#0*8364;|&#x0*20ac;/gi,"€")
+    .replace(/&sup2;|&#0*178;|&#x0*b2;/gi,"²")
+    .replace(/&sup3;|&#0*179;|&#x0*b3;/gi,"³")
+    .replace(/&quot;|&#0*34;/gi,'"')
+    .replace(/&apos;|&#0*39;/gi,"'")
+    .replace(/<[^>]*>/g," ")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+
 export function municipality(s:string):string|null {
-  const n=" "+String(s||"").toLocaleLowerCase("it").replace(/[^\p{L}\p{N}]+/gu," ")+" ";
+  const n=" "+normalizePropertyText(s).toLocaleLowerCase("it").replace(/[^\p{L}\p{N}]+/gu," ")+" ";
   return TOWNS.find(t=>n.includes(" "+t.toLocaleLowerCase("it")+" "))||null;
 }
+
+
 function parseItalianAmount(value:string):number|null {
   let raw=String(value||"").trim().replace(/\s+/g,"");
   let multiplier=1;
@@ -25,7 +42,7 @@ function parseItalianAmount(value:string):number|null {
 }
 
 export function price(s:string):number|null {
-  const value=String(s||"");
+  const value=normalizePropertyText(s);
   const patterns=[
     /(?:€|eur)\s*([0-9][0-9\s.,]*(?:\s*(?:mila|k))?)/i,
     /([0-9][0-9\s.,]*(?:\s*(?:mila|k))?)\s*(?:€|eur|euro)\b/i,
@@ -42,6 +59,7 @@ export function price(s:string):number|null {
 
 
 export function propertyType(s:string):string|null {
+  const value=normalizePropertyText(s);
   const patterns:Array<[string,RegExp]>=[
     ["Porzione di bifamiliare",/\bporzione\s+di\s+bifamiliare\b/i],
     ["Bifamiliare",/\bbifamiliare\b/i],
@@ -61,7 +79,7 @@ export function propertyType(s:string):string|null {
     ["Laboratorio",/\blaboratorio\b/i],["Magazzino / Deposito",/\b(?:magazzino|deposito)\b/i],
     ["Capannone",/\bcapannone\b/i]
   ];
-  for(const [label,pattern] of patterns)if(pattern.test(String(s||"")))return label;
+  for(const [label,pattern] of patterns)if(pattern.test(value))return label;
   return null;
 }
 
@@ -80,7 +98,7 @@ function parsePropertyMeasure(value:string):number|null {
 }
 
 export function surface(s:string):number|null {
-  const value=String(s||"").replace(/\s+/g," ");
+  const value=normalizePropertyText(s);
   const patterns=[
     /(?:superficie(?:\s+(?:commerciale|calpestabile|totale))?|metratura|mq\s+totali|sup\.?)\s*[:\-]?\s*(?:circa\s*|ca\.?\s*)?([1-9]\d{0,3}(?:[.,]\d{1,3})?)\s*(?:m²|m2|mq|metri quadrati|metri)?\b/i,
     /\b([1-9]\d{0,3}(?:[.,]\d{1,3})?)\s*(?:m²|m2|mq|metri quadrati)(?=\s|$|[.,;])/i
@@ -94,8 +112,9 @@ export function surface(s:string):number|null {
   return null;
 }
 
+
 export function rooms(s:string):number|null {
-  const value=String(s||"");
+  const value=normalizePropertyText(s);
   const match=value.match(/\b([1-9]\d?(?:[.,]\d)?)\s*(?:locali|vani)\b/i)
     ||value.match(/\b(?:locali|vani)\s*[:\-]?\s*([1-9]\d?(?:[.,]\d)?)\b/i);
   if(!match)return null;
@@ -105,14 +124,16 @@ export function rooms(s:string):number|null {
 
 
 export function bedrooms(s:string):number|null {
-  const value=String(s||"");
+  const value=normalizePropertyText(s);
   const match=value.match(/\b(\d{1,2})\s*(?:camere(?: da letto)?|camera(?: da letto)?)\b/i)
     ||value.match(/\b(?:camere(?: da letto)?|camera(?: da letto)?)\s*[:\-]?\s*(\d{1,2})\b/i);
   const amount=match?Number(match[1]):null;
   return amount!==null&&amount>=0&&amount<=20?amount:null;
 }
+
+
 export function bathrooms(s:string):number|null {
-  const value=String(s||"");
+  const value=normalizePropertyText(s);
   const match=value.match(/\b(\d{1,2})\s*(?:bagni|bagno)\b/i)
     ||value.match(/\b(?:bagni|bagno)\s*[:\-]?\s*(\d{1,2})\b/i);
   const amount=match?Number(match[1]):null;
@@ -178,7 +199,7 @@ export function propertyEmail(e:any):boolean {
   return true;
 }
 export function listingTitle(e:any):string {
-  const body=String(e.bodyText||"").replace(/https?:\/\/\S+/g," ").replace(/\s+/g," ").trim();
+  const body=normalizePropertyText(String(e.bodyText||"").replace(/https?:\/\/\S+/g," "));
   const propertyPattern=/\b(?:casa indipendente|villetta|villa|monolocale|bilocale|trilocale|quadrilocale|appartamento|attico|mansarda|rustico|casale|terratetto|terreno|garage|box auto|negozio|ufficio|capannone)\b/i;
   const match=propertyPattern.exec(body);
   if(match){
@@ -188,11 +209,13 @@ export function listingTitle(e:any):string {
       .replace(/\s+/g," ").trim();
     if(phrase.length>=10)return phrase.slice(0,250);
   }
-  const subject=String(e.subject||"").trim();
-  const subjectMatch=subject.match(/(?:\d+\s+)?nuov[oi]\s+annunci?[oi]?.{0,140}?:\s*(.+)$/i);
+  const subject=normalizePropertyText(e.subject||"");
+  const subjectMatch=subject.match(/(?:\d+\s+)?nuov[oi]\s+annunci?[oi]?.{0,140}:\s*(.+)$/i);
   if(subjectMatch?.[1])return ("Nuovo annuncio · "+subjectMatch[1].trim()).slice(0,250);
   return (subject||"Nuovo annuncio immobiliare").slice(0,250);
 }
+
+
 function isSpecificListingUrl(value:URL):boolean {
   const host=value.hostname.toLowerCase().replace(/^www\./,"");
   const path=value.pathname;
