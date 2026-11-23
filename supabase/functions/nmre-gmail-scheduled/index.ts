@@ -1,6 +1,6 @@
 import {
   municipality,price,listingPrice,listingUrl,propertyEmail,listingTitle,propertyType,
-  surface,rooms,bedrooms,bathrooms,resolveListingUrl,sellerClassificationDetails
+  surface,rooms,bedrooms,bathrooms,resolveListingUrl,sellerClassificationDetails,canonicalListingKey
 } from "./_shared/parser.ts";
 import { collectHistoryMessageIds } from "./_shared/history.ts";
 import { withSupabase } from "npm:@supabase/server@^1";
@@ -412,9 +412,9 @@ export default {
       // portal homepage instead of an individual listing.
       const { data: candidatesToRepair, error: repairQueryError } = await ctx.supabaseAdmin
         .from("annunci_candidati")
-        .select("source_email_id,url,url_originale,seller_classification_version,data_extraction_version,seller_manual_override")
+        .select("source_email_id,url,url_originale,seller_classification_version,data_extraction_version,seller_manual_override,deduplication_version,listing_key")
         .eq("owner_id", owner)
-        .eq("stato", "da_verificare")
+        .in("stato", ["da_verificare","scartato"])
         .not("source_email_id", "is", null)
         .limit(200);
 
@@ -422,22 +422,12 @@ export default {
       const repairIds = (candidatesToRepair || [])
         .filter((candidate: any) => {
           if (typeof candidate.source_email_id !== "string" || !candidate.url_originale) return false;
-          if (candidate.seller_manual_override === true) return false;
+          // Ogni email legacy viene rielaborata una sola volta per assegnare
+          // un'identità stabile alla scheda, anche se non contiene un link diretto.
+          if (Number(candidate.deduplication_version || 0) < 1) return true;
           if (Number(candidate.seller_classification_version || 0) < 3) return true;
           if (Number(candidate.data_extraction_version || 0) < 4) return true;
-          if (!candidate.url) return true;
-          try {
-            const link = new URL(candidate.url);
-            const host = link.hostname.toLowerCase();
-            const normalizedHost = host.startsWith("www.") ? host.slice(4) : host;
-            const isImmobiliare = normalizedHost === "immobiliare.it" || normalizedHost.endsWith(".immobiliare.it");
-            const path = link.pathname.toLowerCase();
-            const genericPath = path === "/" ||
-              ["/ricerca", "/search", "/vendita-case"].some(prefix => path === prefix || path.startsWith(prefix + "/"));
-            return isImmobiliare && genericPath;
-          } catch {
-            return false;
-          }
+          return false;
         })
         .map((candidate: any) => candidate.source_email_id as string);
 
@@ -535,63 +525,169 @@ export default {
             : null,
           source_email_id: String(email.id),
           dedup_key: "gmail:" + String(email.id),
+          listing_key: canonicalListingKey(url),
+          deduplication_version: 1,
           stato: "da_verificare"
         };
       }));
 
       let inserted = 0;
       let updated = 0;
+      let notificationsSaved = 0;
       for (const row of rows) {
-        const { data: manualRow, error: manualCheckError } = await ctx.supabaseAdmin
+        const { data: currentCandidate, error: currentError } = await ctx.supabaseAdmin
           .from("annunci_candidati")
-          .select("id,seller_manual_override")
+          .select("id,seller_manual_override,stato,listing_key")
           .eq("owner_id", owner)
           .eq("dedup_key", row.dedup_key)
-          .eq("stato", "da_verificare")
           .maybeSingle();
-        if (manualCheckError) throw new Error("Verifica classificazione manuale non riuscita");
-        if (manualRow?.seller_manual_override === true) continue;
-        const { data: existing, error: updateError } = await ctx.supabaseAdmin
-          .from("annunci_candidati")
-          .update({
-            titolo: row.titolo,
-            comune: row.comune,
-            prezzo: row.prezzo,
-            tipo_venditore: row.tipo_venditore,
-            seller_confidence: row.seller_confidence,
-            seller_evidence: row.seller_evidence,
-            seller_classification_version: row.seller_classification_version,
+        if (currentError) throw new Error("Verifica della notifica Gmail già registrata non riuscita");
+
+        let canonicalCandidate: any = null;
+        if (row.listing_key) {
+          const { data, error } = await ctx.supabaseAdmin
+            .from("annunci_candidati")
+            .select("id,seller_manual_override,stato,listing_key")
+            .eq("owner_id", owner)
+            .eq("listing_key", row.listing_key)
+            .maybeSingle();
+          if (error) throw new Error("Ricerca dell'immobile già acquisito non riuscita");
+          canonicalCandidate = data;
+        }
+
+        const existingCandidate = canonicalCandidate || currentCandidate;
+        let candidateId: string | null = null;
+
+        if (existingCandidate) {
+          candidateId = String(existingCandidate.id);
+          const candidateUpdate: Record<string, unknown> = {
+            deduplication_version: 1,
+            updated_at: new Date().toISOString()
+          };
+
+          // I record già scartati o già trasferiti nell'archivio non vengono
+          // riaperti. La notifica viene comunque conservata nello storico.
+          if (existingCandidate.stato === "da_verificare") {
+            Object.assign(candidateUpdate, {
+              titolo: row.titolo,
+              comune: row.comune,
+              prezzo: row.prezzo,
+              notification_sender: row.notification_sender,
+              email_subject: row.email_subject,
+              portale: row.portale,
+              url: row.url,
+              url_originale: row.url_originale,
+              data_pubblicazione: row.data_pubblicazione,
+              tipologia_immobile: row.tipologia_immobile,
+              superficie_mq: row.superficie_mq,
+              locali: row.locali,
+              camere: row.camere,
+              bagni: row.bagni,
+              data_extraction_version: row.data_extraction_version
+            });
+            if (existingCandidate.seller_manual_override !== true) {
+              Object.assign(candidateUpdate, {
+                tipo_venditore: row.tipo_venditore,
+                seller_confidence: row.seller_confidence,
+                seller_evidence: row.seller_evidence,
+                seller_classification_version: row.seller_classification_version
+              });
+            }
+          }
+
+          if (row.listing_key && !existingCandidate.listing_key) {
+            candidateUpdate.listing_key = row.listing_key;
+          }
+
+          const { data: updatedRows, error: updateError } = await ctx.supabaseAdmin
+            .from("annunci_candidati")
+            .update(candidateUpdate)
+            .eq("owner_id", owner)
+            .eq("id", candidateId)
+            .select("id");
+          if (updateError) {
+            // Un altro ciclo potrebbe aver associato la stessa scheda nello stesso istante.
+            if (updateError.code !== "23505") {
+              throw new Error("Aggiornamento dell'immobile candidato non riuscito");
+            }
+            if (row.listing_key) {
+              const { data: raced, error: raceError } = await ctx.supabaseAdmin
+                .from("annunci_candidati")
+                .select("id")
+                .eq("owner_id", owner)
+                .eq("listing_key", row.listing_key)
+                .maybeSingle();
+              if (raceError || !raced) throw new Error("Conflitto durante la deduplicazione dell'immobile");
+              candidateId = String(raced.id);
+            }
+          } else {
+            updated += updatedRows?.length || 0;
+          }
+
+          // La riga email legacy resta intatta, ma non viene rielaborata ad ogni cron.
+          if (currentCandidate && String(currentCandidate.id) !== candidateId) {
+            const { error: markError } = await ctx.supabaseAdmin
+              .from("annunci_candidati")
+              .update({ deduplication_version: 1 })
+              .eq("owner_id", owner)
+              .eq("id", currentCandidate.id);
+            if (markError) throw new Error("Aggiornamento dello stato di deduplicazione non riuscito");
+          }
+        } else {
+          const { data: saved, error: insertError } = await ctx.supabaseAdmin
+            .from("annunci_candidati")
+            .insert(row)
+            .select("id")
+            .maybeSingle();
+
+          if (insertError) {
+            if (insertError.code !== "23505") {
+              throw new Error("Salvataggio dell'immobile candidato non riuscito");
+            }
+            let raced: any = null;
+            if (row.listing_key) {
+              const { data, error } = await ctx.supabaseAdmin
+                .from("annunci_candidati")
+                .select("id")
+                .eq("owner_id", owner)
+                .eq("listing_key", row.listing_key)
+                .maybeSingle();
+              if (error) throw new Error("Verifica del duplicato concorrente non riuscita");
+              raced = data;
+            }
+            if (!raced) {
+              const { data, error } = await ctx.supabaseAdmin
+                .from("annunci_candidati")
+                .select("id")
+                .eq("owner_id", owner)
+                .eq("dedup_key", row.dedup_key)
+                .maybeSingle();
+              if (error || !data) throw new Error("Impossibile recuperare l'immobile salvato durante la deduplicazione");
+              raced = data;
+            }
+            candidateId = String(raced.id);
+            updated++;
+          } else {
+            if (!saved?.id) throw new Error("Il database non ha restituito l'identificativo del candidato salvato");
+            candidateId = String(saved.id);
+            inserted++;
+          }
+        }
+
+        if (!candidateId) throw new Error("Impossibile associare la notifica all'immobile");
+        const { error: notificationError } = await ctx.supabaseAdmin
+          .from("annunci_candidati_notifiche")
+          .upsert({
+            owner_id: owner,
+            candidate_id: candidateId,
+            source_email_id: row.source_email_id,
             notification_sender: row.notification_sender,
             email_subject: row.email_subject,
-            portale: row.portale,
-            url: row.url,
-            url_originale: row.url_originale,
-            data_pubblicazione: row.data_pubblicazione,
-            tipologia_immobile: row.tipologia_immobile,
-            superficie_mq: row.superficie_mq,
-            locali: row.locali,
-            camere: row.camere,
-            bagni: row.bagni,
-            data_extraction_version: row.data_extraction_version,
-            updated_at: new Date().toISOString()
-          })
-          .eq("owner_id", owner)
-          .eq("dedup_key", row.dedup_key)
-          .eq("stato", "da_verificare")
-          .select("id");
-
-        if (updateError) throw new Error("Aggiornamento degli annunci candidati non riuscito");
-        updated += existing?.length || 0;
-      }
-
-      if (rows.length) {
-        const { data: saved, error: saveError } = await ctx.supabaseAdmin
-          .from("annunci_candidati")
-          .upsert(rows, { onConflict: "owner_id,dedup_key", ignoreDuplicates: true })
-          .select("id");
-
-        if (saveError) throw new Error("Salvataggio annunci candidati non riuscito");
-        inserted = saved?.length || 0;
+            notified_at: row.data_pubblicazione,
+            listing_url: row.url || row.url_originale
+          }, { onConflict: "owner_id,source_email_id", ignoreDuplicates: true });
+        if (notificationError) throw new Error("Salvataggio dello storico notifiche non riuscito");
+        notificationsSaved++;
       }
 
       await saveSyncCursor(ctx.supabaseAdmin, nextHistoryId);
