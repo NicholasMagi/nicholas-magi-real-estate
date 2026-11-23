@@ -147,8 +147,8 @@ export function toCandidate(
   const seller = clientTypeID === 1 ? "Privato" : "Agenzia";
   const sellerEvidence = clientTypeID === 1
     ? (phoneNumberProvided === true
-      ? "Immobiliare.it Insights: filtro ufficiale clientTypeID=1 (Privato) e phoneNumberProvided=true"
-      : "Immobiliare.it Insights: filtro ufficiale clientTypeID=1 (Privato); disponibilità telefono non verificata")
+      ? "Immobiliare.it Insights: clientTypeID=1 (Privato); filtro phoneNumberProvided=true. Il portale segnala un recapito nell’annuncio, ma l’API non restituisce il numero: verifica manuale necessaria."
+      : "Immobiliare.it Insights: clientTypeID=1 (Privato); indicatore di recapito non verificato. L’API non restituisce il numero.")
     : "Immobiliare.it Insights: filtro ufficiale clientTypeID=2 (Professionista)";
 
   return {
