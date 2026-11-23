@@ -2,15 +2,15 @@
 
 ## Stato attuale
 
-- Edge Function `nmre-gmail-scheduled`: attiva (versione 13).
+- Edge Function `nmre-gmail-scheduled`: attiva; la versione distribuita è gestita da Supabase e non va fissata in questa guida.
 - Edge Function `nmre-gmail-reader`: dismessa; restituisce HTTP 410 e non espone più il contenuto dei messaggi.
-- Job `nmre-gmail-hourly-sync`: attivo, ogni ora al minuto 15 UTC.
+- Job `nmre-gmail-hourly-sync`: attivo ogni 10 minuti (`*/10 * * * *`, UTC). Il nome `hourly` è storico e non descrive più la frequenza effettiva.
 - Supabase Vault contiene i segreti `project_url` e `secret_key`; non leggere né condividere i relativi valori.
 - Chiamata HTTP server-to-server autenticata con la Secret API Key predefinita, tramite `withSupabase({ auth: "secret" })` e `verify_jwt=false`.
 
 ## Come funziona
 
-La funzione cerca fino a 100 messaggi degli ultimi 30 giorni nell'intera casella Gmail, inclusi quelli archiviati. Estrae inoltre tipologia dell'immobile, superficie in m², locali, camere e bagni quando riconoscibili nel testo della notifica; risolve i link di tracciamento dei portali quando possibile, senza scaricare o archiviare le schede. Il parser condiviso è coperto da test Deno. Legge ed elabora il testo soltanto sul server, riconosce gli avvisi di nuovi annunci e conserva soltanto i dati estratti necessari alla gestione del candidato. Non memorizza il corpo dell'email, il mittente o l'oggetto.
+La prima sincronizzazione e le sincronizzazioni complete di recupero cercano i messaggi degli ultimi 30 giorni nell'intera casella Gmail, inclusi quelli archiviati (fino a 10.000 messaggi per esecuzione). Gli aggiornamenti ordinari usano il cursore della cronologia Gmail e leggono soltanto le modifiche successive all'ultimo cursore salvato. Estrae inoltre tipologia dell'immobile, superficie in m², locali, camere e bagni quando riconoscibili nel testo della notifica; risolve i link di tracciamento dei portali quando possibile, senza scaricare o archiviare le schede. Il parser condiviso è coperto da test Deno. Legge ed elabora il testo soltanto sul server, riconosce gli avvisi di nuovi annunci e conserva soltanto i dati estratti necessari alla gestione del candidato. Non memorizza il corpo dell'email, il mittente o l'oggetto.
 
 - I venditori esplicitamente indicati come privati vengono classificati `Privato`.
 - Gli annunci per cui non è chiaro il tipo di venditore restano `Da verificare` e richiedono approvazione manuale.
