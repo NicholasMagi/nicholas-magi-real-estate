@@ -1454,9 +1454,10 @@ function renderSellerRelationshipScore(all=listingCache,now=new Date()){
   const own=events.filter(event=>String(event.annuncio_id)===String(item.id)&&event.created_at&&Number.isFinite(Date.parse(event.created_at)))
    .sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at));
   const calls=own.filter(event=>event.tipo==="telefonata");
-  const answered=calls.filter(event=>responseCodes.has(event.outcome_code));
-  const noAnswer=calls.filter(event=>event.outcome_code==="nessuna_risposta");
-  const responseRate=calls.length?Math.round(answered.length/calls.length*100):null;
+  const classifiedCalls=calls.filter(event=>!!event.outcome_code);
+  const answered=classifiedCalls.filter(event=>responseCodes.has(event.outcome_code));
+  const noAnswer=classifiedCalls.filter(event=>event.outcome_code==="nessuna_risposta");
+  const responseRate=classifiedCalls.length?Math.round(answered.length/classifiedCalls.length*100):null;
   const latest=own[0]||null;
   const lastDate=latest?new Date(latest.created_at):null;
   const daysSince=lastDate?Math.max(0,Math.floor((today-new Date(lastDate.getFullYear(),lastDate.getMonth(),lastDate.getDate()))/86400000)):null;
@@ -1496,7 +1497,7 @@ function renderSellerRelationshipScore(all=listingCache,now=new Date()){
   else if(drops){category="Ribasso da approfondire";next="Chiedere come sta procedendo la vendita dopo il ribasso documentato.";urgency=3;}
   else if(calls.length>=2&&responseRate>=70){category="Risposte registrate";next="Consolidare la relazione e concordare il prossimo aggiornamento.";urgency=5;}
   const lastLabel=lastDate?lastDate.toLocaleDateString("it-IT"):"Non registrata";
-  return {item,score,reasons,category,next,urgency,calls:calls.length,answered:answered.length,responseRate,lastLabel,daysSince};
+  return {item,score,reasons,category,next,urgency,calls:classifiedCalls.length,answered:answered.length,responseRate,lastLabel,daysSince};
  }).sort((a,b)=>a.urgency-b.urgency||a.score-b.score||((b.daysSince??-1)-(a.daysSince??-1)));
  const counts=[
   ["Richiami scaduti",rows.filter(row=>row.category==="Richiamo scaduto").length],
