@@ -76,7 +76,7 @@ Il servizio mostra i risultati in forma anonimizzata e richiede almeno cinque at
 
 Il prezzo €/m² di un compravenduto viene calcolato dal database soltanto se **tutte** le condizioni sono soddisfatte: l'atto riporta un solo immobile; l'utente conferma che l'intero corrispettivo è attribuibile a quella singola unità; i dati sono stati verificati nella scheda ufficiale; la superficie è disponibile in m². Le consistenze espresse in vani non vengono convertite. Se l'atto contiene più immobili o manca una di queste conferme, NMRE conserva il corrispettivo complessivo e non crea un prezzo individuale.
 
-I compravenduti con attribuzione verificata vengono raggruppati per comune, zona OMI, tipologia dell'atto e categoria catastale; la tabella mostra numerosità, mediana e intervallo minimo/massimo €/m². Ogni campione deve essere letto considerando il numero di atti: pochi casi non descrivono da soli l'intero mercato.
+I compravenduti con attribuzione verificata vengono raggruppati per comune, zona OMI, tipologia dell'atto e categoria catastale; la tabella mostra periodo coperto, numerosità, mediana e intervallo minimo/massimo €/m². Il registro viene caricato a pagine, senza troncare i campioni a 100 righe. Ogni campione deve essere letto considerando sia il periodo sia il numero di atti: pochi casi non descrivono da soli l'intero mercato.
 
 Le tabelle `nmre_omi_quotazioni` e `nmre_compravendite_atti` hanno RLS attiva e policy di proprietà: ogni utente autenticato può leggere e modificare soltanto i propri dati.
 
