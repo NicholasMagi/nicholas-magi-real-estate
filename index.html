@@ -1470,11 +1470,11 @@ function renderSellerRelationshipScore(all=listingCache,now=new Date()){
   const reasons=[];
   if(item.stato_contatto==="interessato"){score+=10;reasons.push("Interesse già registrato");}
   else if(item.stato_contatto==="appuntamento"){score+=12;reasons.push("Appuntamento in pipeline");}
-  if(calls.length>=2){
-   if(responseRate>=70){score+=15;reasons.push(answered.length+"/"+calls.length+" telefonate con esito di risposta");}
-   else if(responseRate>=40){score+=7;reasons.push("Risposte registrate: "+answered.length+"/"+calls.length+" telefonate");}
-   else {score-=8;reasons.push("Poche risposte registrate: "+answered.length+"/"+calls.length+" telefonate");}
-  }else if(calls.length===1){
+  if(classifiedCalls.length>=2){
+   if(responseRate>=70){score+=15;reasons.push(answered.length+"/"+classifiedCalls.length+" telefonate con esito di risposta");}
+   else if(responseRate>=40){score+=7;reasons.push("Risposte registrate: "+answered.length+"/"+classifiedCalls.length+" telefonate");}
+   else {score-=8;reasons.push("Poche risposte registrate: "+answered.length+"/"+classifiedCalls.length+" telefonate");}
+  }else if(classifiedCalls.length===1){
    reasons.push("Una telefonata registrata: campione limitato");
   }
   if(noAnswer.length>=2&&calls.slice(0,2).every(event=>event.outcome_code==="nessuna_risposta")){
