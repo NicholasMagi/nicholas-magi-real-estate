@@ -1189,7 +1189,7 @@ function renderAcquisitionIntelligence(candidates=candidateCache){
   if(!item)return;
   const strategy=buildAcquisitionStrategy(item);
   try{await navigator.clipboard.writeText(strategy.text);button.textContent="Strategia copiata";}
-  catch{window.prompt("Copi il copione della telefonata:",script);}
+  catch{window.prompt("Copi la strategia telefonica:",strategy.text);}
  }));
 }
 
