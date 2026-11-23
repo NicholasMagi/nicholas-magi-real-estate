@@ -882,6 +882,17 @@ function parseOmiHeader(value){
     .toLocaleUpperCase("it").replace(/[^A-Z0-9]+/g,"_").replace(/^_+|_+$/g,"");
 }
 
+async function decodeOmiCsvFile(file){
+  const bytes=await file.arrayBuffer();
+  const utf8=new TextDecoder("utf-8").decode(bytes);
+  const replacementCount=(utf8.match(/\uFFFD/g)||[]).length;
+  if(replacementCount>0){
+    try{return new TextDecoder("windows-1252").decode(bytes);}
+    catch{return new TextDecoder("iso-8859-1").decode(bytes);}
+  }
+  return utf8;
+}
+
 function parseOmiCsvMatrix(text,delimiter){
   const rows=[];
   let row=[],field="",quoted=false;
@@ -1011,7 +1022,7 @@ function runOmiComparison(){
         ?((Number(row.compr_min)/pricePerSqm)-1)*100
         :pricePerSqm>Number(row.compr_max)
           ?((pricePerSqm/Number(row.compr_max))-1)*100:0;
-      return '<div><span>Stato '+safe(row.stato||row.stato_prevalente||"non indicato")+'</span><strong>'+safe(formatOmiEuro(row.compr_min))+' – '+safe(formatOmiEuro(row.compr_max))+'/m²</strong><span>'+safe(relation)+(diff?' · scostamento '+safe(diff.toFixed(1))+'% dal limite':'')+'</span></div>';
+      return '<div><span>Stato '+safe(row.stato||row.stato_prevalente||"non indicato")+' · superficie OMI '+safe(row.sup_nl_compr||"non indicata")+'</span><strong>'+safe(formatOmiEuro(row.compr_min))+' – '+safe(formatOmiEuro(row.compr_max))+'/m²</strong><span>'+safe(relation)+(diff?' · scostamento '+safe(diff.toFixed(1))+'% dal limite':'')+'</span></div>';
     }).join("")+'</div>'+
     '<span>Confronto indicativo tra prezzo richiesto e intervallo OMI per zona e tipologia. Le quotazioni OMI non sono prezzi di singole compravendite e non sostituiscono sopralluogo, comparabili e valutazione professionale.</span>';
 }
@@ -1051,7 +1062,7 @@ async function importOmiCsv(){
   button.disabled=true;omiImportBusy=true;
   try{
     msg("omiImportStatus","Lettura e controllo del tracciato CSV...");
-    const textValue=await file.text();
+    const textValue=await decodeOmiCsvFile(file);
     const lines=textValue.replace(/^\uFEFF/,"").split(/\r?\n/).filter(line=>line.trim()!=="");
     const headerLine=lines.find(line=>/COMUNE[_ ]ISTAT/i.test(line)&&/COMPR[_ ]MIN/i.test(line));
     if(!headerLine)throw new Error("Intestazione VALORI non riconosciuta. Il file deve contenere COMUNE_ISTAT e COMPR_MIN; il file ZONE non è sufficiente.");
