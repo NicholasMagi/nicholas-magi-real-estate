@@ -6,10 +6,10 @@
 The nmre-insights-sync Edge Function uses the official Comps Finder API:
 - OAuth 2.0 password grant, with credentials stored only as Supabase Edge Function secrets.
 - Search by attribute on active/published sale offers (comparableTypeID=1, contractTypeID=1).
-- Private publisher filter (clientTypeID=1) and phoneNumberProvided=true.
+- Private publisher filter (`clientTypeID=1`) and optional `phoneNumberProvided=true` search filter. This is only a portal-side availability flag: the official output mapping does not expose the seller's phone number, so imported candidates still require opening the original listing and manually verifying the contact details.
 - Restricted to the configured Marche municipality allowlist after the API response.
 - Up to three pages per manual sync; deduplication uses the API UUID.
-- The documented output provides listing URL, title, municipality, asking price, type, gross surface, rooms and bathrooms. The API mapping does not include the phone itself; the availability filter is not the phone number.
+- The documented output provides listing URL, title, municipality, asking price, type, gross surface, rooms and bathrooms. `phoneNumberProvided` is a request filter, not a returned phone number. NMRE stores this distinction in the seller evidence and never fills the CRM contact field from that boolean.
 
 Required Supabase Edge Function secrets:
 - INSIGHTS_CLIENT_ID
