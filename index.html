@@ -2062,13 +2062,13 @@ function renderSalesPerformance(){
  const appointmentMandate=nmreCrmPercent(mandates,appointments);
  $("salesPerfCalls").textContent=String(calls.length);
  $("salesPerfResponses").textContent=String(responses.length);
- $("salesPerfAppointments").textContent=String(appointments.length);
- $("salesPerfValuations").textContent=String(valuations.length);
+ $("salesPerfAppointments").textContent=String(appointments);
+ $("salesPerfValuations").textContent=String(valuations);
  $("salesPerfMandates").textContent=String(mandates);
  const steps=[
   {label:"Telefonate → Risposte",value:callResponse,detail:responses.length+" su "+calls.length+" telefonate"},
-  {label:"Risposte → Appuntamenti",value:responseAppointment,detail:appointments.length+" su "+responses.length+" conversazioni"},
-  {label:"Appuntamenti → Incarichi",value:appointmentMandate,detail:mandates+" incarichi su "+appointments.length+" appuntamenti"}
+  {label:"Risposte → Appuntamenti",value:responseAppointment,detail:appointments+" su "+responses.length+" conversazioni"},
+  {label:"Appuntamenti → Incarichi",value:appointmentMandate,detail:mandates+" incarichi su "+appointments+" appuntamenti"}
  ];
  $("salesPerformanceFunnel").innerHTML=steps.map(step=>'<div class="sales-performance-step"><div class="sales-performance-step-top"><span>'+step.label+'</span><strong>'+step.value+'%</strong></div><div class="sales-performance-track"><div class="sales-performance-fill" style="width:'+Math.min(100,step.value)+'%"></div></div><div class="sales-performance-note">'+step.detail+'</div></div>').join("");
  const unclassified=calls.filter(x=>!x.outcome_code).length;
