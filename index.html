@@ -67,6 +67,34 @@ button:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:850px){.territory-tools{grid-template-columns:repeat(2,minmax(0,1fr))}.territory-dashboard{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:650px){.archive-tools{grid-template-columns:1fr}.territory-tools{grid-template-columns:1fr}.territory-dashboard{grid-template-columns:repeat(2,minmax(0,1fr))}.territory-breakdown{grid-template-columns:1fr}}
 @media(max-width:650px){.grid{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}.heading{font-size:24px}}
+
+/* NMRE COMPETITIVE INTELLIGENCE */
+.competitor-panel{border-top:3px solid var(--gold)}
+.competitor-intro{font-size:12px;color:var(--muted);line-height:1.55;margin:-5px 0 14px}
+.competitor-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:13px;border:1px solid var(--line);border-radius:10px;background:#fafbfc;margin:12px 0}
+.competitor-field{min-width:0}
+.competitor-field label{margin:0 0 5px;font-size:10px}
+.competitor-field input,.competitor-field select{padding:9px 10px;font-size:12px;min-width:0}
+.competitor-wide{grid-column:1/-1}
+.competitor-agencies,.competitor-listings{display:grid;gap:9px;margin-top:10px}
+.competitor-agency,.competitor-listing{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fff;min-width:0}
+.competitor-agency-head,.competitor-listing-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.competitor-agency strong,.competitor-listing strong{font-size:13px;line-height:1.4}
+.competitor-meta{font-size:11px;color:var(--muted);line-height:1.5;margin-top:4px;overflow-wrap:anywhere}
+.competitor-price{font-size:15px;font-weight:700;color:#85683d;margin-top:7px}
+.competitor-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+.competitor-actions button{font-size:10px;padding:7px 9px}
+.competitor-badge{display:inline-block;padding:4px 7px;border-radius:20px;background:#eef2f6;color:#536176;font-size:10px;font-weight:700}
+.competitor-badge-live{background:#edf5ef;color:#326342}
+.competitor-badge-off{background:#f2f2f2;color:#747d89}
+.competitor-empty{padding:13px;border:1px dashed #d7dde5;border-radius:9px;color:var(--muted);font-size:11px;line-height:1.5}
+.competitor-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:12px 0}
+.competitor-stat{padding:11px;border:1px solid var(--line);border-radius:9px;background:#f7f8fa}
+.competitor-stat strong{display:block;font-family:Georgia,serif;font-size:22px;font-variant-numeric:tabular-nums}
+.competitor-stat span{display:block;font-size:10px;color:var(--muted);margin-top:3px}
+@media(max-width:760px){.competitor-form{grid-template-columns:1fr 1fr}.competitor-stats{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.competitor-form{grid-template-columns:1fr}.competitor-wide{grid-column:auto}}
+
 </style>
 </head>
 <body>
@@ -150,6 +178,44 @@ l'acquisizione automatica delle notifiche immobiliari.
       <div id="municipalityBreakdown" class="territory-list"></div>
     </div>
   </div>
+</section>
+
+
+<section id="competitorPanel" class="panel competitor-panel">
+  <div class="topline">
+    <div><h2>Monitoraggio della concorrenza</h2><div class="small">Competitive Intelligence · Osservatorio agenzie e immobili</div></div>
+    <button class="secondary" id="refreshCompetitors" type="button">Aggiorna</button>
+  </div>
+  <p class="competitor-intro">Registra le agenzie concorrenti e gli immobili che pubblicano. L'app conserva il primo rilevamento, lo stato online e lo storico dei prezzi, così da individuare ribassi e annunci presenti da molto tempo. I dati inseriti manualmente sono distinti da eventuali flussi automatici futuri.</p>
+  <div id="competitorStats" class="competitor-stats">
+    <div class="competitor-stat"><strong>—</strong><span>Agenzie monitorate</span></div>
+    <div class="competitor-stat"><strong>—</strong><span>Immobili online</span></div>
+    <div class="competitor-stat"><strong>—</strong><span>Ribassi registrati</span></div>
+    <div class="competitor-stat"><strong>—</strong><span>Online da oltre 90 giorni</span></div>
+  </div>
+  <h3 style="font-size:13px;margin:18px 0 5px">Aggiungi un'agenzia concorrente</h3>
+  <form id="competitorAgencyForm" class="competitor-form">
+    <div class="competitor-field"><label for="competitorAgencyName">Nome agenzia *</label><input id="competitorAgencyName" required maxlength="160" placeholder="Es. Agenzia Immobiliare"></div>
+    <div class="competitor-field"><label for="competitorAgencyTown">Sede / Comune *</label><input id="competitorAgencyTown" required maxlength="100" list="municipalityOptions" placeholder="Osimo"></div>
+    <div class="competitor-field"><label for="competitorAgencyWebsite">Sito web</label><input id="competitorAgencyWebsite" type="url" maxlength="1000" placeholder="https://..."></div>
+    <div class="competitor-field competitor-wide"><label for="competitorAgencyAreas">Zone operative (separate da virgole)</label><input id="competitorAgencyAreas" maxlength="500" placeholder="Osimo, Ancona, Castelfidardo"></div>
+    <div class="competitor-wide"><button class="gold" type="submit">Aggiungi agenzia</button></div>
+  </form>
+  <div id="competitorAgencyList" class="competitor-agencies"><div class="competitor-empty">Nessuna agenzia registrata.</div></div>
+  <h3 style="font-size:13px;margin:22px 0 5px">Registra un immobile della concorrenza</h3>
+  <form id="competitorListingForm" class="competitor-form">
+    <div class="competitor-field competitor-wide"><label for="competitorListingTitle">Titolo / descrizione *</label><input id="competitorListingTitle" required maxlength="220" placeholder="Es. Trilocale con garage"></div>
+    <div class="competitor-field"><label for="competitorListingAgency">Agenzia *</label><select id="competitorListingAgency" required><option value="">Selezioni un'agenzia</option></select></div>
+    <div class="competitor-field"><label for="competitorListingTown">Comune *</label><input id="competitorListingTown" required maxlength="100" list="municipalityOptions" placeholder="Castelfidardo"></div>
+    <div class="competitor-field"><label for="competitorListingPrice">Prezzo richiesto (€)</label><input id="competitorListingPrice" type="number" min="1" step="0.01" placeholder="185000"></div>
+    <div class="competitor-field"><label for="competitorListingType">Tipologia</label><select id="competitorListingType"><option value="">Non specificata</option><option>Appartamento</option><option>Villa</option><option>Casa indipendente</option><option>Rustico</option><option>Terreno</option><option>Commerciale</option><option>Altro</option></select></div>
+    <div class="competitor-field"><label for="competitorListingSurface">Superficie (m²)</label><input id="competitorListingSurface" type="number" min="1" max="100000" step="1" placeholder="95"></div>
+    <div class="competitor-field competitor-wide"><label for="competitorListingUrl">Link annuncio</label><input id="competitorListingUrl" type="url" maxlength="1000" placeholder="https://..."></div>
+    <div class="competitor-wide"><button class="gold" type="submit">Registra immobile</button></div>
+  </form>
+  <div class="topline" style="margin-top:18px"><h3 style="font-size:13px;margin:0">Immobili monitorati</h3><span id="competitorListingCount" class="small">0 immobili</span></div>
+  <div id="competitorListingList" class="competitor-listings"><div class="competitor-empty">Nessun immobile monitorato.</div></div>
+  <div id="competitorMsg" class="status" aria-live="polite"></div>
 </section>
 
 <section class="panel">
@@ -406,10 +472,133 @@ async function showApp(session){
   $("auth").hidden=true;
   $("appArea").hidden=false;
   await loadListings();
+  await loadCompetitorMonitor().catch(error=>msg("competitorMsg",error.message,"error"));
   await loadPendingCandidates().catch(error=>{
     msg("gmailMsg","Impossibile caricare la coda dei candidati: "+error.message,"error");
   });
 }
+
+
+/* NMRE COMPETITIVE INTELLIGENCE */
+let competitorAgencyCache=[];
+let competitorListingCache=[];
+let competitorPriceHistoryCache=[];
+
+function euro(value){
+  if(value===null||value===undefined||value==="")return "Prezzo non indicato";
+  return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(Number(value));
+}
+function competitorDays(date){
+  if(!date)return 0;
+  return Math.max(0,Math.floor((Date.now()-new Date(date).getTime())/86400000));
+}
+async function loadCompetitorMonitor(){
+  if(!currentUser)return;
+  msg("competitorMsg","Caricamento osservatorio...");
+  const [agencies,listings]=await Promise.all([
+    supabase.from("nmre_competitor_agencies").select("*").order("name"),
+    supabase.from("nmre_competitor_listings").select("*").order("first_seen_at",{ascending:false})
+  ]);
+  if(agencies.error||listings.error){
+    const error=agencies.error||listings.error;
+    msg("competitorMsg","Impossibile caricare il monitoraggio: "+error.message+". Verifichi di aver applicato la migrazione SQL del modulo.", "error");
+    return;
+  }
+  competitorAgencyCache=agencies.data||[];
+  competitorListingCache=listings.data||[];
+  const ids=competitorListingCache.map(x=>x.id);
+  if(ids.length){
+    const history=await supabase.from("nmre_competitor_price_history").select("*").in("listing_id",ids).order("observed_at",{ascending:false});
+    if(history.error){msg("competitorMsg","Dati caricati, ma storico prezzi non disponibile: "+history.error.message,"error");competitorPriceHistoryCache=[];}
+    else competitorPriceHistoryCache=history.data||[];
+  }else competitorPriceHistoryCache=[];
+  renderCompetitorMonitor();
+  msg("competitorMsg","Osservatorio aggiornato: "+competitorAgencyCache.length+" agenzie e "+competitorListingCache.length+" immobili.", "success");
+}
+function renderCompetitorMonitor(){
+  const live=competitorListingCache.filter(x=>x.listing_status==="online");
+  const reductions=competitorPriceHistoryCache.filter((h,i,arr)=>{
+    const previous=arr.slice(i+1).find(x=>x.listing_id===h.listing_id);
+    return previous&&Number(h.price)<Number(previous.price);
+  });
+  const old=live.filter(x=>competitorDays(x.first_seen_at)>=90);
+  $("competitorStats").innerHTML=[
+    [competitorAgencyCache.length,"Agenzie monitorate"],
+    [live.length,"Immobili online"],
+    [reductions.length,"Ribassi registrati"],
+    [old.length,"Online da oltre 90 giorni"]
+  ].map(([n,label])=>'<div class="competitor-stat"><strong>'+n+'</strong><span>'+label+'</span></div>').join("");
+  $("competitorListingCount").textContent=competitorListingCache.length+" immobili";
+  $("competitorAgencyList").innerHTML=competitorAgencyCache.length?competitorAgencyCache.map(a=>{
+    const count=competitorListingCache.filter(x=>x.agency_id===a.id&&x.listing_status==="online").length;
+    const areas=Array.isArray(a.service_areas)?a.service_areas.join(", "):"";
+    return '<div class="competitor-agency"><div class="competitor-agency-head"><div><strong>'+safe(a.name)+'</strong><div class="competitor-meta">'+safe(a.municipality)+(areas?" · Zone: "+safe(areas):"")+'</div>'+(a.website?'<div class="competitor-meta"><a href="'+safe(a.website)+'" target="_blank" rel="noopener noreferrer">Sito web</a></div>':"")+'</div><span class="competitor-badge">'+count+' online</span></div></div>';
+  }).join(""):'<div class="competitor-empty">Nessuna agenzia registrata. Inserisca le agenzie che desidera tenere sotto osservazione.</div>';
+  $("competitorListingAgency").innerHTML='<option value="">Selezioni un'+'agenzia</option>'+competitorAgencyCache.map(a=>'<option value="'+safe(a.id)+'">'+safe(a.name)+' · '+safe(a.municipality)+'</option>').join("");
+  $("competitorListingList").innerHTML=competitorListingCache.length?competitorListingCache.map(item=>{
+    const agency=competitorAgencyCache.find(a=>a.id===item.agency_id);
+    const days=competitorDays(item.first_seen_at);
+    const history=competitorPriceHistoryCache.filter(h=>h.listing_id===item.id).sort((a,b)=>new Date(b.observed_at)-new Date(a.observed_at));
+    const previous=history.length>1?history[1]:null;
+    const reduced=previous&&item.current_price!==null&&Number(item.current_price)<Number(previous.price);
+    const delta=reduced?Math.round((1-Number(item.current_price)/Number(previous.price))*100):0;
+    return '<article class="competitor-listing"><div class="competitor-listing-head"><div><strong>'+safe(item.title)+'</strong><div class="competitor-meta">'+safe(item.municipality)+' · '+safe(agency?.name||"Agenzia non disponibile")+(item.property_type?" · "+safe(item.property_type):"")+(item.surface_mq?" · "+safe(item.surface_mq)+" m²":"")+'</div></div><span class="competitor-badge '+(item.listing_status==="online"?"competitor-badge-live":"competitor-badge-off")+'">'+(item.listing_status==="online"?"Online":"Non più online")+'</span></div><div class="competitor-price">'+euro(item.current_price)+'</div><div class="competitor-meta">Rilevato il '+safe(new Date(item.first_seen_at).toLocaleDateString("it-IT"))+' · '+days+' giorni monitorati'+(reduced?' · <b style="color:#267447">Ribasso '+delta+'%</b>':"")+'</div>'+(item.source_url?'<div class="competitor-meta"><a href="'+safe(item.source_url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio originale</a></div>':"")+'<div class="competitor-actions"><button type="button" class="secondary" data-competitor-price="'+safe(item.id)+'">Aggiorna prezzo</button>'+(item.listing_status==="online"?'<button type="button" class="secondary" data-competitor-close="'+safe(item.id)+'">Segna non più online</button>':"")+'</div></article>';
+  }).join(""):'<div class="competitor-empty">Nessun immobile registrato. Aggiunga gli annunci pubblicati dalle agenzie concorrenti.</div>';
+  $("competitorListingList").querySelectorAll("[data-competitor-price]").forEach(button=>button.addEventListener("click",()=>updateCompetitorPrice(button.dataset.competitorPrice)));
+  $("competitorListingList").querySelectorAll("[data-competitor-close]").forEach(button=>button.addEventListener("click",()=>closeCompetitorListing(button.dataset.competitorClose)));
+}
+$("competitorAgencyForm").addEventListener("submit",async event=>{
+  event.preventDefault();
+  const button=event.submitter; if(button)button.disabled=true;
+  const name=$("competitorAgencyName").value.trim(), municipality=$("competitorAgencyTown").value.trim();
+  const website=$("competitorAgencyWebsite").value.trim()||null;
+  if(website&&!/^https?:\/\//i.test(website)){msg("competitorMsg","Il sito deve iniziare con https:// o http://.","error");if(button)button.disabled=false;return;}
+  const areas=$("competitorAgencyAreas").value.split(",").map(x=>x.trim()).filter(Boolean);
+  const {error}=await supabase.from("nmre_competitor_agencies").insert({owner_id:currentUser.id,name,municipality,website,service_areas:areas});
+  if(error)msg("competitorMsg","Salvataggio agenzia non riuscito: "+error.message,"error");
+  else{$("competitorAgencyForm").reset();await loadCompetitorMonitor();}
+  if(button)button.disabled=false;
+});
+$("competitorListingForm").addEventListener("submit",async event=>{
+  event.preventDefault();
+  const button=event.submitter;if(button)button.disabled=true;
+  const title=$("competitorListingTitle").value.trim(),agencyId=$("competitorListingAgency").value,municipality=$("competitorListingTown").value.trim();
+  const rawPrice=$("competitorListingPrice").value,price=rawPrice?Number(rawPrice):null;
+  const surface=$("competitorListingSurface").value;
+  const sourceUrl=$("competitorListingUrl").value.trim()||null;
+  if(sourceUrl&&!/^https?:\/\//i.test(sourceUrl)){msg("competitorMsg","Il link deve iniziare con https:// o http://.","error");if(button)button.disabled=false;return;}
+  const payload={owner_id:currentUser.id,agency_id:agencyId,title,municipality,current_price:price,source_url:sourceUrl,property_type:$("competitorListingType").value||null,surface_mq:surface?Number(surface):null,listing_status:"online"};
+  const {data,error}=await supabase.from("nmre_competitor_listings").insert(payload).select("id,current_price").single();
+  if(error)msg("competitorMsg","Salvataggio immobile non riuscito: "+error.message,"error");
+  else{
+    if(price!==null){
+      const history=await supabase.from("nmre_competitor_price_history").insert({owner_id:currentUser.id,listing_id:data.id,price,source:"rilevamento iniziale"});
+      if(history.error)msg("competitorMsg","Immobile salvato, ma storico iniziale non registrato: "+history.error.message,"error");
+    }
+    $("competitorListingForm").reset();await loadCompetitorMonitor();
+  }
+  if(button)button.disabled=false;
+});
+async function updateCompetitorPrice(id){
+  const item=competitorListingCache.find(x=>x.id===id);if(!item)return;
+  const answer=prompt("Nuovo prezzo richiesto in euro:",item.current_price??"");
+  if(answer===null)return;
+  const price=Number(answer.replace(",","."));
+  if(!Number.isFinite(price)||price<=0){msg("competitorMsg","Inserisca un prezzo valido maggiore di zero.","error");return;}
+  const {error}=await supabase.from("nmre_competitor_listings").update({current_price:price}).eq("id",id).eq("owner_id",currentUser.id);
+  if(error){msg("competitorMsg","Aggiornamento prezzo non riuscito: "+error.message,"error");return;}
+  const history=await supabase.from("nmre_competitor_price_history").insert({owner_id:currentUser.id,listing_id:id,price,source:"aggiornamento manuale"});
+  if(history.error){msg("competitorMsg","Prezzo aggiornato, ma storico non salvato: "+history.error.message,"error");return;}
+  await loadCompetitorMonitor();
+}
+async function closeCompetitorListing(id){
+  if(!confirm("Conferma che questo annuncio non è più online?"))return;
+  const {error}=await supabase.from("nmre_competitor_listings").update({listing_status:"offline",last_seen_at:new Date().toISOString()}).eq("id",id).eq("owner_id",currentUser.id);
+  if(error){msg("competitorMsg","Aggiornamento stato non riuscito: "+error.message,"error");return;}
+  await loadCompetitorMonitor();
+}
+$("refreshCompetitors").addEventListener("click",loadCompetitorMonitor);
+
 
 async function boot(){
   loadConfig();
