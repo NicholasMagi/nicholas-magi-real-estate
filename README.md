@@ -14,7 +14,7 @@ Applicazione web per la raccolta, la verifica e la gestione di opportunità immo
 - Acquisizione automatica di notifiche immobiliari in background.
 - Monitoraggio delle sincronizzazioni Gmail: esito, durata, annunci letti, candidati inseriti, agenzie escluse, duplicati ed errori; vengono salvati soltanto contatori operativi, non il contenuto delle email.
 - Coda di annunci privati riconosciuti e opportunità ambigue da approvare manualmente.
-- Doppio punteggio in coda: priorità di acquisizione (venditore, freschezza, territorio e contatto) separata dalla qualità/complettezza dei dati; mostra anche il rapporto tra prezzo richiesto e m² quando calcolabile, senza presentarlo come stima di mercato.
+- Doppio punteggio in coda: priorità di acquisizione (venditore, freschezza, territorio e contatto) separata dalla qualità/completezza dei dati; mostra anche il rapporto tra prezzo richiesto e m² quando calcolabile, senza presentarlo come stima di mercato.
 - Estrazione migliorata di comune, prezzo, tipologia, superficie, locali, camere e bagni, con gestione dei formati italiani (€, euro, mila, mq, m²) e più categorie immobiliari.
 - Versionamento dell'estrazione: le notifiche Gmail ancora in coda vengono rielaborate una sola volta quando cambia il parser; le classificazioni manuali dei venditori restano protette.
 - Deduplicazione tramite ID Gmail.
@@ -44,6 +44,14 @@ La vecchia funzione di lettura diretta nmre-gmail-reader è dismessa: non restit
 I campi strutturati disponibili su candidati e archivio sono: tipologia immobile, superficie in m², numero locali, camere e bagni. L'estrazione è euristica e i campi mancanti restano vuoti per la correzione manuale. L'approvazione del candidato trasferisce questi dati nell'archivio definitivo.
 
 Il parser e l'adattatore Gmail History sono separati nella cartella supabase/functions/nmre-gmail-scheduled/_shared e coperti da test automatici. Il workflow Validate application code esegue i test Deno del parser e della cronologia Gmail, i test del connettore Insights, controlla la sintassi JavaScript incorporata in index.html e verifica che gli ID HTML siano univoci.
+
+## Punteggi della coda candidati
+
+La **priorità di acquisizione** (0–100) ordina il lavoro commerciale: venditore privato riconosciuto (25 punti) o venditore da verificare (7), freschezza della pubblicazione (fino a 20; la sola data di notifica vale meno), territorio principale (20) o esteso (10), contatto diretto inserito (15), link specifico (10), prezzo (4), superficie (4) e tipologia (2). Il punteggio non certifica il venditore: una classificazione non supportata resta da verificare.
+
+La **qualità dei dati** (0–100) misura la completezza della scheda: comune (15), prezzo (15), tipologia (10), superficie (15), locali (5), link specifico (15), data di pubblicazione (10), venditore privato verificato con confidenza almeno 90% (10) e contatto inserito (5).
+
+Il rapporto **prezzo richiesto / m²** viene mostrato solo quando entrambi i dati sono presenti. È un indicatore descrittivo dell'annuncio, non una comparazione con i valori di mercato né una valutazione della convenienza economica.
 
 ## Architettura e sicurezza
 
