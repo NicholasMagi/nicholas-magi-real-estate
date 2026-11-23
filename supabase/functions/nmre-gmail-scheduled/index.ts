@@ -713,7 +713,12 @@ export default {
             .maybeSingle();
           if (priorSnapshotError) throw new Error("Lettura dello storico prezzi non riuscita");
           const lastPrice = Number(priorSnapshot?.listing_price);
-          if (Number.isFinite(lastPrice) && lastPrice > Number(row.prezzo)) previousPrice = lastPrice;
+          if (Number.isFinite(lastPrice) && lastPrice > Number(row.prezzo)) {
+            const historicalDropPercent = ((lastPrice - Number(row.prezzo)) / lastPrice) * 100;
+            // Le vecchie notifiche possono contenere prezzi estratti male:
+            // un calo superiore al 50% non viene attribuito senza conferma esplicita del portale.
+            if (historicalDropPercent > 0 && historicalDropPercent <= 50) previousPrice = lastPrice;
+          }
         }
 
         const currentPrice = row.explicit_price_reduction?.currentPrice
