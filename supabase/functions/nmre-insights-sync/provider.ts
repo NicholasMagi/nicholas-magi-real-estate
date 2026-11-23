@@ -129,7 +129,10 @@ export function toCandidate(item: Record<string, any>, ownerId: string) {
   const rawRooms = safeNumber(item.rooms);
   const rawBathrooms = safeNumber(item.features?.numberOfBathrooms ?? item.numberOfBathrooms);
   const rawClientType = normalize(item.clientType);
-  const seller = rawClientType === "privato" || !rawClientType ? "Privato" : "Da verificare";
+  // La richiesta è già filtrata dal servizio con clientTypeID=1 (Privato).
+  // Se il dettaglio riporta esplicitamente un professionista, prevale il dato contrario.
+  if (rawClientType === "professionista" || rawClientType === "2") return null;
+  const seller = "Privato";
 
   return {
     owner_id: ownerId,
@@ -138,9 +141,16 @@ export function toCandidate(item: Record<string, any>, ownerId: string) {
     prezzo: rawPrice !== null && rawPrice >= 0 ? Math.round(rawPrice) : null,
     contatto: null,
     tipo_venditore: seller,
+    seller_confidence: 99,
+    seller_evidence: "Filtro API ufficiale: clientTypeID=1 (Privato); telefono indicato come disponibile dal filtro phoneNumberProvided=true",
+    seller_classification_version: 3,
+    seller_manual_override: false,
     portale: "Immobiliare.it",
     url,
-    data_pubblicazione: parseApiDate(item.collectionDate ?? item.lastUpdateDate),
+    url_originale: url,
+    // collectionDate è la data di creazione dell'annuncio; lastUpdateDate per gli annunci
+    // in offerta indica invece la data di rimozione e non va mostrata come pubblicazione.
+    data_pubblicazione: parseApiDate(item.collectionDate),
     notification_sender: null,
     email_subject: null,
     source_email_id: null,
