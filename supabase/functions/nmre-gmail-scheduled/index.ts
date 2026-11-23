@@ -2,156 +2,470 @@ import {
   municipality,price,listingUrl,propertyEmail,listingTitle,propertyType,
   surface,rooms,bedrooms,bathrooms,resolveListingUrl,sellerClassification
 } from "./_shared/parser.ts";
-
+import { collectHistoryMessageIds } from "./_shared/history.ts";
 import { withSupabase } from "npm:@supabase/server@^1";
 
 const ACCOUNT = "nicholasmagirealestate@gmail.com";
 const PORTALS = ["idealista.it","immobiliare.it","casa.it","subito.it","green-acres.it","green-acres.com","gate-away.com","trovacasa.it","wikicasa.it"];
-const TOWNS = ["Porto Sant'Elpidio","Porto Recanati","Porto San Giorgio","Civitanova Marche","Falconara Marittima","Santa Maria Nuova","Maiolati Spontini","Monte San Vito","Monte Urano","Monte Roberto","Montecassiano","Morro d'Alba","Montemarciano","Castelfidardo","Ancona","Osimo","Loreto","Recanati","Camerano","Numana","Sirolo","Jesi","Macerata","Fermo","Senigallia","Filottrano","Polverigi","Agugliano","Offagna","Chiaravalle","Ostra","Tolentino","Staffolo","Cupramontana","Monsano","Trecastelli","Corridonia","Montegranaro"];
 
-function b64(bytes: Uint8Array): string { let s=""; for(const x of bytes)s+=String.fromCharCode(x); return btoa(s); }
-function unb64(s: string): Uint8Array { return Uint8Array.from(atob(s),c=>c.charCodeAt(0)); }
-async function key(secret: string): Promise<CryptoKey> {
-  const d=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(secret));
-  return crypto.subtle.importKey("raw",d,{name:"AES-GCM"},false,["encrypt","decrypt"]);
+function b64(bytes: Uint8Array): string {
+  let value = "";
+  for (const byte of bytes) value += String.fromCharCode(byte);
+  return btoa(value);
 }
-async function decrypt(value: string, secret: string): Promise<Record<string,unknown>> {
-  const p=value.split("."); if(p.length!==3||p[0]!=="v1")throw new Error("Formato token cifrato non valido");
-  const plain=await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(p[1])},await key(secret),unb64(p[2]));
+
+function unb64(value: string): Uint8Array {
+  return Uint8Array.from(atob(value), character => character.charCodeAt(0));
+}
+
+async function encryptionKey(secret: string): Promise<CryptoKey> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  return crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+async function decrypt(value: string, secret: string): Promise<Record<string, unknown>> {
+  const parts = value.split(".");
+  if (parts.length !== 3 || parts[0] !== "v1") throw new Error("Formato token cifrato non valido");
+  const plain = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: unb64(parts[1]) },
+    await encryptionKey(secret),
+    unb64(parts[2])
+  );
   return JSON.parse(new TextDecoder().decode(plain));
 }
-async function encrypt(value: Record<string,unknown>, secret: string): Promise<string> {
-  const iv=crypto.getRandomValues(new Uint8Array(12));
-  const cipher=await crypto.subtle.encrypt({name:"AES-GCM",iv},await key(secret),new TextEncoder().encode(JSON.stringify(value)));
-  return "v1."+b64(iv)+"."+b64(new Uint8Array(cipher));
+
+async function encrypt(value: Record<string, unknown>, secret: string): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipher = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    await encryptionKey(secret),
+    new TextEncoder().encode(JSON.stringify(value))
+  );
+  return "v1." + b64(iv) + "." + b64(new Uint8Array(cipher));
 }
-async function accessToken(tokens: Record<string,unknown>, expiresAt: string, secret: string, admin: any): Promise<string> {
-  const refresh=tokens.refresh_token;
-  if(typeof refresh!=="string"||!refresh)throw new Error("Refresh token non disponibile");
-  if(new Date(expiresAt).getTime()>Date.now()+60000&&typeof tokens.access_token==="string")return tokens.access_token;
-  const id=Deno.env.get("GOOGLE_CLIENT_ID"), clientSecret=Deno.env.get("GOOGLE_CLIENT_SECRET");
-  if(!id||!clientSecret)throw new Error("Configurazione Google incompleta");
-  const response=await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:id,client_secret:clientSecret,refresh_token:refresh,grant_type:"refresh_token"})});
-  if(!response.ok)throw new Error("Rinnovo del token Google non riuscito");
-  const fresh=await response.json(); if(!fresh.access_token)throw new Error("Token Google mancante");
-  const updated={...tokens,access_token:fresh.access_token,refresh_token:refresh,token_type:fresh.token_type||"Bearer",scope:fresh.scope||tokens.scope||""};
-  const expiry=new Date(Date.now()+Number(fresh.expires_in||3600)*1000).toISOString();
-  const ciphertext=await encrypt(updated,secret);
-  const {error}=await admin.rpc("nmre_save_gmail_tokens",{p_email:ACCOUNT,p_token_ciphertext:ciphertext,p_scope:String(updated.scope||""),p_expires_at:expiry});
-  if(error)throw new Error("Aggiornamento token Gmail non riuscito");
+
+async function accessToken(
+  tokens: Record<string, unknown>,
+  expiresAt: string,
+  secret: string,
+  admin: any
+): Promise<string> {
+  const refresh = tokens.refresh_token;
+  if (typeof refresh !== "string" || !refresh) throw new Error("Refresh token non disponibile");
+  if (new Date(expiresAt).getTime() > Date.now() + 60000 && typeof tokens.access_token === "string") {
+    return tokens.access_token;
+  }
+
+  const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
+  if (!clientId || !clientSecret) throw new Error("Configurazione Google incompleta");
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refresh,
+      grant_type: "refresh_token"
+    }),
+    signal: AbortSignal.timeout(20000)
+  });
+
+  if (!response.ok) throw new Error("Rinnovo del token Google non riuscito (" + response.status + ")");
+  const fresh = await response.json();
+  if (typeof fresh.access_token !== "string" || !fresh.access_token) {
+    throw new Error("Token Google mancante");
+  }
+
+  const updated = {
+    ...tokens,
+    access_token: fresh.access_token,
+    refresh_token: refresh,
+    token_type: fresh.token_type || "Bearer",
+    scope: fresh.scope || tokens.scope || ""
+  };
+  const expiry = new Date(Date.now() + Number(fresh.expires_in || 3600) * 1000).toISOString();
+  const ciphertext = await encrypt(updated, secret);
+  const { error } = await admin.rpc("nmre_save_gmail_tokens", {
+    p_email: ACCOUNT,
+    p_token_ciphertext: ciphertext,
+    p_scope: String(updated.scope || ""),
+    p_expires_at: expiry
+  });
+  if (error) throw new Error("Aggiornamento token Gmail non riuscito");
   return fresh.access_token;
 }
-function decode(s: string): string {
-  const n=s.replace(/-/g,"+").replace(/_/g,"/"); const padded=n+"=".repeat((4-n.length%4)%4);
-  const bin=atob(padded); return new TextDecoder("utf-8",{fatal:false}).decode(Uint8Array.from(bin,c=>c.charCodeAt(0)));
-}
-function bodyParts(part: any): string[] {
-  const out:string[]=[];
-  if(part?.body?.data&&part.mimeType==="text/plain")out.push(decode(part.body.data));
-  else if(part?.body?.data&&part.mimeType==="text/html"){
-    const html=decode(part.body.data).replace(/<\s*(script|style)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi," ").replace(/<\s*a\b[^>]*href=["']([^"']+)["'][^>]*>/gi," $1 ").replace(/<[^>]+>/g," ").replace(/&nbsp;/gi," ").replace(/&amp;/gi,"&").replace(/&quot;/gi,'"').replace(/&#39;/gi,"'").replace(/&lt;/gi,"<").replace(/&gt;/gi,">");
-    out.push(html);
+
+async function gmailProfile(token: string): Promise<string> {
+  const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+    headers: { Authorization: "Bearer " + token },
+    signal: AbortSignal.timeout(20000)
+  });
+  if (!response.ok) throw new Error("Lettura profilo Gmail non riuscita (" + response.status + ")");
+  const profile = await response.json();
+
+  if (String(profile.emailAddress || "").toLowerCase() !== ACCOUNT) {
+    throw new Error("La casella Gmail autorizzata non corrisponde");
   }
-  for(const child of part?.parts||[])out.push(...bodyParts(child));
-  return out;
+  const historyId = String(profile.historyId || "");
+  if (!/^[0-9]{1,30}$/.test(historyId)) throw new Error("Cronologia Gmail non disponibile");
+  return historyId;
 }
-async function readEmail(m:any,token:string):Promise<any|null>{
-  const r=await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/"+encodeURIComponent(m.id)+"?format=full",{headers:{Authorization:"Bearer "+token}});
-  if(!r.ok)return null; const e=await r.json(); const h=e.payload?.headers||[];
-  const get=(n:string)=>h.find((x:any)=>x.name?.toLowerCase()===n.toLowerCase())?.value||"";
-  return {id:e.id,from:get("From"),subject:get("Subject"),date:get("Date"),snippet:(e.snippet||"").slice(0,500),bodyText:bodyParts(e.payload).join("\n").slice(0,8000)};
+
+async function readSyncCursor(admin: any): Promise<string | null> {
+  const { data, error } = await admin.rpc("nmre_get_gmail_sync_state");
+  if (error) throw new Error("Lettura dello stato di sincronizzazione Gmail non riuscita");
+  const row = Array.isArray(data) ? data[0] : data;
+  const value = String(row?.history_id || "");
+  return /^[0-9]{1,30}$/.test(value) ? value : null;
+}
+
+async function saveSyncCursor(admin: any, historyId: string): Promise<void> {
+  const { error } = await admin.rpc("nmre_save_gmail_sync_state", { p_history_id: historyId });
+  if (error) throw new Error("Salvataggio dello stato di sincronizzazione Gmail non riuscito");
+}
+
+async function listFullSyncMessageIds(token: string): Promise<string[]> {
+  const ids = new Set<string>();
+  let pageToken: string | undefined;
+  let pages = 0;
+
+  do {
+    const params = new URLSearchParams({ maxResults: "100", q: "newer_than:30d" });
+    if (pageToken) params.set("pageToken", pageToken);
+
+    const response = await fetch(
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages?" + params.toString(),
+      {
+        headers: { Authorization: "Bearer " + token },
+        signal: AbortSignal.timeout(20000)
+      }
+    );
+    if (!response.ok) throw new Error("Ricerca Gmail non riuscita (" + response.status + ")");
+
+    const result = await response.json();
+    for (const message of Array.isArray(result.messages) ? result.messages : []) {
+      if (typeof message?.id === "string" && message.id) ids.add(message.id);
+    }
+
+    pageToken = typeof result.nextPageToken === "string" ? result.nextPageToken : undefined;
+    pages++;
+    if (pageToken && pages >= 100) {
+      throw new Error("La sincronizzazione completa supera il limite di sicurezza di 10.000 messaggi; il cursore non è stato aggiornato");
+    }
+  } while (pageToken);
+
+  return [...ids];
+}
+
+type HistorySyncResult = {
+  ids: string[];
+  historyId: string;
+  historyRecords: number;
+};
+
+async function listHistoryMessageIds(
+  token: string,
+  startHistoryId: string
+): Promise<HistorySyncResult | null> {
+  const ids = new Set<string>();
+  let pageToken: string | undefined;
+  let latestHistoryId: string | null = null;
+  let historyRecords = 0;
+  let pages = 0;
+
+  do {
+    const params = new URLSearchParams({
+      startHistoryId,
+      maxResults: "500"
+    });
+    params.append("historyTypes", "messageAdded");
+    params.append("historyTypes", "labelAdded");
+    if (pageToken) params.set("pageToken", pageToken);
+
+    const response = await fetch(
+      "https://gmail.googleapis.com/gmail/v1/users/me/history?" + params.toString(),
+      {
+        headers: { Authorization: "Bearer " + token },
+        signal: AbortSignal.timeout(20000)
+      }
+    );
+
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error("Lettura della cronologia Gmail non riuscita (" + response.status + ")");
+
+    const result = await response.json();
+    const history = Array.isArray(result.history) ? result.history : [];
+    historyRecords += history.length;
+    for (const id of collectHistoryMessageIds(history)) ids.add(id);
+
+    if (typeof result.historyId === "string" && /^[0-9]{1,30}$/.test(result.historyId)) {
+      latestHistoryId = result.historyId;
+    }
+
+    pageToken = typeof result.nextPageToken === "string" ? result.nextPageToken : undefined;
+    pages++;
+    if (pageToken && pages >= 20) {
+      throw new Error("La cronologia Gmail supera il limite di sicurezza di 10.000 record; il cursore non è stato aggiornato");
+    }
+  } while (pageToken);
+
+  if (!latestHistoryId) throw new Error("Gmail non ha restituito il nuovo identificativo della cronologia");
+  return { ids: [...ids], historyId: latestHistoryId, historyRecords };
+}
+
+function decode(value: string): string {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+  const binary = atob(padded);
+  return new TextDecoder("utf-8", { fatal: false }).decode(
+    Uint8Array.from(binary, character => character.charCodeAt(0))
+  );
+}
+
+function bodyParts(part: any): string[] {
+  const output: string[] = [];
+  if (part?.body?.data && part.mimeType === "text/plain") {
+    output.push(decode(part.body.data));
+  } else if (part?.body?.data && part.mimeType === "text/html") {
+    const html = decode(part.body.data)
+      .replace(/<\s*(script|style)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, " ")
+      .replace(/<\s*a\b[^>]*href=["']([^"']+)["'][^>]*>/gi, " $1 ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&quot;/gi, "\"")
+      .replace(/&#39;/gi, "'")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">");
+    output.push(html);
+  }
+  for (const child of part?.parts || []) output.push(...bodyParts(child));
+  return output;
+}
+
+async function readEmail(messageId: string, token: string): Promise<any | null> {
+  const response = await fetch(
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages/" + encodeURIComponent(messageId) + "?format=full",
+    {
+      headers: { Authorization: "Bearer " + token },
+      signal: AbortSignal.timeout(20000)
+    }
+  );
+
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error("Lettura del messaggio Gmail non riuscita (" + response.status + ")");
+
+  const email = await response.json();
+  const headers = email.payload?.headers || [];
+  const get = (name: string) =>
+    headers.find((header: any) => header.name?.toLowerCase() === name.toLowerCase())?.value || "";
+
+  return {
+    id: email.id,
+    labels: Array.isArray(email.labelIds) ? email.labelIds : [],
+    from: get("From"),
+    subject: get("Subject"),
+    date: get("Date"),
+    snippet: (email.snippet || "").slice(0, 500),
+    bodyText: bodyParts(email.payload).join("\n").slice(0, 8000)
+  };
 }
 
 export default {
-  fetch: withSupabase({auth:"secret"},async(req,ctx)=>{
-    if(req.method!=="POST")return Response.json({error:"Metodo non consentito"},{status:405});
-    try{
-      const owner=Deno.env.get("NMRE_ALLOWED_USER_ID"), encryptionSecret=Deno.env.get("INTEGRATION_TOKEN_ENCRYPTION_KEY");
-      if(!owner||!/^[0-9a-f-]{36}$/i.test(owner)||!encryptionSecret)throw new Error("Configurazione server incompleta");
-      const {data,error}=await ctx.supabaseAdmin.rpc("nmre_get_gmail_tokens");
-      if(error||!data?.[0]?.token_ciphertext)throw new Error("Collegamento Gmail non trovato");
-      if(data[0].email?.toLowerCase()!==ACCOUNT)throw new Error("Casella Gmail non autorizzata");
-      const tokens=await decrypt(data[0].token_ciphertext,encryptionSecret);
-      const token=await accessToken(tokens,data[0].expires_at,encryptionSecret,ctx.supabaseAdmin);
-      const listResponse=await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=100&q=newer_than%3A30d",{headers:{Authorization:"Bearer "+token}});
-      if(!listResponse.ok)throw new Error("Lettura Gmail non riuscita");
-      const list=await listResponse.json(), messages=list.messages||[], emails:Array<any|null>=[];
-      for(let i=0;i<messages.length;i+=5)emails.push(...await Promise.all(messages.slice(i,i+5).map((m:any)=>readEmail(m,token))));
-      const propertyEmails=emails.filter((e):e is any=>!!e&&propertyEmail(e));
-      const classifiedAll=propertyEmails.map(e=>{
-        const t=[e.subject,e.snippet,e.bodyText].filter(Boolean).join(" ");
-        const seller=sellerClassification(t);
-        return {email:e,text:t,seller};
-      });
-      const classified=classifiedAll.filter(x=>x.seller!=="Agenzia");
-      const retainedIds=new Set(classified.map(x=>String(x.email.id)));
-      const discardedKeys=emails.filter((e):e is any=>!!e&&!retainedIds.has(String(e.id)))
-        .map(e=>"gmail:"+String(e.id));
-      let discardedExisting=0;
-      if(discardedKeys.length){
-        const {data:discarded,error:discardError}=await ctx.supabaseAdmin.from("annunci_candidati")
-          .update({
-            stato:"scartato",notification_sender:null,email_subject:null,
-            updated_at:new Date().toISOString()
-          })
-          .eq("owner_id",owner).eq("stato","da_verificare")
-          .in("dedup_key",discardedKeys).select("id");
-        if(discardError)throw new Error("Pulizia delle notifiche non pertinenti non riuscita");
-        discardedExisting=discarded?.length||0;
+  fetch: withSupabase({ auth: "secret" }, async (req, ctx) => {
+    if (req.method !== "POST") {
+      return Response.json({ error: "Metodo non consentito" }, { status: 405 });
+    }
+
+    try {
+      const owner = Deno.env.get("NMRE_ALLOWED_USER_ID");
+      const encryptionSecret = Deno.env.get("INTEGRATION_TOKEN_ENCRYPTION_KEY");
+      if (!owner || !/^[0-9a-f-]{36}$/i.test(owner) || !encryptionSecret) {
+        throw new Error("Configurazione server incompleta");
       }
-      const rows=await Promise.all(classified.map(async({email:e,text:t,seller})=>{
-        const url=await resolveListingUrl(t);
-        let portal:string|null=null;
-        try{
-          if(url){
-            const host=new URL(url).hostname.toLowerCase().replace(/^www\./,"");
-            portal=PORTALS.find(d=>host===d||host.endsWith("."+d))||null;
+
+      const { data, error } = await ctx.supabaseAdmin.rpc("nmre_get_gmail_tokens");
+      if (error || !data?.[0]?.token_ciphertext) throw new Error("Collegamento Gmail non trovato");
+      if (data[0].email?.toLowerCase() !== ACCOUNT) throw new Error("Casella Gmail non autorizzata");
+
+      const tokens = await decrypt(data[0].token_ciphertext, encryptionSecret);
+      const token = await accessToken(tokens, data[0].expires_at, encryptionSecret, ctx.supabaseAdmin);
+      const profileHistoryId = await gmailProfile(token);
+      const cursor = await readSyncCursor(ctx.supabaseAdmin);
+
+      let messageIds: string[];
+      let nextHistoryId = profileHistoryId;
+      let syncMode: "full_initial" | "full_recovery" | "incremental";
+      let historyRecords = 0;
+
+      if (!cursor) {
+        messageIds = await listFullSyncMessageIds(token);
+        syncMode = "full_initial";
+      } else {
+        const history = await listHistoryMessageIds(token, cursor);
+        if (history) {
+          messageIds = history.ids;
+          nextHistoryId = history.historyId;
+          historyRecords = history.historyRecords;
+          syncMode = "incremental";
+        } else {
+          messageIds = await listFullSyncMessageIds(token);
+          syncMode = "full_recovery";
+        }
+      }
+
+      const emails: Array<any | null> = [];
+      for (let index = 0; index < messageIds.length; index += 5) {
+        emails.push(
+          ...await Promise.all(
+            messageIds.slice(index, index + 5).map(id => readEmail(id, token))
+          )
+        );
+      }
+
+      const mailboxEmails = emails.filter(
+        (email): email is any =>
+          !!email && !email.labels.includes("SPAM") && !email.labels.includes("TRASH")
+      );
+      const propertyEmails = mailboxEmails.filter(email => propertyEmail(email));
+      const classifiedAll = propertyEmails.map(email => {
+        const value = [email.subject, email.snippet, email.bodyText].filter(Boolean).join(" ");
+        return { email, text: value, seller: sellerClassification(value) };
+      });
+      const classified = classifiedAll.filter(item => item.seller !== "Agenzia");
+      const retainedIds = new Set(classified.map(item => String(item.email.id)));
+      const discardedKeys = mailboxEmails
+        .filter(email => !retainedIds.has(String(email.id)))
+        .map(email => "gmail:" + String(email.id));
+
+      let discardedExisting = 0;
+      if (discardedKeys.length) {
+        const { data: discarded, error: discardError } = await ctx.supabaseAdmin
+          .from("annunci_candidati")
+          .update({
+            stato: "scartato",
+            notification_sender: null,
+            email_subject: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq("owner_id", owner)
+          .eq("stato", "da_verificare")
+          .in("dedup_key", discardedKeys)
+          .select("id");
+
+        if (discardError) throw new Error("Pulizia delle notifiche non pertinenti non riuscita");
+        discardedExisting = discarded?.length || 0;
+      }
+
+      const rows = await Promise.all(classified.map(async ({ email, text, seller }) => {
+        const url = await resolveListingUrl(text);
+        let portal: string | null = null;
+        try {
+          if (url) {
+            const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+            portal = PORTALS.find(domain => host === domain || host.endsWith("." + domain)) || null;
           }
-        }catch{portal=null;}
+        } catch {
+          portal = null;
+        }
+
         return {
-          owner_id:owner,titolo:listingTitle(e),comune:municipality(t),prezzo:price(t),
-          tipologia_immobile:propertyType(t),superficie_mq:surface(t),locali:rooms(t),
-          camere:bedrooms(t),bagni:bathrooms(t),tipo_venditore:seller,
-          portale:portal||"Portale non indicato",url,
-          data_pubblicazione:e.date&&!Number.isNaN(Date.parse(e.date))?new Date(e.date).toISOString():null,
-          source_email_id:String(e.id),dedup_key:"gmail:"+String(e.id),stato:"da_verificare"
+          owner_id: owner,
+          titolo: listingTitle(email),
+          comune: municipality(text),
+          prezzo: price(text),
+          tipologia_immobile: propertyType(text),
+          superficie_mq: surface(text),
+          locali: rooms(text),
+          camere: bedrooms(text),
+          bagni: bathrooms(text),
+          tipo_venditore: seller,
+          portale: portal || "Portale non indicato",
+          url,
+          data_pubblicazione: email.date && !Number.isNaN(Date.parse(email.date))
+            ? new Date(email.date).toISOString()
+            : null,
+          source_email_id: String(email.id),
+          dedup_key: "gmail:" + String(email.id),
+          stato: "da_verificare"
         };
       }));
-      let inserted=0,updated=0;
-      for(const row of rows){
-        const {data:existing,error:updateError}=await ctx.supabaseAdmin.from("annunci_candidati")
+
+      let inserted = 0;
+      let updated = 0;
+      for (const row of rows) {
+        const { data: existing, error: updateError } = await ctx.supabaseAdmin
+          .from("annunci_candidati")
           .update({
-            titolo:row.titolo,comune:row.comune,prezzo:row.prezzo,
-            tipo_venditore:row.tipo_venditore,portale:row.portale,url:row.url,
-            data_pubblicazione:row.data_pubblicazione,
-            tipologia_immobile:row.tipologia_immobile,
-            superficie_mq:row.superficie_mq,locali:row.locali,camere:row.camere,bagni:row.bagni,
-            notification_sender:null,email_subject:null,
-            updated_at:new Date().toISOString()
+            titolo: row.titolo,
+            comune: row.comune,
+            prezzo: row.prezzo,
+            tipo_venditore: row.tipo_venditore,
+            portale: row.portale,
+            url: row.url,
+            data_pubblicazione: row.data_pubblicazione,
+            tipologia_immobile: row.tipologia_immobile,
+            superficie_mq: row.superficie_mq,
+            locali: row.locali,
+            camere: row.camere,
+            bagni: row.bagni,
+            notification_sender: null,
+            email_subject: null,
+            updated_at: new Date().toISOString()
           })
-          .eq("owner_id",owner).eq("dedup_key",row.dedup_key).eq("stato","da_verificare")
+          .eq("owner_id", owner)
+          .eq("dedup_key", row.dedup_key)
+          .eq("stato", "da_verificare")
           .select("id");
-        if(updateError)throw new Error("Aggiornamento degli annunci candidati non riuscito");
-        updated+=existing?.length||0;
+
+        if (updateError) throw new Error("Aggiornamento degli annunci candidati non riuscito");
+        updated += existing?.length || 0;
       }
-      if(rows.length){
-        const {data:saved,error:saveError}=await ctx.supabaseAdmin.from("annunci_candidati")
-          .upsert(rows,{onConflict:"owner_id,dedup_key",ignoreDuplicates:true}).select("id");
-        if(saveError)throw new Error("Salvataggio annunci candidati non riuscito");
-        inserted=saved?.length||0;
+
+      if (rows.length) {
+        const { data: saved, error: saveError } = await ctx.supabaseAdmin
+          .from("annunci_candidati")
+          .upsert(rows, { onConflict: "owner_id,dedup_key", ignoreDuplicates: true })
+          .select("id");
+
+        if (saveError) throw new Error("Salvataggio annunci candidati non riuscito");
+        inserted = saved?.length || 0;
       }
-      const excludedAgencies=propertyEmails.length-classified.length;
+
+      await saveSyncCursor(ctx.supabaseAdmin, nextHistoryId);
+
+      const excludedAgencies = propertyEmails.length - classified.length;
       return Response.json({
-        success:true,account:ACCOUNT,listed:messages.length,read:emails.filter(Boolean).length,
-        propertyNotifications:propertyEmails.length,privateRecognized:rows.filter(r=>r.tipo_venditore==="Privato").length,
-        needsUserReview:rows.filter(r=>r.tipo_venditore==="Da verificare").length,
-        excludedAgencies,discardedExisting,inserted,updated,
-        duplicatesOrExisting:Math.max(0,rows.length-inserted-updated),
-        failed:emails.filter(x=>!x).length
+        success: true,
+        account: ACCOUNT,
+        syncMode,
+        historyRecords,
+        listed: messageIds.length,
+        read: mailboxEmails.length,
+        propertyNotifications: propertyEmails.length,
+        privateRecognized: rows.filter(row => row.tipo_venditore === "Privato").length,
+        needsUserReview: rows.filter(row => row.tipo_venditore === "Da verificare").length,
+        excludedAgencies,
+        discardedExisting,
+        inserted,
+        updated,
+        duplicatesOrExisting: Math.max(0, rows.length - inserted - updated),
+        missingMessages: emails.filter(email => !email).length
       });
-    }catch(error){
-      console.error("Errore Gmail scheduled reader:",error instanceof Error?error.message:"Errore sconosciuto");
-      return Response.json({success:false,error:error instanceof Error?error.message:"Errore sincronizzazione Gmail"},{status:500});
+    } catch (error) {
+      console.error(
+        "Errore Gmail scheduled reader:",
+        error instanceof Error ? error.message : "Errore sconosciuto"
+      );
+      return Response.json(
+        {
+          success: false,
+          error: error instanceof Error ? error.message : "Errore sincronizzazione Gmail"
+        },
+        { status: 500 }
+      );
     }
   })
 };
