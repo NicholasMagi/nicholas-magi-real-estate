@@ -1176,15 +1176,25 @@ $("exportCandidatesXlsx").addEventListener("click",()=>exportXlsx(candidateCache
 
 $("exportCsv").addEventListener("click",exportListingsCsv);
 $("refresh").addEventListener("click",loadListings);
-$("listingSearch").addEventListener("input",loadListings);
-$("sellerFilter").addEventListener("change",loadListings);
-$("contactFilter").addEventListener("change",loadListings);
-let candidateSearchTimer=null;
-$("candidateSearch").addEventListener("input",()=>{
-  clearTimeout(candidateSearchTimer);
-  candidateSearchTimer=setTimeout(loadCandidates,250);
+
+const candidateTextFilters=["candidateSearch","candidatePriceMin","candidatePriceMax","candidateSurfaceMin","candidateSurfaceMax","candidateFromFilter","candidateToFilter"];
+const candidateSelectFilters=["candidateTownFilter","candidateTypeFilter","candidatePortalFilter","candidateSellerFilter"];
+candidateTextFilters.forEach(id=>$(id).addEventListener("input",renderCandidates));
+candidateSelectFilters.forEach(id=>$(id).addEventListener("change",renderCandidates));
+$("candidateResetFilters").addEventListener("click",()=>{
+  [...candidateTextFilters,...candidateSelectFilters].forEach(id=>$(id).value="");
+  renderCandidates();
 });
 $("refreshCandidates").addEventListener("click",loadCandidates);
+
+const listingTextFilters=["listingSearch","listingPriceMin","listingPriceMax","listingSurfaceMin","listingSurfaceMax","listingRoomsMin","listingRoomsMax"];
+const listingSelectFilters=["listingTownFilter","listingTypeFilter","listingPortalFilter","sellerFilter","contactFilter"];
+listingTextFilters.forEach(id=>$(id).addEventListener("input",renderListings));
+listingSelectFilters.forEach(id=>$(id).addEventListener("change",renderListings));
+$("listingResetFilters").addEventListener("click",()=>{
+  [...listingTextFilters,...listingSelectFilters].forEach(id=>$(id).value="");
+  renderListings();
+});
 
 /* COLLEGAMENTO GMAIL */
 
