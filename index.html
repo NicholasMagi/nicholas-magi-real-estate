@@ -1202,7 +1202,7 @@ async function syncOmiOpenData(){
     }
     await loadOmiQuotations();
     const statusText="Aggiornamento completato: "+saved.toLocaleString("it-IT")+" righe OMI del semestre "+formatOmiSemester(rows[0].semestre)+". Comuni caricati: "+loaded.join(", ")+".";
-    msg("omiImportStatus",statusText+(failed.length?" Non disponibili: "+failed.join("; "):"")+" Fonte dati: Agenzia delle Entrate - OMI; diffusione open data Cruscotto Italia / AgID, licenza CC BY 4.0.",failed.length?"":"success");
+    msg("omiImportStatus",statusText+(failed.length?" Non disponibili: "+failed.join("; "):"")+" Fonte dati: Agenzia delle Entrate - OMI; diffusione open data Cruscotto Italia / AgID, licenza CC BY 4.0.",failed.length?"error":"success");
   }catch(error){
     msg("omiImportStatus",error instanceof Error?error.message:"Aggiornamento OMI automatico non riuscito.","error");
   }finally{
@@ -1392,6 +1392,10 @@ async function saveDeclaredDeed(event){
   }
   if(attributable&&propertyCount!==1){
     msg("deedSaveStatus","L'attribuzione del corrispettivo alla singola unità è consentita solo quando l'atto contiene un immobile.","error");
+    return;
+  }
+  if(attributable&&(!verified||surface===null)){
+    msg("deedSaveStatus","Per calcolare il €/m² deve anche verificare i dati sulla scheda ufficiale e inserire la superficie in m².","error");
     return;
   }
   if(surface!==null&&(!Number.isFinite(surface)||surface<=0)){
