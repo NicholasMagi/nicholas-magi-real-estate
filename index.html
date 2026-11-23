@@ -700,8 +700,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
     <div class="actions"><button class="gold" id="runOmiCompare" type="button">Confronta con OMI</button></div>
     <div id="omiCompareResult" class="market-result" aria-live="polite">Completi i dati e scelga Confronta con OMI.</div>
     <div class="market-block">
-      <div class="market-block-head"><div><h3>3. Valuation Intelligence · Rapporto per il proprietario</h3><p class="hint">Genera una scheda stampabile incrociando l'intervallo OMI più recente con i soli atti verificati e attribuibili a una singola unità nella stessa zona.</p></div><span class="pill">Analisi documentata</span></div>
-      <div class="market-notice"><strong>Metodo prudenziale:</strong> l'intervallo OMI costituisce il riferimento ufficiale. I compravenduti verificati vengono mostrati separatamente come riscontro, senza mescolare dati non omogenei o attribuire prezzi a immobili diversi.</div>
+      <div class="market-block-head"><div><h3>3. Valuation Intelligence · Rapporto per il proprietario</h3><p class="hint">Genera una scheda stampabile incrociando l’intervallo OMI più recente con i soli atti verificati e attribuibili a una singola unità nella stessa zona.</p></div><span class="pill">Analisi documentata</span></div>
+      <div class="market-notice"><strong>Metodo prudenziale:</strong> l’intervallo OMI costituisce il riferimento ufficiale. I compravenduti verificati vengono mostrati separatamente come riscontro, senza mescolare dati non omogenei o attribuire prezzi a immobili diversi.</div>
       <div class="actions"><button class="gold" id="runValuationIntelligence" type="button">Genera rapporto di valutazione</button></div>
       <div id="valuationIntelligenceResult" class="market-result" aria-live="polite">Compili i campi del confronto OMI qui sopra e generi il rapporto.</div>
     </div>
@@ -2001,7 +2001,7 @@ function runOmiComparison(){
   matches=matches.filter(row=>Number(row.semestre)===latest);
   target.innerHTML='<strong>Richiesta: '+safe(formatOmiEuro(pricePerSqm))+'/m²</strong> · '+safe(formatOmiSemester(latest))+
     '<div class="market-result-grid">'+matches.map(row=>{
-      const relation=pricePerSqm<Number(row.compr_min)?"Sotto l'intervallo OMI":pricePerSqm>Number(row.compr_max)?"Sopra l'intervallo OMI":"Dentro l'intervallo OMI";
+      const relation=pricePerSqm<Number(row.compr_min)?"Sotto l’intervallo OMI":pricePerSqm>Number(row.compr_max)?"Sopra l’intervallo OMI":"Dentro l’intervallo OMI";
       const diff=pricePerSqm<Number(row.compr_min)
         ?((Number(row.compr_min)-pricePerSqm)/Number(row.compr_min))*100
         :pricePerSqm>Number(row.compr_max)
@@ -2102,7 +2102,7 @@ function printValuationReport(){
     '<div class="grid"><div class="tile"><span class="muted">Intervallo inferiore OMI</span><strong>'+safe(money(r.lowValue))+'</strong><span>'+safe(money(r.lowSqm))+'/m²</span></div><div class="tile"><span class="muted">Punto centrale matematico</span><strong>'+safe(money(r.midpointValue))+'</strong><span>'+safe(money(r.midpointSqm))+'/m²</span></div><div class="tile"><span class="muted">Intervallo superiore OMI</span><strong>'+safe(money(r.highValue))+'</strong><span>'+safe(money(r.highSqm))+'/m²</span></div></div>'+
     '<h2>Prezzo richiesto e posizionamento</h2><p>Prezzo richiesto: <strong>'+safe(money(r.asking))+'</strong> ('+safe(money(r.askingSqm))+'/m²). Scostamento dal punto centrale OMI: <strong>'+safe((r.gapPct>0?"+":"")+r.gapPct.toFixed(1).replace(".",",")+"%")+'</strong>.</p>'+
     '<h2>Riscontro dai compravenduti verificati</h2><p>'+(r.deedMedian!==null?safe(r.deedCount+" atti residenziali verificati nella stessa zona · mediana "+money(r.deedMedian)+"/m² · periodo "+r.deedPeriod):"Nessun atto verificato e attribuibile a una singola unità negli ultimi 36 mesi.")+'</p>'+
-    '<div class="notice"><strong>Metodo e limiti.</strong><br>Il riferimento principale è l'intervallo OMI ufficiale del semestre '+safe(formatOmiSemester(r.latest))+'. I corrispettivi dei compravenduti sono mostrati separatamente e non vengono fusi con l'intervallo OMI, poiché la superficie catastale può differire dal criterio lordo/netto selezionato. Le quotazioni OMI sono indicative e non identificano il prezzo certo di vendita.</div>'+
+    '<div class="notice"><strong>Metodo e limiti.</strong><br>Il riferimento principale è l’intervallo OMI ufficiale del semestre '+safe(formatOmiSemester(r.latest))+'. I corrispettivi dei compravenduti sono mostrati separatamente e non vengono fusi con l’intervallo OMI, poiché la superficie catastale può differire dal criterio lordo/netto selezionato. Le quotazioni OMI sono indicative e non identificano il prezzo certo di vendita.</div>'+
     '<p class="foot">Analisi preliminare a supporto del colloquio con il proprietario. Non è una perizia e non sostituisce sopralluogo, verifica urbanistico-catastale, stato manutentivo, comparabili puntuali e valutazione professionale. Fonte OMI: Agenzia delle Entrate. Dati dei compravenduti: schede consultate e verificate dall'operatore.</p><button class="noprint" onclick="window.print()">Stampa / salva PDF</button></body></html>';
   w.document.open();w.document.write(html);w.document.close();
 }
