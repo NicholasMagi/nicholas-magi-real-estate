@@ -107,6 +107,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const settings = requiredSettings();
+  const leadUseApproved = Deno.env.get("INSIGHTS_LEAD_USE_APPROVED") === "true";
   const environment = Deno.env.get("NMRE_INSIGHTS_ENV") === "production" ? "production" : "sandbox";
 
   if (req.method === "GET") {
@@ -114,6 +115,8 @@ Deno.serve(async (req: Request) => {
       success: true,
       provider: "Immobiliare.it Insights",
       configured: settings.configured,
+      leadUseApproved,
+      canImport: settings.configured && leadUseApproved,
       environment,
       capabilities: ["offerte residenziali in vendita", "venditore privato", "disponibilità numero telefonico"],
       missingSecrets: [
@@ -123,6 +126,15 @@ Deno.serve(async (req: Request) => {
         ["INSIGHTS_PASSWORD", settings.password]
       ].filter((entry) => !entry[1]).map((entry) => entry[0])
     });
+  }
+
+  if (!leadUseApproved) {
+    return reply({
+      success: false,
+      configured: settings.configured,
+      code: "INSIGHTS_LEAD_USE_NOT_APPROVED",
+      error: "Prima di importare i risultati per finalità di acquisizione immobiliare, occorre una conferma scritta di Immobiliare.it Insights che autorizzi espressamente questo utilizzo."
+    }, 200);
   }
 
   if (!settings.configured) {
@@ -159,7 +171,7 @@ Deno.serve(async (req: Request) => {
     let detailRead = 0;
     let detailsFailed = 0;
     let pagesRead = 0;
-    const maxPages = 5;
+    const maxPages = 10;
 
     for (let page = 1; page <= maxPages; page++) {
       const response = await fetch(baseUrl + "/comparables/searchByAttribute", {
