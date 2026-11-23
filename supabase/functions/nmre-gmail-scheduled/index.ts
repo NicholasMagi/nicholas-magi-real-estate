@@ -735,6 +735,7 @@ export default {
         discardedExisting,
         inserted,
         updated,
+        notificationHistoryEntriesSaved: notificationsSaved,
         reprocessedExistingListingLinks: repairIds.length,
         duplicatesOrExisting: Math.max(0, rows.length - inserted - updated),
         missingMessages: emails.filter(email => !email).length
