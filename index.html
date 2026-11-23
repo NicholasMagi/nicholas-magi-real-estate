@@ -2591,7 +2591,7 @@ function renderConversionIntelligence(){
   const property=(nmreCrmProperties||[]).find(item=>item.id===row.property_id);
   snippets.push({note,who:contact?.full_name||property?.title||"Contatto senza nominativo",date:row.created_at});
  });
- reasonsBox.innerHTML=snippets.length?snippets.slice(0,5).map(item=>'<article class="nmre-crm-item"><div><strong>'+safe(item.who)+'</strong><p>'+safe(item.note)+'</p></div><div class="nmre-crm-item-side"><span>'+safe(item.date?new Date(item.date).toLocaleDateString("it-IT"):"")+'</span></div></article>').join(""):'<div class="nmre-crm-empty">Nessuna motivazione testuale registrata per i contatti non interessati nel periodo.';
+ reasonsBox.innerHTML=snippets.length?snippets.slice(0,5).map(item=>'<article class="nmre-crm-item"><div><strong>'+safe(item.who)+'</strong><p>'+safe(item.note)+'</p></div><div class="nmre-crm-item-side"><span>'+safe(item.date?new Date(item.date).toLocaleDateString("it-IT"):"")+'</span></div></article>').join(""):'<div class="nmre-crm-empty">Nessuna motivazione testuale registrata per i contatti non interessati nel periodo.</div>';
  const period=$("conversionIntelligencePeriod");if(period)period.textContent="Ultimi "+range+" giorni";
  const note=$("conversionIntelligenceNote");
  if(note)note.textContent="Base dati: interazioni CRM e archivio disponibili (fino a 90 giorni) e appuntamenti in agenda. I conteggi richiedono un contatto o immobile collegato; una fase successiva non prova che la precedente sia stata completata nello stesso percorso.";
