@@ -422,6 +422,8 @@ export default {
       const repairIds = (candidatesToRepair || [])
         .filter((candidate: any) => {
           if (typeof candidate.source_email_id !== "string" || !candidate.url_originale) return false;
+          // Le verifiche manuali già archiviate come scartate restano definitive.
+          if (candidate.seller_manual_override === true && candidate.stato === "scartato") return false;
           // Ogni email legacy viene rielaborata una sola volta per assegnare
           // un'identità stabile alla scheda, anche se non contiene un link diretto.
           if (Number(candidate.deduplication_version || 0) < 1) return true;
