@@ -3219,6 +3219,7 @@ async function saveCallTask(id,card,button){
     ?"Chiamata registrata nello storico. Non è stato possibile aggiornare lo stato e il promemoria: "+updateError.message
     :"Chiamata registrata. Storico e prossima attività aggiornati.",updateError?"error":"success");
   await loadListings();
+  await loadCrmWorkspace();
 }
 
 async function loadInteractions(annuncioId,details){
