@@ -21,10 +21,13 @@ function canonicalImmobiliareUrl(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
   try {
     const url = new URL(value.trim());
-    const host = url.hostname.toLowerCase().replace(/^www\\./, "");
+    let host = url.hostname.toLowerCase();
+    if (host.startsWith("www.")) host = host.slice(4);
     if (url.protocol !== "https:" || host !== "immobiliare.it") return null;
-    const match = url.pathname.match(/\\/annunci\\/(\\d+)/i);
-    return match ? "immobiliare.it/annunci/" + match[1] : null;
+    const segments = url.pathname.split("/").filter(Boolean);
+    if (segments.length < 2 || segments[0].toLowerCase() !== "annunci") return null;
+    if (!/^[0-9]+$/.test(segments[1])) return null;
+    return "immobiliare.it/annunci/" + segments[1];
   } catch {
     return null;
   }
