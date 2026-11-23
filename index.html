@@ -1343,14 +1343,15 @@ function renderTerritoryScanner(all=listingCache,candidates=candidateCache,now=n
   const town=ensure(item.comune);if(!town)return;
   const key=propertyKey(item,"crm");if(crmKeys.has(key))return;crmKeys.add(key);
   // Count each property once across lead and CRM records, while preserving CRM status.
-  if(!listingKeys.has(key)){
+  const alreadyCounted=listingKeys.has(key);
+  if(!alreadyCounted){
    listingKeys.add(key);
    if(item.tipo_venditore==="Privato")town.privateAds++;else town.otherAds++;
    if(isRecentRecord(item))town.recent++;
   }
   if(!["incarico_acquisito","non_interessato"].includes(item.stato_contatto||"da_contattare")&&item.altre_agenzie!=="esclusiva")town.crmActive++;
   const history=priceHistoryAnalysis(item);
-  if(!listingKeys.has(key)&&history.drops.length){town.dropProperties++;town.dropEvents+=history.drops.length;}
+  if(!alreadyCounted&&history.drops.length){town.dropProperties++;town.dropEvents+=history.drops.length;}
   town.items.push({item,kind:"crm",isRecent:isRecentRecord(item),dropCount:history.drops.length});
  };
  (Array.isArray(candidates)?candidates:[]).forEach(addCandidate);
