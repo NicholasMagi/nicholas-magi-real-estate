@@ -1254,7 +1254,22 @@ function renderAcquisitionPredictor(all=listingCache,candidates=candidateCache,n
   if(url)seen.add(url);
   if(kind==="candidate"){
    const intel=acquisitionIntelligence(item,now);
-   rows.push({item,kind,score:intel.score,signals:intel.signals.slice(0,4),next:intel.next,tag:item.tipo_venditore==="Privato"?"PRIVATO VERIFICATO":"IDENTITÀ DA VERIFICARE",level:intel.level});
+   const qualityFields=[
+    !!String(item.comune||"").trim(),
+    !!String(item.contatto||"").trim(),
+    isSpecificCandidateUrl(item.url),
+    Number(item.prezzo)>0,
+    Number(item.superficie_mq)>0,
+    !!String(item.tipologia_immobile||"").trim(),
+    item.tipo_venditore==="Privato"||item.tipo_venditore==="Agenzia"
+   ];
+   const quality={done:qualityFields.filter(Boolean).length,total:qualityFields.length};
+   const gaps=[];
+   if(!String(item.contatto||"").trim())gaps.push("reperire recapito");
+   if(!isSpecificCandidateUrl(item.url))gaps.push("verificare link annuncio");
+   if(item.tipo_venditore!=="Privato"&&item.tipo_venditore!=="Agenzia")gaps.push("identificare venditore");
+   if(!item.comune)gaps.push("confermare comune");
+   rows.push({item,kind,score:intel.score,signals:intel.signals.slice(0,4),next:gaps.length?"Completare i dati: "+gaps.slice(0,2).join(" e "):intel.next,tag:item.tipo_venditore==="Privato"?"PRIVATO VERIFICATO":"IDENTITÀ DA VERIFICARE",level:intel.level,quality,gaps});
    return;
   }
   const status=item.stato_contatto||"da_contattare";
@@ -1282,7 +1297,24 @@ function renderAcquisitionPredictor(all=listingCache,candidates=candidateCache,n
    next=status==="interessato"?"Fissare un follow-up con il proprietario interessato":"Pianificare il primo contatto o il richiamo";
   }
   if(status==="appuntamento")next="Confermare l'appuntamento e preparare l'analisi dell'immobile";
-  rows.push({item,kind,score:Math.min(100,score),signals:signals.slice(0,4),next,tag:"PROPRIETARIO IN CRM",level:score>=65?"high":score>=40?"medium":"low",urgency});
+  const qualityFields=[
+   !!String(item.contatto||"").trim(),
+   !!String(item.vendita_motivazione||"").trim(),
+   !!String(item.tempistiche_vendita||"").trim(),
+   !!(item.altre_agenzie&&item.altre_agenzie!=="da_verificare"),
+   !!(item.prezzo_trattabile&&item.prezzo_trattabile!=="da_verificare"),
+   !!String(item.prossimo_contatto_il||"").trim()
+  ];
+  const quality={done:qualityFields.filter(Boolean).length,total:qualityFields.length};
+  const gaps=[];
+  if(!String(item.contatto||"").trim())gaps.push("recapito");
+  if(!String(item.vendita_motivazione||"").trim())gaps.push("motivazione");
+  if(!String(item.tempistiche_vendita||"").trim())gaps.push("tempistiche");
+  if(!item.altre_agenzie||item.altre_agenzie==="da_verificare")gaps.push("situazione agenzie");
+  if(!item.prezzo_trattabile||item.prezzo_trattabile==="da_verificare")gaps.push("margine sul prezzo");
+  if(!item.prossimo_contatto_il)gaps.push("data prossimo contatto");
+  if(gaps.length&&score<80)next="Completare la qualificazione: "+gaps.slice(0,3).join(", ");
+  rows.push({item,kind,score:Math.min(100,score),signals:signals.slice(0,4),next,tag:"PROPRIETARIO IN CRM",level:score>=65?"high":score>=40?"medium":"low",urgency,quality,gaps});
  };
  (Array.isArray(all)?all:[]).forEach(item=>addRow(item,"archive"));
  (Array.isArray(candidates)?candidates:[]).forEach(item=>addRow(item,"candidate"));
@@ -1302,7 +1334,9 @@ function renderAcquisitionPredictor(all=listingCache,candidates=candidateCache,n
   const action=row.kind==="candidate"?"Verifica lead":"Apri scheda proprietario";
   return '<article class="seller-radar-item"><div class="seller-radar-item-top"><span class="dash-lead-rank">'+(index===0?"Prima priorità":"Priorità "+(index+1))+' · '+safe(row.tag)+'</span><span class="seller-radar-score '+(row.level==="high"?"seller-radar-score-high":"")+'">'+row.score+'/100</span></div>'+
    '<div class="seller-radar-title">'+safe(item.titolo||"Immobile senza titolo")+'</div><div class="seller-radar-meta">'+safe([item.comune,item.portale,status,price].filter(Boolean).join(" · "))+'</div>'+
-   '<div class="seller-radar-signals">'+signals+'</div><div class="hint"><strong>Prossima azione consigliata:</strong> '+safe(row.next)+'</div>'+
+   '<div class="seller-radar-signals">'+signals+'</div>'+
+   '<div class="hint"><strong>Completezza dati:</strong> '+row.quality.done+'/'+row.quality.total+' · '+(row.gaps.length?'Da completare: '+safe(row.gaps.slice(0,3).join(", ")):'Scheda completa sui campi monitorati')+'</div>'+
+   '<div class="hint"><strong>Prossima azione consigliata:</strong> '+safe(row.next)+'</div>'+
    '<div class="actions"><button type="button" class="gold" data-predictor-kind="'+row.kind+'" data-predictor-id="'+safe(item.id)+'">'+action+'</button></div></article>';
  }).join("")+'</div>';
  box.querySelectorAll("[data-predictor-kind]").forEach(button=>button.addEventListener("click",()=>{
