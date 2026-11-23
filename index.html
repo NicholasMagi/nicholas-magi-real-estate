@@ -570,8 +570,10 @@ button:disabled{opacity:.55;cursor:not-allowed}
   </section>
 
   <section class="dash-card dash-action-plan" style="margin:14px 0">
-    <div class="dash-card-head"><div><h2>Piano operativo suggerito</h2><div class="dash-card-sub">Le prossime azioni, ordinate per urgenza e qualità dei dati disponibili</div></div><span class="small" id="dashActionPlanCount">Analisi attività</span></div>
-    <div id="dashActionPlan"><div class="dash-empty">Preparazione del piano operativo…</div></div>
+    <div class="dash-card-head"><div><h2>NMRE Acquisition Command Center</h2><div class="dash-card-sub">Le 10 azioni commerciali più importanti, ordinate per urgenza e segnali verificabili</div></div><span class="small" id="dashActionPlanCount">Analisi attività</span></div>
+    <div class="seller-radar-intro">Priorità operative costruite su richiami, appuntamenti, interazioni, ribassi documentati e qualità dei dati. Non sono previsioni di incarico. Le attività vengono aggiornate quando si sincronizzano CRM e opportunità.</div>
+    <div id="dashCommandSummary" class="dash-overview" style="margin:12px 0"></div>
+    <div id="dashActionPlan"><div class="dash-empty">Preparazione del centro operativo…</div></div>
   </section>
   <section class="dash-card dash-action-plan" style="margin:14px 0">
     <div class="dash-card-head"><div><h2>NMRE Intelligence Engine</h2><div class="dash-card-sub">Le opportunità da approfondire, ordinate con segnali commerciali verificabili</div></div><span class="small" id="acquisitionIntelCount">Analisi in corso</span></div>
@@ -1068,39 +1070,119 @@ function openDashboardCandidate(id){
 }
 
 function renderDailyActionPlan(all,candidates,today){
- const active=item=>!["incarico_acquisito","non_interessato"].includes(item.stato_contatto||"da_contattare");
- const actions=[];
+ const active=item=>!["incarico_acquisito","non_interessato"].includes(item.stato_contatto||"da_contattare")
+  &&item.altre_agenzie!=="esclusiva";
+ const actions=[],seen=new Set();
  const dateOnly=value=>{if(!value)return null;const d=new Date(String(value).slice(0,10)+"T00:00:00");return Number.isNaN(d.getTime())?null:d;};
+ const dayGap=date=>Math.floor((date-today)/86400000);
+ const events=Array.isArray(nmreListingInteractions)?nmreListingInteractions:[];
+ const push=(row)=>{
+  const key=String(row.kind)+":"+String(row.id);
+  if(!row.id||seen.has(key))return;
+  seen.add(key);actions.push(row);
+ };
  const due=all.filter(item=>active(item)&&dateOnly(item.prossimo_contatto_il)&&dateOnly(item.prossimo_contatto_il)<=today)
   .sort((a,b)=>String(a.prossimo_contatto_il).localeCompare(String(b.prossimo_contatto_il)));
- due.slice(0,3).forEach(item=>{
-  const d=dateOnly(item.prossimo_contatto_il),days=Math.round((d-today)/86400000);
-  actions.push({kind:"call",id:item.id,tag:days<0?"RICHIAMO IN RITARDO":"DA FARE OGGI",
+ due.forEach(item=>{
+  const d=dateOnly(item.prossimo_contatto_il),days=dayGap(d);
+  push({kind:"call",id:item.id,tag:days<0?"RICHIAMO IN RITARDO":"DA FARE OGGI",
    title:item.titolo||"Proprietario da ricontattare",
    detail:[item.comune,days<0?"Scaduto da "+Math.abs(days)+" giorni":"Richiamo previsto oggi",item.contatto].filter(Boolean).join(" · "),
-   button:"Apri chiamata",priority:days<0?0:1});
+   button:"Apri chiamata",priority:days<0?0:1,rank:days<0?Math.max(0,30+days):0});
  });
- const ranked=candidates.map(item=>({item,priority:candidatePriority(item)}))
+ const appointments=all.filter(item=>active(item)&&item.stato_contatto==="appuntamento"&&dateOnly(item.prossimo_contatto_il))
+  .map(item=>({item,date:dateOnly(item.prossimo_contatto_il)})).filter(row=>dayGap(row.date)>=0&&dayGap(row.date)<=3)
+  .sort((a,b)=>a.date-b.date);
+ appointments.forEach(({item,date})=>push({kind:"call",id:item.id,tag:dayGap(date)===0?"APPUNTAMENTO OGGI":"APPUNTAMENTO IN ARRIVO",
+  title:item.titolo||"Appuntamento proprietario",detail:[item.comune,"Data: "+date.toLocaleDateString("it-IT"),item.contatto].filter(Boolean).join(" · "),
+  button:"Prepara appuntamento",priority:2,rank:dayGap(date)}));
+ const interactionsByListing=new Map();
+ events.forEach(event=>{
+  const key=String(event.annuncio_id||"");if(!key)return;
+  if(!interactionsByListing.has(key))interactionsByListing.set(key,[]);
+  if(event.created_at&&Number.isFinite(Date.parse(event.created_at)))interactionsByListing.get(key).push(event);
+ });
+ interactionsByListing.forEach(rows=>rows.sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)));
+ const responseCodes=new Set(["parlato","richiamare","interessato","appuntamento_fissato","valutazione_fissata","valutazione_completata","incarico_acquisito","non_interessato"]);
+ const noAnswerRows=all.filter(item=>{
+  if(!active(item))return false;
+  const own=interactionsByListing.get(String(item.id))||[];
+  const calls=own.filter(event=>event.tipo==="telefonata"&&event.outcome_code);
+  return calls.length>=2&&calls[0].outcome_code==="nessuna_risposta"&&calls[1].outcome_code==="nessuna_risposta";
+ });
+ noAnswerRows.forEach(item=>push({kind:"call",id:item.id,tag:"DUE TENTATIVI SENZA RISPOSTA",
+  title:item.titolo||"Proprietario da ricontattare",detail:[item.comune,"Ultime due telefonate classificate senza risposta"].filter(Boolean).join(" · "),
+  button:"Rivedi contatto",priority:3,rank:0}));
+ const priceDropRows=[];
+ const addPriceDrop=(item,kind)=>{
+  const history=priceHistoryAnalysis(item);
+  if(!history.drops.length)return;
+  const latest=history.drops[history.drops.length-1];
+  const age=Math.floor((today-new Date(latest.date).setHours(0,0,0,0))/86400000);
+  if(age<0||age>30)return;
+  priceDropRows.push({item,kind,latest,age});
+ };
+ (Array.isArray(all)?all:[]).filter(active).forEach(item=>addPriceDrop(item,"call"));
+ (Array.isArray(candidates)?candidates:[]).filter(item=>item.tipo_venditore!=="Agenzia").forEach(item=>addPriceDrop(item,"candidate"));
+ priceDropRows.sort((a,b)=>a.age-b.age);
+ priceDropRows.forEach(({item,kind,latest,age})=>push({kind,id:item.id,tag:"RIBASSO DOCUMENTATO",
+  title:item.titolo||"Immobile con variazione di prezzo",detail:[item.comune,"Prezzo rilevato: "+formatCurrency(latest.entry.listing_price),"Ribasso "+(age===0?"oggi":age+" giorni fa")].filter(Boolean).join(" · "),
+  button:kind==="candidate"?"Verifica annuncio":"Apri proprietario",priority:4,rank:age}));
+ const follow=all.filter(item=>active(item)&&item.stato_contatto==="interessato"&&!item.prossimo_contatto_il)
+  .sort((a,b)=>(Date.parse(a.ultimo_contatto_il||"")||0)-(Date.parse(b.ultimo_contatto_il||"")||0));
+ follow.forEach(item=>push({kind:"call",id:item.id,tag:"INTERESSE SENZA FOLLOW-UP",
+  title:item.titolo||"Proprietario interessato",detail:[item.comune,"Interesse registrato, ma nessuna prossima attività programmata"].filter(Boolean).join(" · "),
+  button:"Pianifica seguito",priority:5,rank:0}));
+ const stale=all.filter(item=>{
+  if(!active(item)||!["primo_contatto","interessato"].includes(item.stato_contatto)||item.prossimo_contatto_il)return false;
+  const own=interactionsByListing.get(String(item.id))||[];
+  const last=own[0]?.created_at||item.ultimo_contatto_il;
+  const timestamp=Date.parse(last||"");
+  return Number.isFinite(timestamp)&&dayGap(new Date(new Date(timestamp).setHours(0,0,0,0)))>=7;
+ }).sort((a,b)=>(Date.parse(a.ultimo_contatto_il||"")||0)-(Date.parse(b.ultimo_contatto_il||"")||0));
+ stale.forEach(item=>{
+  const own=interactionsByListing.get(String(item.id))||[];
+  const last=own[0]?.created_at||item.ultimo_contatto_il;
+  const days=dayGap(new Date(new Date(last).setHours(0,0,0,0)));
+  push({kind:"call",id:item.id,tag:"CONTINUITÀ DA RECUPERARE",title:item.titolo||"Proprietario da riattivare",
+   detail:[item.comune,"Ultimo contatto "+days+" giorni fa","Nessun richiamo programmato"].filter(Boolean).join(" · "),
+   button:"Riprendi contatto",priority:6,rank:-days});
+ });
+ const ranked=(Array.isArray(candidates)?candidates:[]).filter(item=>item.tipo_venditore!=="Agenzia")
+  .map(item=>({item,priority:candidatePriority(item)}))
   .sort((a,b)=>b.priority.score-a.priority.score||(Date.parse(b.item.created_at||"")||0)-(Date.parse(a.item.created_at||"")||0));
- ranked.slice(0,2).forEach(({item,priority})=>{
-  actions.push({kind:"candidate",id:item.id,tag:item.tipo_venditore==="Privato"?"PRIVATO RICONOSCIUTO":"NUOVA OPPORTUNITÀ",
-   title:item.titolo||"Annuncio da verificare",
-   detail:[item.comune,priority.score+"/100 priorità",priority.reasons?.slice(0,2).join(" · ")].filter(Boolean).join(" · "),
-   button:"Verifica lead",priority:item.tipo_venditore==="Privato"?2:3});
- });
- const untouched=all.filter(item=>active(item)&&["da_contattare","primo_contatto"].includes(item.stato_contatto||"da_contattare")
-  &&!item.prossimo_contatto_il&&item.contatto)
-  .sort((a,b)=>(a.tipo_venditore==="Privato"?0:1)-(b.tipo_venditore==="Privato"?0:1)||(Date.parse(b.created_at||"")||0)-(Date.parse(a.created_at||"")||0));
- untouched.slice(0,2).forEach(item=>actions.push({kind:"call",id:item.id,tag:item.tipo_venditore==="Privato"?"CONTATTO PRIVATO":"LEAD DA CONTATTARE",
-  title:item.titolo||"Nuovo proprietario",detail:[item.comune,item.contatto,"Nessun richiamo programmato"].filter(Boolean).join(" · "),
-  button:"Apri chiamata",priority:item.tipo_venditore==="Privato"?4:5}));
- const follow=all.filter(item=>active(item)&&item.stato_contatto==="interessato"&&!item.prossimo_contatto_il).slice(0,1);
- follow.forEach(item=>actions.push({kind:"call",id:item.id,tag:"OPPORTUNITÀ CALDA",title:item.titolo||"Proprietario interessato",
-  detail:[item.comune,"Interessato senza prossimo richiamo"].filter(Boolean).join(" · "),button:"Pianifica seguito",priority:6}));
- actions.sort((a,b)=>a.priority-b.priority);
- const chosen=actions.slice(0,5),box=$("dashActionPlan");
- $("dashActionPlanCount").textContent=chosen.length+" azioni suggerite";
- if(!chosen.length){box.innerHTML='<div class="dash-action-empty">Nessuna urgenza rilevata nei dati registrati. Può dedicarsi alla verifica dei nuovi annunci o alla ricerca di proprietari da contattare. Il piano si aggiorna quando registra nuove attività.</div>';return;}
+ ranked.forEach(({item,priority})=>push({kind:"candidate",id:item.id,tag:item.tipo_venditore==="Privato"?"PRIVATO RICONOSCIUTO":"VENDITORE DA VERIFICARE",
+  title:item.titolo||"Nuova opportunità",detail:[item.comune,priority.score+"/100 priorità",priority.reasons?.slice(0,2).join(" · ")].filter(Boolean).join(" · "),
+  button:"Verifica lead",priority:item.tipo_venditore==="Privato"?7:8,rank:-priority.score}));
+ const incomplete=all.filter(item=>active(item)&&["da_contattare","primo_contatto","interessato"].includes(item.stato_contatto||"da_contattare"))
+  .map(item=>{
+   const gaps=[];
+   if(!String(item.contatto||"").trim())gaps.push("recapito");
+   if(!String(item.vendita_motivazione||"").trim())gaps.push("motivazione");
+   if(!String(item.tempistiche_vendita||"").trim())gaps.push("tempistiche");
+   if(!item.altre_agenzie||item.altre_agenzie==="da_verificare")gaps.push("situazione agenzie");
+   if(!item.prezzo_trattabile||item.prezzo_trattabile==="da_verificare")gaps.push("margine sul prezzo");
+   return {item,gaps};
+  }).filter(row=>row.gaps.length)
+  .sort((a,b)=>b.gaps.length-a.gaps.length);
+ incomplete.forEach(({item,gaps})=>push({kind:"call",id:item.id,tag:"QUALIFICAZIONE INCOMPLETA",
+  title:item.titolo||"Scheda proprietario da completare",detail:[item.comune,gaps.length+" informazioni mancanti: "+gaps.slice(0,3).join(", ")].filter(Boolean).join(" · "),
+  button:"Completa scheda",priority:9,rank:-gaps.length}));
+ actions.sort((a,b)=>a.priority-b.priority||a.rank-b.rank);
+ const chosen=actions.slice(0,10),box=$("dashActionPlan");
+ const count=$("dashActionPlanCount");
+ if(count)count.textContent=chosen.length+" azioni · "+actions.length+" individuate";
+ const summary=$("dashCommandSummary");
+ if(summary){
+  const metrics=[
+   [due.filter(item=>dateOnly(item.prossimo_contatto_il)<today).length,"Richiami in ritardo"],
+   [appointments.length,"Appuntamenti entro 3 giorni"],
+   [priceDropRows.length,"Ribassi ultimi 30 giorni"],
+   [noAnswerRows.length,"Contatti senza risposta ripetuta"]
+  ];
+  summary.innerHTML=metrics.map(([value,label])=>'<div class="dash-overview-item"><strong>'+value+'</strong><span>'+label+'</span></div>').join("");
+ }
+ if(!chosen.length){box.innerHTML='<div class="dash-action-empty">Nessuna priorità rilevata nei dati disponibili. Può concentrarsi sulla ricerca di nuovi proprietari e sulla verifica delle opportunità.</div>';return;}
  box.innerHTML='<div class="dash-action-list">'+chosen.map((item,index)=>
   '<div class="dash-action-row"><div class="dash-action-number">'+(index+1)+'</div><div class="dash-action-copy"><span class="dash-action-tag">'+safe(item.tag)+'</span><strong>'+safe(item.title)+'</strong><span>'+safe(item.detail)+'</span></div><button type="button" class="secondary" data-action-kind="'+item.kind+'" data-action-id="'+safe(item.id)+'">'+safe(item.button)+'</button></div>'
  ).join("")+'</div>';
@@ -2563,6 +2645,7 @@ async function loadCrmWorkspace(){
  ]);
  const err=c.error||p.error||a.error||i.error||l.error;if(err){$("nmreCrmError").textContent="Caricamento CRM non riuscito: "+err.message;return;}
  nmreCrmContacts=c.data||[];nmreCrmProperties=p.data||[];nmreCrmAppointments=a.data||[];nmreCrmInteractions=i.data||[];nmreListingInteractions=l.data||[];
+ renderDailyActionPlan(listingCache,candidateCache,new Date(new Date().setHours(0,0,0,0)));
  renderSellerRelationshipScore();
  await loadSalesGoals();
  nmreCrmOption("nmreCrmPropertyContact",nmreCrmContacts,"Nessun contatto collegato",x=>x.full_name);
