@@ -982,6 +982,14 @@ function renderCandidates(){
   });
   const ranked=visible.map(item=>({item,priority:candidatePriority(item),quality:qualityById.get(String(item.id))}))
     .sort((a,b)=>b.priority.score-a.priority.score||new Date(b.item.created_at||0)-new Date(a.item.created_at||0));
+  const uniqueRanked=[];
+  const seenListingUrls=new Set();
+  for(const entry of ranked){
+    const key=canonicalCandidateUrl(entry.item.url);
+    if(key&&seenListingUrls.has(key)&&qualityFilter!=="duplicates")continue;
+    if(key)seenListingUrls.add(key);
+    uniqueRanked.push(entry);
+  }
   const priorityCounts={high:ranked.filter(x=>x.priority.level==="high").length,medium:ranked.filter(x=>x.priority.level==="medium").length,low:ranked.filter(x=>x.priority.level==="low").length};
   const allQuality=[...qualityById.values()];
   const duplicateCount=allQuality.filter(x=>x.duplicate).length;
@@ -992,7 +1000,7 @@ function renderCandidates(){
     ?priorityCounts.high+" priorità alte · "+priorityCounts.medium+" medie · "+priorityCounts.low+" da completare. "
       +duplicateCount+" possibili duplicati · "+linkReviewCount+" link da verificare · "+staleCount+" annunci oltre 30 giorni · "+incompleteCount+" incompleti."
     :"Nessuna opportunità da classificare.";
-  $("candidateFilterCount").textContent=visible.length+" risultati su "+data.length+" opportunità";
+  $("candidateFilterCount").textContent=(qualityFilter==="duplicates"?uniqueRanked.length+" possibili duplicati":uniqueRanked.length+" annunci unici")+" · "+visible.length+" notifiche su "+data.length+" ricevute";
   if(!data.length){
     box.innerHTML='<p class="hint">Nessun nuovo annuncio da valutare. La ricerca automatica continua in background.</p>';
     msg("candidateMsg","");
@@ -1005,7 +1013,7 @@ function renderCandidates(){
     renderDashboard();
     return;
   }
-  box.innerHTML=ranked.map(({item:c,priority,quality})=>{
+  box.innerHTML=uniqueRanked.map(({item:c,priority,quality})=>{
     const isPrivate=c.tipo_venditore==="Privato";
     const published=quality.hasPublication
       ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data di pubblicazione non indicata";
