@@ -81,7 +81,7 @@ Fonti: [Agenzia delle Entrate - Forniture dati OMI](https://www.agenziaentrate.g
 - Frontend statico: GitHub Pages.
 - Database, autenticazione e funzioni backend: Supabase.
 - Email: Gmail API con OAuth 2.0 e scope di sola lettura.
-- Tabelle operative: annunci, annunci_candidati, annunci_interazioni.
+- Tabelle operative: annunci, annunci_candidati, annunci_interazioni, `nmre_omi_quotazioni` e `nmre_compravendite_atti`.
 - Token OAuth cifrati e conservati in uno schema privato; chiavi e segreti sono custoditi lato server.
 - Registro tecnico `nmre_gmail_sync_runs` con RLS: gli utenti autenticati possono leggere soltanto i propri riepiloghi; le scritture sono riservate al backend.
 - Stato di sincronizzazione Gmail conservato separatamente dai token, in uno schema privato e accessibile soltanto al service role.
