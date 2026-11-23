@@ -12,6 +12,7 @@ Applicazione web per la raccolta, la verifica e la gestione di opportunità immo
 - Storico di telefonate, WhatsApp, email, appuntamenti e note.
 - Collegamento Gmail OAuth, con token conservati cifrati lato server.
 - Acquisizione automatica di notifiche immobiliari in background.
+- Monitoraggio delle sincronizzazioni Gmail: esito, durata, annunci letti, candidati inseriti, agenzie escluse, duplicati ed errori; vengono salvati soltanto contatori operativi, non il contenuto delle email.
 - Coda di annunci privati riconosciuti e opportunità ambigue da approvare manualmente.
 - Estrazione euristica di comune, prezzo, tipologia, superficie, locali, camere e bagni quando presenti nella notifica.
 - Deduplicazione tramite ID Gmail.
@@ -49,6 +50,7 @@ Il parser e l'adattatore Gmail History sono separati nella cartella supabase/fun
 - Email: Gmail API con OAuth 2.0 e scope di sola lettura.
 - Tabelle operative: annunci, annunci_candidati, annunci_interazioni.
 - Token OAuth cifrati e conservati in uno schema privato; chiavi e segreti sono custoditi lato server.
+- Registro tecnico `nmre_gmail_sync_runs` con RLS: gli utenti autenticati possono leggere soltanto i propri riepiloghi; le scritture sono riservate al backend.
 - Stato di sincronizzazione Gmail conservato separatamente dai token, in uno schema privato e accessibile soltanto al service role.
 - RLS attiva sulle tabelle applicative e policy che limitano le righe all'utente proprietario.
 - Il RPC di conferma dei candidati è eseguibile soltanto da utenti autenticati.
