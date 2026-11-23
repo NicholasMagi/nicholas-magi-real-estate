@@ -6,6 +6,7 @@ NMRE Intelligence is an authenticated assistant embedded in the private app.
 
 - Frontend invokes the `nmre-ai-assistant` Supabase Edge Function using the signed-in Supabase session.
 - The Edge Function validates the caller with Supabase Auth and reads CRM records using the caller's JWT, so existing row-level security remains in force.
+- The function is restricted to the existing `NMRE_ALLOWED_USER_ID` project secret and applies a per-instance request limit.
 - The function sends a limited operational context to the OpenAI Responses API using the server-side `OPENAI_API_KEY` secret.
 - The OpenAI key is never sent to the browser or committed to Git.
 - Conversation history is held in the current page session; the OpenAI request uses `store: false`.
@@ -28,7 +29,7 @@ The function retrieves only records owned by the authenticated user from:
 - `nmre_properties`
 - `nmre_appointments`
 
-Phone numbers, email addresses, and private street addresses are not selected. Free-text fields are truncated and common phone/email patterns are redacted before the request. The UI discloses that selected operational data and the prompt are sent to OpenAI to generate the response. Review notes before entering sensitive details in the CRM.
+Phone numbers, email addresses, and private street-address fields are not selected. Free-text fields are truncated and common phone, email, and Italian street-address patterns are redacted before the request. The UI discloses that selected operational data and the prompt are sent to OpenAI to generate the response. Review notes before entering sensitive details in the CRM.
 
 ## Safety boundaries
 
