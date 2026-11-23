@@ -2468,6 +2468,15 @@ function syncCallTaskFields(card,changedField){
   dateLabel.textContent=status.value==="appuntamento"?"Data appuntamento":"Prossimo richiamo";
 }
 
+function buildWhatsappMessage(item){
+  const title=String(item?.titolo||"l'immobile").trim();
+  const town=String(item?.comune||"").trim();
+  const portal=String(item?.portale||"").trim();
+  const property="«"+title+"»"+(town?" a "+town:"");
+  const source=portal?" che ho visto su "+portal:"";
+  return "Buongiorno, sono Nicholas Magi, consulente immobiliare. La contatto per il Suo annuncio relativo a "+property+source+". Vorrei chiederLe qualche informazione e capire se posso esserLe utile nella vendita. Quando Le sarebbe più comodo sentirci? La ringrazio e Le auguro una buona giornata.";
+}
+
 function renderCallCenter(){
   const all=callQueueModel(listingCache);
   const count=kind=>all.filter(entry=>entry.kind===kind).length;
@@ -2503,7 +2512,7 @@ function renderCallCenter(){
       ?'<a class="call-link" href="tel:'+safe(contact.phone.tel)+'">Chiama '+safe(contact.phone.raw)+'</a>'
       :'';
     const whatsapp=contact.phone?.whatsapp
-      ?'<a class="whatsapp-link" href="https://wa.me/'+safe(contact.phone.whatsapp)+'" target="_blank" rel="noopener noreferrer">WhatsApp</a>'
+      ?'<a class="whatsapp-link" href="'+safe("https://wa.me/"+contact.phone.whatsapp+"?text="+encodeURIComponent(buildWhatsappMessage(item)))+'" target="_blank" rel="noopener noreferrer" aria-label="Prepara un messaggio WhatsApp per '+safe(item.titolo||"questo annuncio")+'">WhatsApp · messaggio pronto</a>'
       :'';
     const email=contact.email
       ?'<a class="call-link" href="mailto:'+safe(contact.email)+'">Email</a>'
