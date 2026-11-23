@@ -2775,8 +2775,8 @@ async function loadCrmWorkspace(){
   supabase.from("nmre_contacts").select("*").eq("owner_id",currentUser.id).order("full_name"),
   supabase.from("nmre_properties").select("*").eq("owner_id",currentUser.id).order("created_at",{ascending:false}),
   supabase.from("nmre_appointments").select("*").eq("owner_id",currentUser.id).order("starts_at",{ascending:true}),
-  supabase.from("nmre_contact_interactions").select("id,contact_id,property_id,interaction_type,outcome_code,created_at").eq("owner_id",currentUser.id).gte("created_at",interactionSince).order("created_at",{ascending:false}).limit(5000),
-  supabase.from("annunci_interazioni").select("id,annuncio_id,tipo,outcome_code,created_at").eq("owner_id",currentUser.id).gte("created_at",interactionSince).order("created_at",{ascending:false}).limit(5000)
+  supabase.from("nmre_contact_interactions").select("id,contact_id,property_id,interaction_type,outcome_code,outcome,notes,created_at").eq("owner_id",currentUser.id).gte("created_at",interactionSince).order("created_at",{ascending:false}).limit(5000),
+  supabase.from("annunci_interazioni").select("id,annuncio_id,tipo,outcome_code,esito,note,created_at").eq("owner_id",currentUser.id).gte("created_at",interactionSince).order("created_at",{ascending:false}).limit(5000)
  ]);
  const err=c.error||p.error||a.error||i.error||l.error;if(err){$("nmreCrmError").textContent="Caricamento CRM non riuscito: "+err.message;return;}
  nmreCrmContacts=c.data||[];nmreCrmProperties=p.data||[];nmreCrmAppointments=a.data||[];nmreCrmInteractions=i.data||[];nmreListingInteractions=l.data||[];
