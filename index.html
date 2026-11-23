@@ -2209,7 +2209,14 @@ function renderCandidates(){
       +qualityHighCount+" schede con dati solidi · qualità media "+averageQuality+"/100. "
       +duplicateCount+" possibili duplicati · "+linkReviewCount+" link da verificare · "+staleCount+" annunci oltre 30 giorni · "+incompleteCount+" incompleti."
     :"Nessuna opportunità da classificare.";
-  $("candidateFilterCount").textContent=(qualityFilter==="duplicates"?uniqueRanked.length+" possibili duplicati":uniqueRanked.length+" annunci unici")+" · "+visible.length+" notifiche su "+data.length+" ricevute";
+  const visibleNotificationIds=new Set();
+  visible.forEach(item=>{
+    const history=Array.isArray(item.notification_history)?item.notification_history:[];
+    history.forEach(entry=>{if(entry.source_email_id)visibleNotificationIds.add(String(entry.source_email_id));});
+    if(!history.length&&item.source_email_id)visibleNotificationIds.add(String(item.source_email_id));
+  });
+  const visibleNotifications=visibleNotificationIds.size;
+  $("candidateFilterCount").textContent=(qualityFilter==="duplicates"?uniqueRanked.length+" possibili duplicati":uniqueRanked.length+" immobili unici")+" · "+visibleNotifications+" notifiche email storiche";
   if(!data.length){
     box.innerHTML='<p class="hint">Nessun nuovo annuncio da valutare. La ricerca automatica continua in background.</p>';
     msg("candidateMsg","");
@@ -2240,6 +2247,20 @@ function renderCandidates(){
       :"Nessun duplicato evidente individuato";
     const tone=quality.duplicate||!quality.specificLink||quality.stale?"warning":quality.incomplete||!quality.hasPublication?"review":"ok";
     const qualityHtml='<div class="candidate-quality candidate-quality-'+tone+'"><strong>Controllo qualità:</strong> '+safe(linkText)+' · '+safe(ageText)+' · '+safe(missingText)+'<br>'+safe(duplicateText)+'</div>';
+    const history=Array.isArray(c.notification_history)?c.notification_history:[];
+    const historyHtml=history.length
+      ?'<details class="candidate-quality"><summary>Storico notifiche · '+history.length+' '+(history.length===1?'email':'email')+'</summary>'
+        +history.slice(0,20).map(entry=>{
+          const timestamp=entry.notified_at||entry.created_at;
+          const date=timestamp&&Number.isFinite(Date.parse(timestamp))
+            ?new Date(timestamp).toLocaleString("it-IT")
+            :"Data non disponibile";
+          const details=[entry.notification_sender,entry.email_subject].filter(Boolean).map(safe).join(" · ");
+          return '<div class="crm-entry"><strong>'+safe(date)+'</strong><span>'+details+'</span></div>';
+        }).join("")
+        +(history.length>20?'<small>Mostrate le 20 notifiche più recenti.</small>':"")
+        +'</details>'
+      :'';
     const pricePerSqmText=quality.pricePerSqm!==null
       ?new Intl.NumberFormat("it-IT").format(quality.pricePerSqm)+" €/m² richiesti"
       :"€/m² non calcolabile: prezzo o superficie assenti";
@@ -2257,6 +2278,7 @@ function renderCandidates(){
       +qualityHtml
       +'<div class="topline"><span class="meta">'+safe(c.portale||"Portale non indicato")+' · '+safe(published)+'</span><span class="pill">'+(isPrivate?"Privato riconosciuto":c.tipo_venditore==="Agenzia"?"Agenzia riconosciuta":"Venditore da verificare")+'</span></div>'
       +'<div class="candidate-quality"><strong>Riconoscimento venditore:</strong> '+safe(c.seller_evidence||"Nessuna prova automatica disponibile")+' · '+(Number(c.seller_confidence)>0?Number(c.seller_confidence)+"% di confidenza":"Confidenza non determinabile")+(c.seller_manual_override?" · Verifica manuale":"")+'</div>'
+      +historyHtml
       +'<label>Titolo / descrizione dell\'annuncio</label><input data-field="titolo" value="'+safe(c.titolo||"Annuncio immobiliare")+'" maxlength="250">'
       +'<div class="row"><div><label>Comune</label><input data-field="comune" value="'+safe(c.comune||"")+'" placeholder="Comune da verificare"></div>'
       +'<div><label>Prezzo richiesto (€)</label><input data-field="prezzo" type="number" min="0" step="1" value="'+(c.prezzo??"")+'" placeholder="Non indicato"></div></div>'
@@ -2276,7 +2298,7 @@ function renderCandidates(){
   box.querySelectorAll("[data-discard]").forEach(btn=>btn.addEventListener("click",()=>discardCandidate(btn.dataset.discard,btn)));
   const recognized=visible.filter(item=>item.tipo_venditore==="Privato").length;
   const review=visible.length-recognized;
-  msg("candidateMsg",visible.length+" annunci visualizzati · "+recognized+" privati riconosciuti · "+review+" da verificare.","success");
+  msg("candidateMsg",uniqueRanked.length+" immobili visualizzati · "+visibleNotifications+" notifiche email nello storico · "+recognized+" privati riconosciuti · "+review+" da verificare.","success");
   renderDashboard();
 }
 
@@ -2295,6 +2317,45 @@ async function loadCandidates(){
     data.push(...(page||[]));
     if(!page||page.length<pageSize)break;
   }
+
+  // Carica lo storico delle email collegate a ciascun immobile, senza esporre
+  // il contenuto dei messaggi: vengono mostrati solo mittente, oggetto e data.
+  const notificationHistory = new Map();
+  const candidateIds = data.map(item=>String(item.id));
+  for(let batch=0;batch<candidateIds.length;batch+=100){
+    const ids=candidateIds.slice(batch,batch+100);
+    for(let offset=0;;offset+=500){
+      const {data:notifications,error}=await supabase
+        .from("annunci_candidati_notifiche")
+        .select("candidate_id,source_email_id,notification_sender,email_subject,notified_at,created_at")
+        .in("candidate_id",ids)
+        .order("notified_at",{ascending:false})
+        .order("created_at",{ascending:false})
+        .range(offset,offset+499);
+      if(error){msg("candidateMsg","Storico notifiche non disponibile: "+error.message,"error");return;}
+      for(const notification of notifications||[]){
+        const key=String(notification.candidate_id);
+        if(!notificationHistory.has(key))notificationHistory.set(key,[]);
+        notificationHistory.get(key).push(notification);
+      }
+      if(!notifications||notifications.length<500)break;
+    }
+  }
+  data.forEach(item=>{
+    const history=notificationHistory.get(String(item.id))||[];
+    if(!history.length&&item.source_email_id){
+      history.push({
+        source_email_id:item.source_email_id,
+        notification_sender:item.notification_sender,
+        email_subject:item.email_subject,
+        notified_at:item.data_pubblicazione,
+        created_at:item.created_at
+      });
+    }
+    item.notification_history=history;
+    item.notification_count=history.length;
+  });
+
   // Mantiene nel tempo lo scarto di un immobile: se una nuova email genera
   // un altro record con lo stesso link già scartato, non deve riapparire in coda.
   const dismissedListingUrls=new Set();

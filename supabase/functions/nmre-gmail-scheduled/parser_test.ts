@@ -1,6 +1,6 @@
 import {
   municipality,price,listingPrice,listingUrl,propertyEmail,propertyType,surface,rooms,
-  bedrooms,bathrooms,sellerClassification,resolveListingUrl
+  bedrooms,bathrooms,sellerClassification,resolveListingUrl,canonicalListingKey
 } from "./_shared/parser.ts";
 
 function assertEquals<T>(actual:T,expected:T,message:string){
@@ -89,4 +89,21 @@ Deno.test("non accetta la homepage come destinazione di un link tracciato",async
   }finally{
     globalThis.fetch=originalFetch;
   }
+});
+
+
+Deno.test("chiave canonica stabile solo per URL di schede specifiche",()=>{
+  assertEquals(
+    canonicalListingKey("https://www.immobiliare.it/annunci/987654321/?utm_source=email#dettagli"),
+    "immobiliare.it/annunci/987654321",
+    "ignora www, parametri di tracciamento e frammenti"
+  );
+  assertEquals(
+    canonicalListingKey("https://immobiliare.it/annunci/987654321/"),
+    "immobiliare.it/annunci/987654321",
+    "stessa scheda con forma URL diversa"
+  );
+  assertEquals(canonicalListingKey("https://www.immobiliare.it/"),null,"rifiuta la homepage");
+  assertEquals(canonicalListingKey("https://www.immobiliare.it/ricerca/"),null,"rifiuta la ricerca generica");
+  assertEquals(canonicalListingKey("https://example.com/annunci/987654321/"),null,"rifiuta host non riconosciuti");
 });

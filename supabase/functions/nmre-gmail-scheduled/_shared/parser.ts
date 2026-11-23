@@ -270,3 +270,23 @@ export function sellerClassificationDetails(value:string):{classification:Seller
 export function sellerClassification(value:string):SellerClassification {
   return sellerClassificationDetails(value).classification;
 }
+
+
+/**
+ * Stable key for a verified portal listing.
+ * Query parameters and fragments are excluded because portal tracking tokens
+ * do not change the identity of a listing. Generic/search URLs are rejected.
+ */
+export function canonicalListingKey(value:string|null|undefined):string|null {
+  if(!value)return null;
+  try{
+    const url=new URL(value);
+    const host=url.hostname.toLowerCase().replace(/^www\./,"");
+    const allowed=PORTALS.some(domain=>host===domain||host.endsWith("."+domain));
+    if(!allowed||!isSpecificListingUrl(url))return null;
+    const path=decodeURIComponent(url.pathname).replace(/\/+$/,"").toLowerCase()||"/";
+    return host+path;
+  }catch{
+    return null;
+  }
+}
