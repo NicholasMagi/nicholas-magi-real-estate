@@ -2105,7 +2105,7 @@ function renderSellerRadar(candidates=candidateCache){
     const currentPrice=item.prezzo!==null&&item.prezzo!==undefined?euro(item.prezzo):"Prezzo non indicato";
     const seller=item.tipo_venditore==="Privato"?"Privato verificato":"Venditore da verificare";
     const title=safe(item.titolo||"Immobile senza titolo");
-    const notificationTime=item.data_pubblicazione||item.created_at;
+    const notificationTime=item.data_pubblicazione;
     const notificationLabel=notificationTime&&Number.isFinite(Date.parse(notificationTime))
       ?"Email ricevuta il "+new Date(notificationTime).toLocaleDateString("it-IT")
       :"Data email non disponibile";
@@ -2349,7 +2349,7 @@ function renderCandidates(){
       &&qualityMatches(quality,item)
       &&numberWithinRange(item.prezzo,"candidatePriceMin","candidatePriceMax")
       &&numberWithinRange(item.superficie_mq,"candidateSurfaceMin","candidateSurfaceMax")
-      &&dateWithinRange(item.data_pubblicazione||item.created_at,"candidateFromFilter","candidateToFilter");
+      &&dateWithinRange(item.data_pubblicazione,"candidateFromFilter","candidateToFilter");
   });
   const ranked=visible.map(item=>({item,priority:candidatePriority(item),quality:qualityById.get(String(item.id))}))
     .sort((a,b)=>b.priority.score-a.priority.score||new Date(b.item.created_at||0)-new Date(a.item.created_at||0));
