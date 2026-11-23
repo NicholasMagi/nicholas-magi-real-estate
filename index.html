@@ -1279,7 +1279,8 @@ function renderAcquisitionPredictor(all=listingCache,candidates=candidateCache,n
  };
  (Array.isArray(all)?all:[]).forEach(item=>addRow(item,"archive"));
  (Array.isArray(candidates)?candidates:[]).forEach(item=>addRow(item,"candidate"));
- rows.sort((a,b)=>b.score-a.score||(Date.parse(a.item.prossimo_contatto_il||a.item.created_at||"")||Infinity)-(Date.parse(b.item.prossimo_contatto_il||b.item.created_at||"")||Infinity));
+ const priorityDate=row=>{const value=Date.parse(row.item.prossimo_contatto_il||row.item.created_at||"");return Number.isFinite(value)?value:Number.MAX_SAFE_INTEGER;};
+ rows.sort((a,b)=>b.score-a.score||priorityDate(a)-priorityDate(b));
  const chosen=rows.slice(0,6);
  const count=$("acquisitionPredictorCount");if(count)count.textContent=chosen.length+" priorità operative";
  if(!chosen.length){
