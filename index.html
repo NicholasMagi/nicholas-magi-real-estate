@@ -496,6 +496,12 @@ button:disabled{opacity:.55;cursor:not-allowed}
     <div id="sellerRadarFeedback" class="seller-radar-feedback" aria-live="polite"></div>
   </section>
 
+  <section class="dash-card seller-radar" id="priceHistoryPanel" aria-label="Storico prezzi annunci">
+    <div class="dash-card-head"><div><h2>Analisi ribassi e storico prezzi</h2><div class="dash-card-sub">Evoluzione dei prezzi rilevati nelle notifiche Gmail dello stesso annuncio</div></div><span class="small" id="priceHistoryMetric">0 ribassi documentati</span></div>
+    <p class="seller-radar-intro">Sono mostrati soltanto prezzi presenti nelle notifiche collegate allo stesso annuncio. Un ribasso è definito documentato solo quando la notifica riporta sia il prezzo precedente sia quello aggiornato. Le rilevazioni non dimostrano da sole da quanto tempo l'immobile sia online o la disponibilità del proprietario a trattare.</p>
+    <div id="priceHistoryList" class="seller-radar-list"><div class="dash-empty">Lo storico apparirà dopo il caricamento delle notifiche.</div></div>
+  </section>
+
   <div class="dash-grid">
     <section class="dash-card">
       <div class="dash-card-head">
@@ -1093,6 +1099,7 @@ function renderDashboard(){
   const all=Array.isArray(listingCache)?listingCache:[];
   const candidates=Array.isArray(candidateCache)?candidateCache:[];
   renderSellerRadar(candidates);
+  renderPriceHistoryRadar(candidates);
   const today=new Date();
   today.setHours(0,0,0,0);
   const weekEnd=new Date(today);
@@ -2325,6 +2332,38 @@ function formatCurrency(value){
     :"—";
 }
 
+
+function priceHistoryAnalysis(item){
+ const history=Array.isArray(item.notification_history)?item.notification_history:[];
+ const dated=history.map(entry=>({entry,date:entry.notified_at||entry.created_at||null,price:Number(entry.listing_price)}))
+  .filter(row=>row.date&&Number.isFinite(Date.parse(row.date))).sort((a,b)=>Date.parse(a.date)-Date.parse(b.date));
+ const observations=dated.filter(row=>row.price>0);
+ const drops=dated.filter(row=>Number(row.entry.previous_price)>Number(row.entry.listing_price)&&Number(row.entry.listing_price)>0&&Number(row.entry.price_drop_percent)>0);
+ const unique=[],seen=new Set();
+ drops.forEach(row=>{const key=[Number(row.entry.previous_price),Number(row.entry.listing_price),row.date.slice(0,10)].join("|");if(!seen.has(key)){seen.add(key);unique.push(row);}});
+ return {observations,drops:unique,latest:observations[observations.length-1]||null};
+}
+function renderPriceHistoryRadar(candidates=candidateCache){
+ const box=$("priceHistoryList");if(!box)return;
+ const all=(Array.isArray(candidates)?candidates:[]).filter(item=>item.tipo_venditore!=="Agenzia");
+ const rows=all.map(item=>({item,history:priceHistoryAnalysis(item)}))
+  .filter(row=>row.history.observations.length>=2||row.history.drops.length>0)
+  .sort((a,b)=>{const ad=a.history.drops[a.history.drops.length-1],bd=b.history.drops[b.history.drops.length-1];return (bd?Date.parse(bd.date):0)-(ad?Date.parse(ad.date):0)||b.history.drops.length-a.history.drops.length;}).slice(0,6);
+ const totalDrops=all.reduce((sum,item)=>sum+priceHistoryAnalysis(item).drops.length,0);
+ const metric=$("priceHistoryMetric");if(metric)metric.textContent=totalDrops+" ribassi documentati";
+ if(!rows.length){box.innerHTML='<div class="dash-empty">Non ci sono ancora abbastanza notifiche con prezzi confrontabili. Quando Gmail riceverà aggiornamenti di prezzo sullo stesso annuncio, lo storico comparirà qui.</div>';return;}
+ box.innerHTML=rows.map(({item,history})=>{
+  const latest=history.latest;
+  const observations=history.observations.slice(-5).map(row=>'<span class="seller-radar-signal">'+safe(new Date(row.date).toLocaleDateString("it-IT"))+': '+safe(formatCurrency(row.price))+'</span>').join("");
+  const drops=history.drops.slice(-3).reverse().map(row=>{const previous=Number(row.entry.previous_price),current=Number(row.entry.listing_price),pct=Number(row.entry.price_drop_percent);return '<div class="crm-entry"><strong>Ribasso documentato: −'+safe(pct.toLocaleString("it-IT"))+'%</strong><span>'+safe(formatCurrency(previous))+' → '+safe(formatCurrency(current))+' · −'+safe(formatCurrency(Number(row.entry.price_drop_amount)||previous-current))+'</span><span>'+safe(new Date(row.date).toLocaleDateString("it-IT"))+'</span></div>';}).join("");
+  return '<article class="seller-radar-item"><div class="seller-radar-item-top"><strong>'+safe(item.titolo||"Immobile senza titolo")+'</strong><span class="seller-radar-score">'+history.drops.length+' ribassi</span></div>'
+   +'<div class="seller-radar-meta">'+safe([item.comune,item.portale].filter(Boolean).join(" · ")||"Dettagli non disponibili")+'<br>Ultimo prezzo rilevato: '+safe(latest?formatCurrency(latest.price):"Non disponibile")+' · '+history.observations.length+' rilevazioni con prezzo</div>'
+   +'<div class="seller-radar-signals">'+observations+'</div>'
+   +(drops?'<details open><summary>Ribassi verificati nello storico</summary>'+drops+'</details>':'<div class="hint">Prezzi rilevati in notifiche successive; nessun ribasso esplicitamente documentato.</div>')
+   +'<div class="actions"><button type="button" class="gold" data-price-history-open="'+safe(item.id)+'">Apri opportunità</button></div></article>';
+ }).join("");
+ box.querySelectorAll("[data-price-history-open]").forEach(button=>button.addEventListener("click",()=>openDashboardCandidate(button.dataset.priceHistoryOpen)));
+}
 
 function sellerRadarPriority(item,now=new Date()){
   let score=0;
