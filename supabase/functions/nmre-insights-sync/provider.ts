@@ -35,7 +35,13 @@ export function formatInsightsDate(date: Date): string {
   return day + "/" + month + "/" + date.getUTCFullYear() + "T00:00:00Z";
 }
 
-export function buildInsightsSearchPayload(now: Date, lookbackDays = 30, page = 1) {
+export function buildInsightsSearchPayload(
+  now: Date,
+  lookbackDays = 30,
+  page = 1,
+  clientTypeID: 1 | 2 = 1,
+  phoneNumberProvided: boolean | null = true
+) {
   const minDate = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
   return {
     Filters: {
@@ -63,8 +69,8 @@ export function buildInsightsSearchPayload(now: Date, lookbackDays = 30, page = 
       maxPrice: null,
       minDate: formatInsightsDate(minDate),
       maxDate: formatInsightsDate(now),
-      clientTypeID: 1,
-      phoneNumberProvided: true
+      clientTypeID,
+      phoneNumberProvided
     },
     Pagination: { page, limit: 5 },
     Sorting: { by: "date", direction: "desc" }
@@ -107,9 +113,13 @@ function safeNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export function toCandidate(item: Record<string, any>, ownerId: string) {
-  // This mapping is called on the Comparable Detail response after Search by Attribute.
-  // The search request explicitly filters clientTypeID=1 (Privato) and phoneNumberProvided=true.
+export function toCandidate(
+  item: Record<string, any>,
+  ownerId: string,
+  clientTypeID: 1 | 2 = 1
+) {
+  // The official Search by Attribute request filters clientTypeID:
+  // 1 = Privato, 2 = Professionista. Do not infer seller type from missing text.
   const location = item?.location ?? {};
   const comune = typeof location.municipality === "string" ? location.municipality.trim() : "";
   if (!ALLOWED_MUNICIPALITIES.has(normalize(comune))) return null;
@@ -118,8 +128,13 @@ export function toCandidate(item: Record<string, any>, ownerId: string) {
   const uuid = typeof item.uuid === "string" ? item.uuid.trim() : "";
   if (!url || !uuid) return null;
 
-  // Respect a future explicit classification field should the provider expose one.
-  if (normalize(item.clientType) === "professionista") return null;
+  if (clientTypeID !== 1 && clientTypeID !== 2) return null;
+
+  const rawClientType = normalize(item.clientType);
+  const privateLabels = new Set(["privato", "private", "private owner", "1"]);
+  const professionalLabels = new Set(["professionista", "professional", "agency", "agenzia", "2"]);
+  if (clientTypeID === 1 && professionalLabels.has(rawClientType)) return null;
+  if (clientTypeID === 2 && privateLabels.has(rawClientType)) return null;
 
   const propertyType = typeof item.propertyType === "string" ? item.propertyType.trim() : "";
   const rawTitle = typeof item.extra?.title === "string" ? item.extra.title.trim() : "";
@@ -128,11 +143,10 @@ export function toCandidate(item: Record<string, any>, ownerId: string) {
   const rawSurface = safeNumber(item.grossSquareFootage);
   const rawRooms = safeNumber(item.rooms);
   const rawBathrooms = safeNumber(item.features?.numberOfBathrooms ?? item.numberOfBathrooms);
-  const rawClientType = normalize(item.clientType);
-  // La richiesta è già filtrata dal servizio con clientTypeID=1 (Privato).
-  // Se il dettaglio riporta esplicitamente un professionista, prevale il dato contrario.
-  if (rawClientType === "professionista" || rawClientType === "2") return null;
-  const seller = "Privato";
+  const seller = clientTypeID === 1 ? "Privato" : "Agenzia";
+  const sellerEvidence = clientTypeID === 1
+    ? "Immobiliare.it Insights: filtro ufficiale clientTypeID=1 (Privato); phoneNumberProvided=true"
+    : "Immobiliare.it Insights: filtro ufficiale clientTypeID=2 (Professionista)";
 
   return {
     owner_id: ownerId,
@@ -142,8 +156,8 @@ export function toCandidate(item: Record<string, any>, ownerId: string) {
     contatto: null,
     tipo_venditore: seller,
     seller_confidence: 99,
-    seller_evidence: "Filtro API ufficiale: clientTypeID=1 (Privato); telefono indicato come disponibile dal filtro phoneNumberProvided=true",
-    seller_classification_version: 3,
+    seller_evidence: sellerEvidence,
+    seller_classification_version: 4,
     seller_manual_override: false,
     portale: "Immobiliare.it",
     url,
