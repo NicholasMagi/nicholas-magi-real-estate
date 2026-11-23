@@ -2452,6 +2452,22 @@ function callQueueDateLabel(entry){
   return "Nessun richiamo programmato";
 }
 
+function callOutcomeSuggestedStatus(outcome,currentStatus){
+  if(outcome==="Interessato")return "interessato";
+  if(outcome==="Non interessato")return "non_interessato";
+  if(outcome==="Appuntamento fissato")return "appuntamento";
+  if(outcome==="Parlato · richiamare"&&currentStatus==="da_contattare")return "primo_contatto";
+  return currentStatus;
+}
+
+function syncCallTaskFields(card,changedField){
+  const outcome=card.querySelector("[data-call-outcome]");
+  const status=card.querySelector("[data-call-status]");
+  const dateLabel=card.querySelector("[data-call-followup-label]");
+  if(changedField==="outcome")status.value=callOutcomeSuggestedStatus(outcome.value,status.value);
+  dateLabel.textContent=status.value==="appuntamento"?"Data appuntamento":"Prossimo richiamo";
+}
+
 function renderCallCenter(){
   const all=callQueueModel(listingCache);
   const count=kind=>all.filter(entry=>entry.kind===kind).length;
@@ -2481,7 +2497,7 @@ function renderCallCenter(){
       ?"Ultimo contatto: "+new Date(item.ultimo_contatto_il).toLocaleDateString("it-IT")
       :"Nessun contatto registrato";
     const nextContact=item.prossimo_contatto_il
-      ?"Prossimo richiamo: "+new Date(item.prossimo_contatto_il+"T00:00:00").toLocaleDateString("it-IT")
+      ?(item.stato_contatto==="appuntamento"?"Data appuntamento: ":"Prossimo richiamo: ")+new Date(item.prossimo_contatto_il+"T00:00:00").toLocaleDateString("it-IT")
       :"Nessun richiamo fissato";
     const phone=contact.phone
       ?'<a class="call-link" href="tel:'+safe(contact.phone.tel)+'">Chiama '+safe(contact.phone.raw)+'</a>'
@@ -2510,12 +2526,19 @@ function renderCallCenter(){
       +'<option value="non_interessato"'+(item.stato_contatto==="non_interessato"?' selected':"")+'>Non interessato</option>'
       +'</select></div>'
       +'<div><label>Esito della chiamata</label><select data-call-outcome><option value="">Selezioni l’esito</option><option value="Non risponde">Non risponde</option><option value="Parlato · richiamare">Parlato · richiamare</option><option value="Interessato">Interessato</option><option value="Non interessato">Non interessato</option><option value="Appuntamento fissato">Appuntamento fissato</option><option value="Numero errato">Numero errato</option><option value="Altro">Altro</option></select></div>'
-      +'<div><label>Prossimo richiamo</label><input data-call-followup type="date" value="'+safe(item.prossimo_contatto_il||"")+'"></div>'
+      +'<div><label data-call-followup-label>'+(item.stato_contatto==="appuntamento"?"Data appuntamento":"Prossimo richiamo")+'</label><input data-call-followup type="date" value="'+safe(item.prossimo_contatto_il||"")+'"></div>'
       +'<div class="call-task-note"><label>Note della conversazione</label><textarea data-call-note maxlength="5000" placeholder="Es. proprietario assente, richiama venerdì..."></textarea></div>'
       +'<button type="button" class="gold" data-save-call>Registra esito</button>'
       +'</div></article>';
   }).join("");
   box.querySelectorAll("[data-open-call-crm]").forEach(button=>button.addEventListener("click",()=>openCallCrm(button.dataset.openCallCrm)));
+  box.querySelectorAll("[data-call-task]").forEach(card=>{
+    const outcome=card.querySelector("[data-call-outcome]");
+    const status=card.querySelector("[data-call-status]");
+    outcome.addEventListener("change",()=>syncCallTaskFields(card,"outcome"));
+    status.addEventListener("change",()=>syncCallTaskFields(card,"status"));
+    syncCallTaskFields(card,"status");
+  });
   box.querySelectorAll("[data-save-call]").forEach(button=>button.addEventListener("click",()=>saveCallTask(button.closest("[data-call-task]").dataset.callTask,button.closest("[data-call-task]"),button)));
 }
 
@@ -2543,6 +2566,11 @@ async function saveCallTask(id,card,button){
   if(!outcome){
     msg("listMsg","Selezioni l'esito della chiamata prima di registrarla.","error");
     card.querySelector("[data-call-outcome]").focus();
+    return;
+  }
+  if(status==="appuntamento"&&!followup){
+    msg("listMsg","Per registrare un appuntamento, indichi prima la data dell'incontro.","error");
+    card.querySelector("[data-call-followup]").focus();
     return;
   }
   button.disabled=true;
@@ -2617,7 +2645,7 @@ function renderFollowups(data){
   box.innerHTML=due.slice(0,12).map(item=>{
     const date=new Date(item.prossimo_contatto_il+"T00:00:00");
     const days=Math.round((date-today)/86400000);
-    const label=days<0?"In ritardo di "+Math.abs(days)+" giorni":days===0?"Da fare oggi":"Tra "+days+" giorni";
+    const label=item.stato_contatto==="appuntamento"?"Appuntamento fissato":days<0?"In ritardo di "+Math.abs(days)+" giorni":days===0?"Da fare oggi":"Tra "+days+" giorni";
     return `<div class="crm-entry"><strong>${safe(item.titolo)}</strong><span>${safe(item.comune)} · ${safe(item.prossimo_contatto_il)} · <span class="due">${label}</span></span><div><button class="secondary" data-open-followup="${safe(item.id)}">Apri scheda</button></div></div>`;
   }).join("");
   box.querySelectorAll("[data-open-followup]").forEach(button=>button.addEventListener("click",()=>openCallCrm(button.dataset.openFollowup)));
