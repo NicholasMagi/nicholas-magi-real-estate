@@ -66,7 +66,7 @@ export function buildInsightsSearchPayload(now: Date, lookbackDays = 30, page = 
       clientTypeID: 1,
       phoneNumberProvided: true
     },
-    Pagination: { page, limit: 10 },
+    Pagination: { page, limit: 5 },
     Sorting: { by: "date", direction: "desc" }
   };
 }
@@ -108,8 +108,8 @@ function safeNumber(value: unknown): number | null {
 }
 
 export function toCandidate(item: Record<string, any>, ownerId: string) {
-  // Full Search by Attribute returns expanded "Offerta" details. The search payload
-  // explicitly filters clientTypeID=1 (Privato) and phoneNumberProvided=true.
+  // This mapping is called on the Comparable Detail response after Search by Attribute.
+  // The search request explicitly filters clientTypeID=1 (Privato) and phoneNumberProvided=true.
   const location = item?.location ?? {};
   const comune = typeof location.municipality === "string" ? location.municipality.trim() : "";
   if (!ALLOWED_MUNICIPALITIES.has(normalize(comune))) return null;
