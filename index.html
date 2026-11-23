@@ -551,6 +551,10 @@ let listingCache = [];
 let candidateCache = [];
 let sellerRegistryCache = [];
 let insightsCanImport = false;
+let omiQuotationCache = [];
+let declaredDeedsCache = [];
+let declaredDeedBatchId = null;
+let omiImportBusy = false;
 
 function msg(id,text,type=""){
   $(id).textContent=text;
@@ -862,6 +866,334 @@ function showAuth(){
   $("appArea").hidden=true;
 }
 
+
+function marketFillSelect(id,values,firstLabel){
+  const select=$(id);
+  if(!select)return;
+  const previous=select.value;
+  const unique=[...new Set((values||[]).filter(value=>value!==null&&value!==undefined&&String(value).trim()!=="").map(value=>String(value)))].sort((a,b)=>a.localeCompare(b,"it"));
+  select.innerHTML='<option value="">'+safe(firstLabel)+'</option>'+unique.map(value=>'<option value="'+safe(value)+'">'+safe(value)+'</option>').join("");
+  if(unique.includes(previous))select.value=previous;
+}
+
+function parseOmiHeader(value){
+  return String(value||"").replace(/^\uFEFF/,"").trim().replace(/^["']|["']$/g,"")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLocaleUpperCase("it").replace(/[^A-Z0-9]+/g,"_").replace(/^_+|_+$/g,"");
+}
+
+function parseOmiCsvMatrix(text,delimiter){
+  const rows=[];
+  let row=[],field="",quoted=false;
+  const input=String(text||"").replace(/^\uFEFF/,"");
+  for(let i=0;i<input.length;i++){
+    const ch=input[i];
+    if(ch==='"'){
+      if(quoted&&input[i+1]==='"'){field+='"';i++;}
+      else quoted=!quoted;
+    }else if(ch===delimiter&&!quoted){
+      row.push(field);field="";
+    }else if((ch==="\n"||ch==="\r")&&!quoted){
+      if(ch==="\r"&&input[i+1]==="\n")i++;
+      row.push(field);
+      if(row.some(value=>String(value).trim()!==""))rows.push(row);
+      row=[];field="";
+    }else field+=ch;
+  }
+  row.push(field);
+  if(row.some(value=>String(value).trim()!==""))rows.push(row);
+  return rows;
+}
+
+function parseOmiNumber(value){
+  let raw=String(value??"").trim().replace(/\s+/g,"").replace(/[€]/g,"");
+  if(!raw||raw==="-"||raw==="—")return null;
+  if(raw.includes(",")&&raw.includes(".")){
+    if(raw.lastIndexOf(",")>raw.lastIndexOf("."))raw=raw.replace(/\./g,"").replace(",",".");
+    else raw=raw.replace(/,/g,"");
+  }else if(raw.includes(",")){
+    const tail=raw.split(",").pop();
+    raw=/^\d{1,2}$/.test(tail)?raw.replace(",","."):raw.replace(/,/g,"");
+  }else if((raw.match(/\./g)||[]).length>1)raw=raw.replace(/\./g,"");
+  const number=Number(raw);
+  return Number.isFinite(number)&&number>=0?number:null;
+}
+
+function formatOmiSemester(value){
+  const code=String(value||"");
+  return /^20\d{2}[12]$/.test(code)?code.slice(0,4)+"/"+code.slice(4):code||"—";
+}
+
+function formatOmiEuro(value,decimals=0){
+  if(value===null||value===undefined||value==="")return "—";
+  return new Intl.NumberFormat("it-IT",{maximumFractionDigits:decimals,minimumFractionDigits:decimals}).format(Number(value))+" €";
+}
+
+function omiComuneNames(){
+  return [...new Set(omiQuotationCache.map(row=>row.comune).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"it"));
+}
+
+function renderOmiQuotations(){
+  const rows=omiQuotationCache||[];
+  const town=$("omiComuneFilter").value;
+  const semester=$("omiSemesterFilter").value;
+  const type=$("omiTypeFilter").value;
+  const zoneSearch=$("omiZoneSearch").value.trim().toLocaleLowerCase("it");
+  const filtered=rows.filter(row=>
+    (!town||row.comune===town)&&
+    (!semester||String(row.semestre)===semester)&&
+    (!type||row.tipologia===type)&&
+    (!zoneSearch||String(row.zona||"").toLocaleLowerCase("it").includes(zoneSearch)||
+      String(row.link_zona||"").toLocaleLowerCase("it").includes(zoneSearch))
+  );
+  $("omiTotalRows").textContent=rows.length.toLocaleString("it-IT");
+  const semesters=rows.map(row=>Number(row.semestre)).filter(Number.isFinite);
+  $("omiLatestSemester").textContent=semesters.length?formatOmiSemester(Math.max(...semesters)):"—";
+  $("omiMunicipalityCount").textContent=omiComuneNames().length.toLocaleString("it-IT");
+  $("omiFilterCount").textContent=filtered.length.toLocaleString("it-IT")+" quotazioni visualizzate · "+rows.length.toLocaleString("it-IT")+" archiviate";
+  const box=$("omiQuotationList");
+  if(!filtered.length){
+    box.innerHTML='<p class="hint">Nessuna quotazione corrisponde ai filtri. Importi il CSV ufficiale OMI oppure allarghi la ricerca.</p>';
+    return;
+  }
+  const display=filtered.slice(0,150);
+  box.innerHTML='<table class="market-table"><thead><tr><th>Semestre</th><th>Comune</th><th>Zona</th><th>Tipologia</th><th>Stato</th><th>Compravendita €/m²</th><th>Locazione €/m²/mese</th><th>Sup.</th></tr></thead><tbody>'+
+    display.map(row=>{
+      const purchase=row.compr_min!==null&&row.compr_max!==null
+        ?formatOmiEuro(row.compr_min)+" – "+formatOmiEuro(row.compr_max)
+        :"—";
+      const rental=row.loc_min!==null&&row.loc_max!==null
+        ?formatOmiEuro(row.loc_min,2)+" – "+formatOmiEuro(row.loc_max,2)
+        :"—";
+      return '<tr><td>'+safe(formatOmiSemester(row.semestre))+'</td><td>'+safe(row.comune)+'</td><td><strong>'+safe(row.zona)+'</strong></td><td>'+safe(row.tipologia)+'</td><td>'+safe(row.stato||row.stato_prevalente||"—")+'</td><td>'+safe(purchase)+'</td><td>'+safe(rental)+'</td><td>'+safe(row.sup_nl_compr||"—")+'</td></tr>';
+    }).join("")+'</tbody></table>'+
+    (filtered.length>display.length?'<p class="small">Mostrate le prime '+display.length+' righe. Raffini i filtri per consultare gli altri risultati.</p>':"");
+  updateOmiCompareOptions();
+}
+
+function updateOmiCompareOptions(){
+  const town=$("omiCompareComune").value;
+  const townRows=omiQuotationCache.filter(row=>!town||row.comune===town);
+  marketFillSelect("omiCompareZone",townRows.map(row=>row.zona),"Selezioni una zona");
+  const zone=$("omiCompareZone").value;
+  const zoneRows=townRows.filter(row=>!zone||row.zona===zone);
+  marketFillSelect("omiCompareType",zoneRows.map(row=>row.tipologia),"Selezioni una tipologia");
+  const type=$("omiCompareType").value;
+  const typeRows=zoneRows.filter(row=>!type||row.tipologia===type);
+  marketFillSelect("omiCompareState",typeRows.map(row=>row.stato||row.stato_prevalente),"Tutti gli stati");
+}
+
+function runOmiComparison(){
+  const town=$("omiCompareComune").value;
+  const zone=$("omiCompareZone").value;
+  const type=$("omiCompareType").value;
+  const state=$("omiCompareState").value;
+  const asking=parseOmiNumber($("omiComparePrice").value);
+  const surface=parseOmiNumber($("omiCompareSurface").value);
+  const target=$("omiCompareResult");
+  if(!town||!zone||!type||!asking||!surface||surface<=0){
+    target.textContent="Selezioni comune, zona e tipologia e inserisca prezzo e superficie.";
+    return;
+  }
+  const pricePerSqm=asking/surface;
+  let matches=omiQuotationCache.filter(row=>row.comune===town&&row.zona===zone&&row.tipologia===type&&
+    (!state||(row.stato||row.stato_prevalente)===state)&&row.compr_min!==null&&row.compr_max!==null);
+  if(!matches.length){
+    target.textContent="Non ci sono intervalli OMI di compravendita importati per questa combinazione. Verifichi il semestre e lo stato conservativo.";
+    return;
+  }
+  const latest=Math.max(...matches.map(row=>Number(row.semestre)));
+  matches=matches.filter(row=>Number(row.semestre)===latest);
+  target.innerHTML='<strong>Richiesta: '+safe(formatOmiEuro(pricePerSqm))+'/m²</strong> · '+safe(formatOmiSemester(latest))+
+    '<div class="market-result-grid">'+matches.map(row=>{
+      const relation=pricePerSqm<Number(row.compr_min)?"Sotto l'intervallo OMI":pricePerSqm>Number(row.compr_max)?"Sopra l'intervallo OMI":"Dentro l'intervallo OMI";
+      const diff=pricePerSqm<Number(row.compr_min)
+        ?((Number(row.compr_min)/pricePerSqm)-1)*100
+        :pricePerSqm>Number(row.compr_max)
+          ?((pricePerSqm/Number(row.compr_max))-1)*100:0;
+      return '<div><span>Stato '+safe(row.stato||row.stato_prevalente||"non indicato")+'</span><strong>'+safe(formatOmiEuro(row.compr_min))+' – '+safe(formatOmiEuro(row.compr_max))+'/m²</strong><span>'+safe(relation)+(diff?' · scostamento '+safe(diff.toFixed(1))+'% dal limite':'')+'</span></div>';
+    }).join("")+'</div>'+
+    '<span>Confronto indicativo tra prezzo richiesto e intervallo OMI per zona e tipologia. Le quotazioni OMI non sono prezzi di singole compravendite e non sostituiscono sopralluogo, comparabili e valutazione professionale.</span>';
+}
+
+async function loadOmiQuotations(){
+  if(!currentUser||!supabase)return;
+  const rows=[];
+  const pageSize=500;
+  for(let offset=0;;offset+=pageSize){
+    const {data,error}=await supabase.from("nmre_omi_quotazioni").select("*")
+      .order("semestre",{ascending:false}).order("comune",{ascending:true})
+      .range(offset,offset+pageSize-1);
+    if(error){msg("omiImportStatus","Impossibile leggere l'archivio OMI: "+error.message,"error");return;}
+    rows.push(...(data||[]));
+    if(!data||data.length<pageSize)break;
+  }
+  omiQuotationCache=rows;
+  marketFillSelect("omiComuneFilter",rows.map(row=>row.comune),"Tutti i comuni importati");
+  marketFillSelect("omiSemesterFilter",rows.map(row=>String(row.semestre)),"Tutti i semestri");
+  marketFillSelect("omiTypeFilter",rows.map(row=>row.tipologia),"Tutte le tipologie");
+  marketFillSelect("omiCompareComune",rows.map(row=>row.comune),"Selezioni un comune");
+  marketFillSelect("deedQueryTown",[
+    "Ancona","Osimo","Castelfidardo","Jesi","Loreto","Camerano","Recanati","Porto Recanati",
+    "Numana","Sirolo","Falconara Marittima","Chiaravalle","Filottrano","Polverigi","Agugliano",
+    "Monte San Vito","Civitanova Marche","Macerata","Fermo","Porto Sant'Elpidio"
+  ],"Selezioni un comune");
+  updateOmiCompareOptions();
+  renderOmiQuotations();
+}
+
+async function importOmiCsv(){
+  if(omiImportBusy)return;
+  const file=$("omiCsvFile").files?.[0];
+  if(!file){msg("omiImportStatus","Selezioni prima il file CSV VALORI ufficiale.","error");return;}
+  if(file.size>100*1024*1024){msg("omiImportStatus","Il file supera 100 MB. Scarichi il file della sola provincia o delle province interessate.","error");return;}
+  const button=$("importOmiCsv");
+  button.disabled=true;omiImportBusy=true;
+  try{
+    msg("omiImportStatus","Lettura e controllo del tracciato CSV...");
+    const textValue=await file.text();
+    const lines=textValue.replace(/^\uFEFF/,"").split(/\r?\n/).filter(line=>line.trim()!=="");
+    const headerLine=lines.find(line=>/COMUNE[_ ]ISTAT/i.test(line)&&/COMPR[_ ]MIN/i.test(line));
+    if(!headerLine)throw new Error("Intestazione VALORI non riconosciuta. Il file deve contenere COMUNE_ISTAT e COMPR_MIN; il file ZONE non è sufficiente.");
+    const delimiters=[";","\t",",","|"];
+    const delimiter=delimiters.sort((a,b)=>headerLine.split(b).length-headerLine.split(a).length)[0];
+    const matrix=parseOmiCsvMatrix(textValue,delimiter);
+    const headerIndex=matrix.findIndex(row=>row.some(cell=>parseOmiHeader(cell).startsWith("COMUNE_ISTAT"))&&row.some(cell=>parseOmiHeader(cell).startsWith("COMPR_MIN")));
+    if(headerIndex<0)throw new Error("Non trovo la riga d'intestazione dei valori OMI.");
+    const headers=matrix[headerIndex].map(parseOmiHeader);
+    const col=(prefix)=>headers.findIndex(value=>value===prefix||value.startsWith(prefix+"_"));
+    const required=["PROV","COMUNE_ISTAT","COMUNE_DESCRIZIONE","ZONA","COD_TIP","DESCR_TIPOLOGIA","COMPR_MIN","COMPR_MAX"];
+    const missing=required.filter(name=>col(name)<0);
+    if(missing.length)throw new Error("Nel CSV mancano colonne obbligatorie: "+missing.join(", ")+".");
+    const filenameSemester=(file.name.match(/(20\d{2}[12])/i)||[])[1];
+    const semester=String(filenameSemester||$("omiImportSemester").value||"").trim();
+    if(!/^20\d{2}[12]$/.test(semester))throw new Error("Indichi il semestre nel formato YYYY1 o YYYY2, ad esempio 20252.");
+    $("omiImportSemester").value=semester;
+    const allowedProvinces=new Set(["AN","MC","FM","AP"]);
+    const rows=[];
+    let skipped=0;
+    for(let index=headerIndex+1;index<matrix.length;index++){
+      const cells=matrix[index];
+      if(cells.length<headers.length)continue;
+      const get=(name)=>{const i=col(name);return i<0?"":String(cells[i]??"").trim();};
+      const province=get("PROV").toUpperCase();
+      if(!allowedProvinces.has(province)){skipped++;continue;}
+      const commune=get("COMUNE_DESCRIZIONE").trim();
+      const communeIstat=get("COMUNE_ISTAT").replace(/^'+|'+$/g,"");
+      const zone=get("ZONA");
+      const tipCode=get("COD_TIP");
+      const tipology=get("DESCR_TIPOLOGIA");
+      const buyMin=parseOmiNumber(get("COMPR_MIN"));
+      const buyMax=parseOmiNumber(get("COMPR_MAX"));
+      const rentMin=parseOmiNumber(get("LOCMIN"));
+      const rentMax=parseOmiNumber(get("LOCMAX"));
+      if(!commune||!communeIstat||!zone||!tipCode||(![buyMin,buyMax,rentMin,rentMax].some(value=>value!==null)))continue;
+      rows.push({
+        owner_id:currentUser.id,semestre:Number(semester),provincia:province,comune_istat:communeIstat,
+        comune,fascia:get("FASCIA"),zona,link_zona:get("LINK_ZONA")||communeIstat+":"+zone,
+        cod_tip:tipCode,tipologia:tipology||"Non indicata",stato:get("STATO"),
+        stato_prevalente:get("STATO_PREVALENTE"),compr_min:buyMin,compr_max:buyMax,
+        sup_nl_compr:get("SUP_NL_COMPR"),loc_min:rentMin,loc_max:rentMax,
+        sup_nl_loc:get("SUP_NL_LOC"),source_file:file.name,
+        source_label:"Agenzia delle Entrate - OMI",
+        source_license:"Agenzia delle Entrate - OMI (citazione della fonte richiesta)",
+        raw_data:{area_territoriale:get("AREA_TERRITORIALE"),regione:get("REGIONE"),comune_cat:get("COMUNE_CAT")}
+      });
+    }
+    if(!rows.length)throw new Error("Non ho trovato righe valide per le province AN, MC, FM o AP. Verifichi di aver caricato il file VALORI della zona geografica corretta.");
+    let saved=0;
+    const chunkSize=200;
+    for(let offset=0;offset<rows.length;offset+=chunkSize){
+      const chunk=rows.slice(offset,offset+chunkSize);
+      const {error}=await supabase.from("nmre_omi_quotazioni").upsert(chunk,{onConflict:"owner_id,semestre,comune_istat,zona,cod_tip,stato"});
+      if(error)throw new Error("Errore nel salvataggio del blocco "+(Math.floor(offset/chunkSize)+1)+": "+error.message);
+      saved+=chunk.length;
+      button.textContent="Importati "+saved.toLocaleString("it-IT")+" / "+rows.length.toLocaleString("it-IT");
+    }
+    await loadOmiQuotations();
+    msg("omiImportStatus","Importazione completata: "+saved.toLocaleString("it-IT")+" righe OMI elaborate. Righe di altre province saltate: "+skipped.toLocaleString("it-IT")+". Fonte: Agenzia delle Entrate - OMI.","success");
+    $("omiCsvFile").value="";
+  }catch(error){
+    msg("omiImportStatus",error instanceof Error?error.message:"Importazione CSV non riuscita.","error");
+  }finally{
+    button.disabled=false;button.textContent="Importa quotazioni CSV";omiImportBusy=false;
+  }
+}
+
+async function loadDeclaredDeeds(){
+  if(!currentUser||!supabase)return;
+  const {data,error}=await supabase.from("nmre_compravendite_atti").select("*")
+    .order("mese_atto",{ascending:false}).limit(100);
+  if(error){msg("deedSaveStatus","Impossibile caricare il registro compravendite: "+error.message,"error");return;}
+  declaredDeedsCache=data||[];
+  renderDeclaredDeeds();
+}
+
+function renderDeclaredDeeds(){
+  const box=$("declaredDeedList");
+  if(!declaredDeedsCache.length){
+    box.innerHTML='<p class="hint">Nessuna scheda-atto registrata. Dopo la consultazione ufficiale potrà annotare qui i dati non identificativi.</p>';
+    return;
+  }
+  box.innerHTML=declaredDeedsCache.map(row=>{
+    const month=row.mese_atto?new Date(row.mese_atto+"T00:00:00").toLocaleDateString("it-IT",{month:"long",year:"numeric"}):"Periodo non indicato";
+    const summary=[row.tipologia_atto,row.numero_immobili+" immobili",row.zona_omi?"Zona OMI "+row.zona_omi:""].filter(Boolean).join(" · ");
+    return '<div class="market-deed-row"><div><strong>'+safe(row.comune_ricerca)+' · '+safe(month)+'</strong><span>'+safe(summary)+' · Ricerca con '+safe(row.atti_nella_ricerca)+' atti visualizzati</span>'+(row.riepilogo_unita?'<span>Unità riportate: '+safe(row.riepilogo_unita)+'</span>':"")+'<span>Corrispettivo riferito all’intero atto, non a una singola unità.</span></div><div class="market-deed-amount">'+safe(formatOmiEuro(row.corrispettivo_dichiarato))+'<br><button type="button" class="danger" data-delete-deed="'+safe(row.id)+'">Elimina</button></div></div>';
+  }).join("");
+  box.querySelectorAll("[data-delete-deed]").forEach(button=>button.addEventListener("click",()=>deleteDeclaredDeed(button.dataset.deleteDeed)));
+}
+
+async function saveDeclaredDeed(event){
+  event.preventDefault();
+  if(!currentUser||!supabase)return;
+  const count=Number($("deedSearchCount").value);
+  const propertyCount=Number($("deedPropertyCount").value);
+  const amount=Number($("deedDeclaredAmount").value);
+  const month=$("deedMonth").value;
+  if(!/^\d{4}-\d{2}$/.test(month)||count<5||count>50||!Number.isInteger(propertyCount)||propertyCount<1||amount<=0){
+    msg("deedSaveStatus","Controlli mese, corrispettivo, numero immobili e numero di atti nella ricerca (da 5 a 50).","error");
+    return;
+  }
+  const button=$("saveDeclaredDeed");
+  button.disabled=true;
+  const row={
+    owner_id:currentUser.id,
+    batch_id:declaredDeedBatchId||(declaredDeedBatchId=crypto.randomUUID()),
+    atti_nella_ricerca:count,
+    mese_atto:month+"-01",
+    tipologia_atto:$("deedType").value,
+    corrispettivo_dichiarato:amount,
+    numero_immobili:propertyCount,
+    comune_ricerca:$("deedQueryTown").value,
+    zona_omi:$("deedOmiZone").value.trim()||null,
+    riepilogo_unita:$("deedUnitSummary").value.trim()||null,
+    note:$("deedNote").value.trim()||null
+  };
+  const {error}=await supabase.from("nmre_compravendite_atti").insert(row);
+  if(error){
+    msg("deedSaveStatus","Scheda-atto non salvata: "+error.message,"error");
+    button.disabled=false;
+    return;
+  }
+  msg("deedSaveStatus","Scheda-atto registrata. Il corrispettivo resta associato all'intero atto e non viene ripartito tra le unità.","success");
+  $("deedMonth").value="";$("deedType").value="";$("deedSearchCount").value="";
+  $("deedDeclaredAmount").value="";$("deedPropertyCount").value="";
+  $("deedOmiZone").value="";$("deedUnitSummary").value="";$("deedNote").value="";
+  await loadDeclaredDeeds();
+  button.disabled=false;
+}
+
+async function deleteDeclaredDeed(id){
+  if(!confirm("Eliminare questa scheda-atto dal registro NMRE?"))return;
+  const {error}=await supabase.from("nmre_compravendite_atti").delete().eq("id",id);
+  if(error){msg("deedSaveStatus","Eliminazione non riuscita: "+error.message,"error");return;}
+  await loadDeclaredDeeds();
+}
+
+async function loadMarketData(){
+  await Promise.all([loadOmiQuotations(),loadDeclaredDeeds()]);
+}
+
 async function showApp(session){
   currentUser=session.user;
   $("userEmail").textContent=currentUser.email||"";
@@ -872,6 +1204,7 @@ async function showApp(session){
   await loadCandidates();
   await loadSellerRegistry();
   await loadGmailSyncStatus();
+  await loadMarketData();
   checkInsightsApi();
   if(!candidateRefreshTimer){
     candidateRefreshTimer=setInterval(()=>{
@@ -2122,6 +2455,21 @@ $("connectGmail").addEventListener("click",async()=>{
 
     button.disabled=false;
   }
+});
+
+
+$("importOmiCsv").addEventListener("click",importOmiCsv);
+$("refreshMarketData").addEventListener("click",loadMarketData);
+["omiComuneFilter","omiSemesterFilter","omiTypeFilter"].forEach(id=>$(id).addEventListener("change",renderOmiQuotations));
+$("omiZoneSearch").addEventListener("input",renderOmiQuotations);
+$("omiCompareComune").addEventListener("change",updateOmiCompareOptions);
+$("omiCompareZone").addEventListener("change",updateOmiCompareOptions);
+$("omiCompareType").addEventListener("change",updateOmiCompareOptions);
+$("runOmiCompare").addEventListener("click",runOmiComparison);
+$("declaredDeedForm").addEventListener("submit",saveDeclaredDeed);
+$("newDeedBatch").addEventListener("click",()=>{
+  declaredDeedBatchId=crypto.randomUUID();
+  msg("deedSaveStatus","Nuovo lotto di consultazione pronto. Le prossime schede-atto saranno raggruppate insieme.","success");
 });
 
 boot().catch(e=>{
