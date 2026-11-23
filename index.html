@@ -475,6 +475,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
         <option value="new">Nuovi proprietari</option>
         <option value="appointment">Appuntamenti in pipeline</option>
         <option value="plan">Da pianificare</option>
+        <option value="stale">Da riprendere · oltre 7 giorni</option>
       </select>
     </div>
     <div id="callQueueList" class="call-queue"><div class="call-center-empty">La lista apparirà dopo il caricamento dell'archivio.</div></div>
@@ -3745,11 +3746,18 @@ function callQueueModel(data,now=new Date()){
       else return null;
     }
     else if(status==="da_contattare"){kind="new";sort=4;}
-    else if(["primo_contatto","interessato"].includes(status)){kind="plan";sort=5;}
+    else if(["primo_contatto","interessato"].includes(status)){
+      const lastContact=item.ultimo_contatto_il?Date.parse(item.ultimo_contatto_il):NaN;
+      const daysSinceContact=Number.isFinite(lastContact)?Math.floor((today.getTime()-new Date(lastContact).setHours(0,0,0,0))/86400000):null;
+      if(daysSinceContact!==null&&daysSinceContact>=7){kind="stale";sort=4;}
+      else {kind="plan";sort=5;}
+    }
     else return null;
     const contact=parseContactDetails(item.contatto);
     const days=due?Math.round((due-today)/86400000):null;
-    return {item,kind,sort,days,contact};
+    const lastContact=item.ultimo_contatto_il?Date.parse(item.ultimo_contatto_il):NaN;
+    const daysSinceContact=Number.isFinite(lastContact)?Math.max(0,Math.floor((today.getTime()-new Date(lastContact).setHours(0,0,0,0))/86400000)):null;
+    return {item,kind,sort,days,daysSinceContact,contact};
   }).filter(Boolean).sort((a,b)=>{
     if(a.sort!==b.sort)return a.sort-b.sort;
     if(a.kind==="overdue"&&a.days!==b.days)return a.days-b.days;
@@ -3766,6 +3774,7 @@ function callQueueDateLabel(entry){
   if(entry.kind==="upcoming")return "Richiamo tra "+entry.days+" "+(entry.days===1?"giorno":"giorni");
   if(entry.kind==="appointment")return "Appuntamento in pipeline";
   if(entry.kind==="new")return "Primo contatto da avviare";
+  if(entry.kind==="stale")return "Da riprendere · "+entry.daysSinceContact+" giorni dall'ultimo contatto";
   return "Nessun richiamo programmato";
 }
 
@@ -3798,13 +3807,13 @@ function followUpIntelligence(item,entry){
   channel:"Conferma appuntamento"
  };
  if(status==="interessato")return {
-  title:"Trasformare l'interesse in un incontro",
-  detail:validDue?"Richiamo concordato per "+dateLabel+". Riprenda il filo e proponga un confronto concreto.":"Interesse registrato"+(last?" il "+last:"")+". Proponga un incontro conoscitivo e concordi il prossimo passo.",
+  title:entry?.kind==="stale"?"Riprendere subito il proprietario interessato":"Trasformare l'interesse in un incontro",
+  detail:entry?.kind==="stale"?"Sono trascorsi "+entry.daysSinceContact+" giorni dall'ultimo contatto. Riprenda il filo della conversazione e proponga un prossimo passo preciso.":validDue?"Richiamo concordato per "+dateLabel+". Riprenda il filo e proponga un confronto concreto.":"Interesse registrato"+(last?" il "+last:"")+". Proponga un incontro conoscitivo e concordi il prossimo passo.",
   channel:"Follow-up interessato"
  };
  if(status==="primo_contatto")return {
-  title:"Riprendere il contatto senza ricominciare da zero",
-  detail:validDue?"Ricontatto previsto per "+dateLabel+". Richiami facendo riferimento alla conversazione precedente.":"Primo contatto già avviato. Verifichi disponibilità e concordi una data precisa per risentirvi.",
+  title:entry?.kind==="stale"?"Riattivare il contatto":"Riprendere il contatto senza ricominciare da zero",
+  detail:entry?.kind==="stale"?"Nessun richiamo programmato e "+entry.daysSinceContact+" giorni dall'ultimo contatto. Verifichi se la vendita è ancora attiva e concordi una data precisa.":validDue?"Ricontatto previsto per "+dateLabel+". Richiami facendo riferimento alla conversazione precedente.":"Primo contatto già avviato. Verifichi disponibilità e concordi una data precisa per risentirvi.",
   channel:"Secondo contatto"
  };
  if(status==="da_contattare")return {
