@@ -306,6 +306,28 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .dash-action-empty{padding:12px;border:1px dashed var(--line);border-radius:9px;color:var(--muted);font-size:12px;line-height:1.5}
 @media(max-width:560px){.dash-action-row{grid-template-columns:30px minmax(0,1fr)}.dash-action-row button{grid-column:2;justify-self:start;padding:9px 12px}}
 
+
+/* NMRE AI assistant */
+.nmre-ai-launcher{position:fixed;right:22px;bottom:22px;z-index:1000;border-radius:999px;padding:14px 18px;box-shadow:0 8px 28px #101a2b35;display:flex;align-items:center;gap:9px;background:var(--navy);color:#fff;border:1px solid #c9a96e}
+.nmre-ai-launcher-mark{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;background:#c9a96e;color:#172033;font-size:15px}
+.nmre-ai-panel{position:fixed;right:22px;bottom:86px;z-index:1001;width:min(420px,calc(100vw - 28px));height:min(620px,calc(100dvh - 120px));background:#fff;border:1px solid #dfe4eb;border-radius:18px;box-shadow:0 18px 55px #101a2b35;display:flex;flex-direction:column;overflow:hidden}
+.nmre-ai-head{padding:15px 16px;background:var(--navy);color:#fff;display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:2px solid var(--gold)}
+.nmre-ai-head strong{display:block;font-size:14px}.nmre-ai-head small{display:block;color:#c8d0dd;font-size:11px;margin-top:3px}
+.nmre-ai-close{background:#26344a;color:#fff;padding:7px 10px}
+.nmre-ai-context{padding:9px 13px;background:#f8f9fb;color:#667286;font-size:10px;line-height:1.45;border-bottom:1px solid #e8ebf0}
+.nmre-ai-messages{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:#fbfcfd}
+.nmre-ai-msg{max-width:90%;padding:10px 12px;border-radius:12px;font-size:12px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
+.nmre-ai-msg.assistant{align-self:flex-start;background:#fff;border:1px solid #e5e9ef;color:#263348}
+.nmre-ai-msg.user{align-self:flex-end;background:#17253a;color:#fff}
+.nmre-ai-msg.error{border-color:#efc7c4;background:#fff5f4;color:#8f302b}
+.nmre-ai-suggestions{display:flex;gap:6px;overflow-x:auto;padding:9px 12px;border-top:1px solid #edf0f4;background:#fff}
+.nmre-ai-suggestions button{white-space:nowrap;padding:7px 9px;font-size:10px;background:#f0f2f6;color:#3c4b60}
+.nmre-ai-compose{display:flex;gap:8px;padding:11px 12px;border-top:1px solid #e8ebf0;background:#fff;align-items:flex-end}
+.nmre-ai-compose textarea{flex:1;min-width:0;max-height:100px;min-height:42px;resize:vertical;border:1px solid #d9dfe8;border-radius:10px;padding:10px;font:inherit;font-size:12px}
+.nmre-ai-compose button{padding:11px 13px}
+.nmre-ai-typing{font-size:11px;color:#687386;padding:0 14px 8px}
+@media(max-width:560px){.nmre-ai-launcher{right:14px;bottom:14px;padding:11px 14px}.nmre-ai-panel{right:8px;bottom:72px;width:calc(100vw - 16px);height:min(650px,calc(100dvh - 90px))}}
+
 </style>
 </head>
 <body>
@@ -898,6 +920,22 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 </section>
 </div></div>
 <p class="hint">I dati sono associati al Suo account e protetti dalle regole di sicurezza di Supabase.</p>
+
+<div id="nmreAiPanel" class="nmre-ai-panel" hidden role="dialog" aria-label="NMRE Intelligence">
+  <div class="nmre-ai-head"><div><strong>NMRE Intelligence</strong><small>Il Suo assistente di acquisizione</small></div><button id="nmreAiClose" class="nmre-ai-close" type="button" aria-label="Chiudi assistente">✕</button></div>
+  <div class="nmre-ai-context">Può consultare i dati operativi NMRE. Numeri di telefono, email e indirizzi riconoscibili vengono esclusi o oscurati. I dati operativi selezionati e il messaggio vengono inviati a OpenAI per generare la risposta.</div>
+  <div id="nmreAiMessages" class="nmre-ai-messages" aria-live="polite"><div class="nmre-ai-msg assistant">Buonasera. Sono NMRE Intelligence. Posso aiutarLa a individuare le priorità, preparare telefonate e analizzare le opportunità presenti nel Suo gestionale.</div></div>
+  <div id="nmreAiTyping" class="nmre-ai-typing" hidden>Sto analizzando i dati NMRE…</div>
+  <div class="nmre-ai-suggestions">
+    <button type="button" data-ai-prompt="Quali sono le mie priorità di acquisizione oggi?">Priorità di oggi</button>
+    <button type="button" data-ai-prompt="Analizza le opportunità più promettenti nel CRM.">Migliori opportunità</button>
+    <button type="button" data-ai-prompt="Preparami una telefonata efficace per un proprietario privato.">Prepara telefonata</button>
+    <button type="button" data-ai-prompt="Quali richiami sto trascurando?">Richiami</button>
+  </div>
+  <form id="nmreAiForm" class="nmre-ai-compose"><textarea id="nmreAiInput" rows="1" maxlength="2000" placeholder="Chieda qualcosa al Suo assistente…"></textarea><button id="nmreAiSend" class="gold" type="submit">Invia</button></form>
+</div>
+<button id="nmreAiLauncher" class="nmre-ai-launcher" type="button"><span class="nmre-ai-launcher-mark">✦</span><span>Assistente AI</span></button>
+
 </section>
 </main>
 
@@ -2939,6 +2977,52 @@ $("nmreCrmAgendaFilter").addEventListener("change",nmreCrmRenderAgenda);
 $("salesPerformanceRange").addEventListener("change",renderSalesPerformance);
 $("salesGoalsToggle").addEventListener("click",()=>{const form=$("salesGoalsForm");form.hidden=!form.hidden;$("salesGoalsToggle").textContent=form.hidden?"Modifica obiettivi":"Chiudi modifica";});
 $("salesGoalsForm").addEventListener("submit",saveSalesGoals);
+
+
+/* NMRE Intelligence assistant */
+let nmreAiHistory=[];
+function nmreAiAppend(role,text,type=""){
+ const box=$("nmreAiMessages"),item=document.createElement("div");
+ item.className="nmre-ai-msg "+role+(type?" "+type:"");
+ item.textContent=text;
+ box.appendChild(item);box.scrollTop=box.scrollHeight;
+}
+function nmreAiOpen(){
+ $("nmreAiPanel").hidden=false;$("nmreAiLauncher").hidden=true;
+ $("nmreAiInput").focus();
+}
+function nmreAiClose(){
+ $("nmreAiPanel").hidden=true;$("nmreAiLauncher").hidden=false;
+}
+async function nmreAiSend(message){
+ const clean=String(message||"").trim();
+ if(!clean||clean.length>2000||!supabase||!currentUser)return;
+ const button=$("nmreAiSend"),input=$("nmreAiInput");
+ button.disabled=true;$("nmreAiTyping").hidden=false;
+ nmreAiAppend("user",clean);
+ nmreAiHistory.push({role:"user",content:clean});
+ input.value="";
+ try{
+  const {data,error}=await supabase.functions.invoke("nmre-ai-assistant",{body:{messages:nmreAiHistory.slice(-10)}});
+  if(error)throw new Error(error.message||"Servizio AI non raggiungibile.");
+  if(data?.code==="OPENAI_API_KEY_MISSING"){
+   throw new Error("L'interfaccia è pronta, ma manca la chiave API OpenAI sul server. Occorre configurare OPENAI_API_KEY nelle Edge Function Secrets di Supabase.");
+  }
+  if(!data?.success||!data?.answer)throw new Error(data?.error||"Risposta dell'assistente non disponibile.");
+  nmreAiHistory.push({role:"assistant",content:data.answer});
+  nmreAiHistory=nmreAiHistory.slice(-10);
+  nmreAiAppend("assistant",data.answer);
+ }catch(error){
+  nmreAiAppend("assistant",error.message||"Si è verificato un errore.", "error");
+ }finally{
+  $("nmreAiTyping").hidden=true;button.disabled=false;input.focus();
+ }
+}
+$("nmreAiLauncher").addEventListener("click",nmreAiOpen);
+$("nmreAiClose").addEventListener("click",nmreAiClose);
+$("nmreAiForm").addEventListener("submit",event=>{event.preventDefault();const text=$("nmreAiInput").value;nmreAiSend(text);});
+$("nmreAiInput").addEventListener("keydown",event=>{if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();$("nmreAiForm").requestSubmit();}});
+document.querySelectorAll("[data-ai-prompt]").forEach(button=>button.addEventListener("click",()=>nmreAiSend(button.dataset.aiPrompt)));
 
 async function boot(){
   loadConfig();
