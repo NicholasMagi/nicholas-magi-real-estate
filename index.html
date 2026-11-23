@@ -68,7 +68,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .market-deed-checks label{display:flex;gap:9px;align-items:flex-start;font-size:11px;line-height:1.5;color:#46536a}
 .market-deed-checks input{width:16px;height:16px;flex:0 0 auto;margin:2px 0 0}
 .market-deed-price{display:block;color:#315e3a!important;font-weight:700;margin-top:4px}
-.market-deed-verified{display:inline-block;color:#315e3a!important;font-size:10px;margin-left:6px}
+.market-deed-verified{display:inline-block;color:#315e3a!important;font-size:10px;margin-left:6px}.market-deed-unverified{display:inline-block;color:#95672f!important;font-size:10px;margin-left:6px}
 @media(max-width:900px){.market-import{grid-template-columns:1fr 1fr}.market-import-action{grid-column:1/-1}.market-import-action button{width:100%}}
 @media(max-width:560px){.market-import{grid-template-columns:1fr}.market-import-action{grid-column:auto}.market-stat-grid,.market-result-grid{grid-template-columns:1fr 1fr}.market-block-head{flex-direction:column}}
 .candidate-analysis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:9px 0}.candidate-analysis-item{border:1px solid #e4e8ee;border-radius:9px;padding:9px 11px;background:#fff;min-width:0}.candidate-analysis-item span{display:block;font-size:10px;color:var(--muted);margin-bottom:4px}.candidate-analysis-item strong{display:block;font-size:12px;color:#35435a;line-height:1.35}.candidate-analysis-item small{display:block;font-size:9px;color:var(--muted);line-height:1.4;margin-top:4px}@media(max-width:520px){.candidate-analysis{grid-template-columns:1fr}}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.toolbar input{max-width:280px}
@@ -392,6 +392,12 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div class="actions"><button class="gold" id="saveDeclaredDeed" type="submit">Registra scheda-atto</button></div>
       <div id="deedSaveStatus" class="status"></div>
     </form>
+    <div class="market-stat-grid" id="declaredDeedSummary">
+      <div class="market-stat"><strong>0</strong><span>Schede-atto registrate</span></div>
+      <div class="market-stat"><strong>0</strong><span>Atti con dati verificati</span></div>
+      <div class="market-stat"><strong>0</strong><span>Compravenduti con €/m² attribuibile</span></div>
+    </div>
+    <div id="declaredDeedComparables" class="market-table-wrap"><p class="hint">I confronti €/m² appariranno quando saranno disponibili dati verificati e attribuibili a singole unità.</p></div>
     <div id="declaredDeedList" class="market-table-wrap"><p class="hint">Nessun atto registrato.</p></div>
     <p class="market-attribution">Fonte dei dati: Agenzia delle Entrate · Consultazione Valori Immobiliari Dichiarati. Il servizio espone gli atti in forma anonimizzata e limita la visualizzazione alle ricerche con almeno cinque atti. Registri solo dati necessari e non identificativi.</p>
   </div>
@@ -1159,11 +1165,65 @@ async function loadDeclaredDeeds(){
 
 function renderDeclaredDeeds(){
   const box=$("declaredDeedList");
-  if(!declaredDeedsCache.length){
+  const summary=$("declaredDeedSummary");
+  const comparables=$("declaredDeedComparables");
+  const rows=declaredDeedsCache||[];
+  const verified=rows.filter(row=>row.dati_verificati===true);
+  const attributable=verified.filter(row=>
+    row.numero_immobili===1&&row.corrispettivo_attribuibile_unita===true
+    &&row.prezzo_mq_unita!==null&&row.prezzo_mq_unita!==undefined
+  );
+  summary.innerHTML=
+    '<div class="market-stat"><strong>'+rows.length.toLocaleString("it-IT")+'</strong><span>Schede-atto registrate</span></div>'+
+    '<div class="market-stat"><strong>'+verified.length.toLocaleString("it-IT")+'</strong><span>Atti con dati verificati</span></div>'+
+    '<div class="market-stat"><strong>'+attributable.length.toLocaleString("it-IT")+'</strong><span>Compravenduti con €/m² attribuibile</span></div>';
+
+  const groups=new Map();
+  for(const row of attributable){
+    const key=[
+      row.comune_ricerca||"Comune non indicato",
+      row.zona_omi||"Zona OMI non indicata",
+      row.tipologia_atto||"Tipologia non indicata",
+      row.categoria_catastale||"Categoria non indicata"
+    ].join("|");
+    if(!groups.has(key)){
+      groups.set(key,{
+        comune:row.comune_ricerca||"Comune non indicato",
+        zona:row.zona_omi||"Non indicata",
+        tipologia:row.tipologia_atto||"Non indicata",
+        categoria:row.categoria_catastale||"Non indicata",
+        values:[]
+      });
+    }
+    groups.get(key).values.push(Number(row.prezzo_mq_unita));
+  }
+  const median=values=>{
+    const sorted=values.slice().sort((a,b)=>a-b);
+    if(!sorted.length)return null;
+    const middle=Math.floor(sorted.length/2);
+    return sorted.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])/2;
+  };
+  const grouped=[...groups.values()].sort((a,b)=>
+    a.comune.localeCompare(b.comune,"it")||
+    a.zona.localeCompare(b.zona,"it")||
+    a.tipologia.localeCompare(b.tipologia,"it")
+  );
+  comparables.innerHTML=grouped.length
+    ?'<table class="market-table"><thead><tr><th>Comune</th><th>Zona OMI</th><th>Tipologia</th><th>Categoria</th><th>Atti attribuibili</th><th>Mediana €/m²</th><th>Min–max €/m²</th></tr></thead><tbody>'+
+      grouped.map(group=>{
+        const values=group.values;
+        const med=median(values);
+        const min=Math.min(...values),max=Math.max(...values);
+        return '<tr><td>'+safe(group.comune)+'</td><td>'+safe(group.zona)+'</td><td>'+safe(group.tipologia)+'</td><td>'+safe(group.categoria)+'</td><td class="number">'+values.length+'</td><td class="number"><strong>'+safe(formatOmiEuro(med))+'</strong></td><td class="number">'+safe(formatOmiEuro(min))+' – '+safe(formatOmiEuro(max))+'</td></tr>';
+      }).join("")+'</tbody></table>'+
+      '<p class="market-attribution">Confronti calcolati soltanto sugli atti verificati con una singola unità e superficie in m². La numerosità del campione è indicata per ogni gruppo: un campione ridotto non rappresenta da solo il mercato.</p>'
+    :'<p class="hint">Nessun compravenduto dispone ancora di tutti i requisiti per un confronto €/m². Gli atti con più immobili restano comunque nell’archivio come corrispettivi complessivi.</p>';
+
+  if(!rows.length){
     box.innerHTML='<p class="hint">Nessuna scheda-atto registrata. Dopo la consultazione ufficiale potrà annotare qui i dati non identificativi.</p>';
     return;
   }
-  box.innerHTML=declaredDeedsCache.map(row=>{
+  box.innerHTML=rows.map(row=>{
     const month=row.mese_atto?new Date(row.mese_atto+"T00:00:00").toLocaleDateString("it-IT",{month:"long",year:"numeric"}):"Periodo non indicato";
     const summary=[row.tipologia_atto,row.numero_immobili+" immobili",row.zona_omi?"Zona OMI "+row.zona_omi:"",row.categoria_catastale||""].filter(Boolean).join(" · ");
     const surface=row.superficie_catastale_mq
@@ -1172,7 +1232,8 @@ function renderDeclaredDeeds(){
     const unitPrice=row.prezzo_mq_unita!==null&&row.prezzo_mq_unita!==undefined
       ?'<span class="market-deed-price"><strong>'+safe(formatOmiEuro(row.prezzo_mq_unita))+'/m²</strong> · prezzo attribuibile all’unica unità verificata</span>'
       :'<span>€/m² non calcolato: corrispettivo dell’atto non attribuibile con certezza a una singola unità.</span>';
-    const verified=row.dati_verificati===true?' <span class="market-deed-verified">Dati verificati</span>':'';
+    const verifiedFlag=row.dati_verificati===true;
+    const verified=verifiedFlag?' <span class="market-deed-verified">Dati verificati</span>':' <span class="market-deed-unverified">Da verificare</span>';
     return '<div class="market-deed-row"><div><strong>'+safe(row.comune_ricerca)+' · '+safe(month)+'</strong><span>'+safe(summary)+' · Ricerca con '+safe(row.atti_nella_ricerca)+' atti visualizzati</span>'+(row.riepilogo_unita?'<span>Unità riportate: '+safe(row.riepilogo_unita)+'</span>':"")+'<span>'+safe(surface)+'</span>'+unitPrice+verified+'</div><div class="market-deed-amount">'+safe(formatOmiEuro(row.corrispettivo_dichiarato))+'<br><button type="button" class="danger" data-delete-deed="'+safe(row.id)+'">Elimina</button></div></div>';
   }).join("");
   box.querySelectorAll("[data-delete-deed]").forEach(button=>button.addEventListener("click",()=>deleteDeclaredDeed(button.dataset.deleteDeed)));
