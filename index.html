@@ -1037,7 +1037,8 @@ function renderCandidates(){
       +'<div class="candidate-priority-info"><strong>Priorità '+safe(priority.label)+'</strong><span>'+safe(priority.description)+'</span><small>'+safe(priority.reasons.join(" · "))+'</small></div>'
       +'</div>'
       +qualityHtml
-      +'<div class="topline"><span class="meta">'+safe(c.portale||"Portale non indicato")+' · '+safe(published)+'</span><span class="pill">'+(isPrivate?"Privato riconosciuto":"Venditore da verificare")+'</span></div>'
+      +'<div class="topline"><span class="meta">'+safe(c.portale||"Portale non indicato")+' · '+safe(published)+'</span><span class="pill">'+(isPrivate?"Privato riconosciuto":c.tipo_venditore==="Agenzia"?"Agenzia riconosciuta":"Venditore da verificare")+'</span></div>'
+      +'<div class="candidate-quality"><strong>Riconoscimento venditore:</strong> '+safe(c.seller_evidence||"Nessuna prova automatica disponibile")+' · '+(Number(c.seller_confidence)>0?Number(c.seller_confidence)+"% di confidenza":"Confidenza non determinabile")+(c.seller_manual_override?" · Verifica manuale":"")+'</div>'
       +'<label>Titolo / descrizione dell\'annuncio</label><input data-field="titolo" value="'+safe(c.titolo||"Annuncio immobiliare")+'" maxlength="250">'
       +'<div class="row"><div><label>Comune</label><input data-field="comune" value="'+safe(c.comune||"")+'" placeholder="Comune da verificare"></div>'
       +'<div><label>Prezzo richiesto (€)</label><input data-field="prezzo" type="number" min="0" step="1" value="'+(c.prezzo??"")+'" placeholder="Non indicato"></div></div>'
@@ -1047,11 +1048,12 @@ function renderCandidates(){
       +'<div><label>Camere da letto</label><input data-field="camere" type="number" min="0" max="100" step="1" value="'+(c.camere??"")+'"></div></div>'
       +'<div class="row"><div><label>Bagni</label><input data-field="bagni" type="number" min="0" max="100" step="1" value="'+(c.bagni??"")+'"></div>'
       +'<div><label>Contatto del proprietario (se disponibile)</label><input data-field="contatto" value="'+safe(c.contatto||"")+'" placeholder="Non presente nella notifica"></div></div>'
-      +'<input type="hidden" data-field="venditore" value="Privato">'
-      +'<div class="candidate-actions"><button class="gold" data-confirm="'+safe(c.id)+'">'+(isPrivate?"Inserisci nell\'archivio":"Accetta come privato e inserisci")+'</button><button class="danger" data-discard="'+safe(c.id)+'">Scarta</button>'+linkHtml+'</div>'
+      +'<div class="row"><div><label>Verifica tipo venditore</label><select data-field="venditore"><option value="Da verificare" '+(c.tipo_venditore==="Da verificare"?"selected":"")+'>Da verificare</option><option value="Privato" '+(c.tipo_venditore==="Privato"?"selected":"")+'>Privato</option><option value="Agenzia" '+(c.tipo_venditore==="Agenzia"?"selected":"")+'>Agente / Agenzia</option></select></div></div>'
+      +'<div class="candidate-actions"><button class="secondary" data-save-seller="'+safe(c.id)+'">Salva verifica venditore</button><button class="gold" data-confirm="'+safe(c.id)+'">'+(isPrivate?"Inserisci nell\'archivio":"Accetta come privato e inserisci")+'</button><button class="danger" data-discard="'+safe(c.id)+'">Scarta</button>'+linkHtml+'</div>'
       +'</article>';
   }).join("");
   box.querySelectorAll("[data-confirm]").forEach(btn=>btn.addEventListener("click",()=>confirmCandidate(btn.dataset.confirm,btn)));
+  box.querySelectorAll("[data-save-seller]").forEach(btn=>btn.addEventListener("click",()=>saveCandidateSeller(btn.dataset.saveSeller,btn)));
   box.querySelectorAll("[data-discard]").forEach(btn=>btn.addEventListener("click",()=>discardCandidate(btn.dataset.discard)));
   const recognized=visible.filter(item=>item.tipo_venditore==="Privato").length;
   const review=visible.length-recognized;
@@ -1077,6 +1079,32 @@ async function loadCandidates(){
   candidateCache=data;
   renderDashboard();
   renderCandidates();
+}
+
+async function saveCandidateSeller(id,button){
+  const card=button.closest("[data-candidate]");
+  const seller=card.querySelector('[data-field="venditore"]').value;
+  if(!["Privato","Agenzia","Da verificare"].includes(seller))return;
+  if(seller==="Agenzia"&&!confirm("Conferma che questo annuncio è pubblicato da un agente o da un'agenzia? Verrà escluso dalla lista delle opportunità da acquisire."))return;
+  button.disabled=true;
+  const isAgency=seller==="Agenzia";
+  const evidence=seller==="Privato"
+    ?"Verificato manualmente: venditore privato"
+    :isAgency
+      ?"Verificato manualmente: agente o agenzia"
+      :"Verificato manualmente: identità del venditore non determinata";
+  const {error}=await supabase.from("annunci_candidati").update({
+    tipo_venditore:seller,
+    seller_confidence:seller==="Da verificare"?0:100,
+    seller_evidence:evidence,
+    seller_manual_override:true,
+    seller_classification_version:100,
+    stato:isAgency?"scartato":"da_verificare",
+    updated_at:new Date().toISOString()
+  }).eq("id",id);
+  if(error){msg("candidateMsg",error.message,"error");button.disabled=false;return;}
+  msg("candidateMsg",isAgency?"Annuncio classificato come agenzia e rimosso dalle opportunità da acquisire.":"Verifica del venditore salvata. La classificazione manuale non verrà sovrascritta dalla sincronizzazione.", "success");
+  await loadCandidates();
 }
 
 async function confirmCandidate(id,button){
