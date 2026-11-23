@@ -37,11 +37,10 @@ async function getInsightsToken(
     throw new Error("Credenziali API non configurate.");
   }
 
-  const credentials = btoa(settings.clientId + ":" + settings.clientSecret);
   const response = await fetch(baseUrl + "/oauth/token", {
     method: "POST",
     headers: {
-      "Authorization": "Basic " + credentials,
+      "Authorization": "Basic " + btoa(settings.clientId + ":" + settings.clientSecret),
       "Content-Type": "application/x-www-form-urlencoded"
     },
     body: new URLSearchParams({
@@ -65,6 +64,19 @@ async function getInsightsToken(
   cachedToken = tokenData.access_token;
   cachedTokenExpiresAt = Date.now() + Math.max(60, Number(tokenData.expires_in || 14400)) * 1000;
   return cachedToken;
+}
+
+async function fetchComparableDetail(baseUrl: string, token: string, uuid: string) {
+  const response = await fetch(baseUrl + "/comparable/" + encodeURIComponent(uuid), {
+    headers: { "Authorization": "Bearer " + token },
+    signal: AbortSignal.timeout(20000)
+  });
+  if (!response.ok) {
+    console.error("Insights comparable detail failed:", response.status);
+    return null;
+  }
+  const detail = await response.json();
+  return detail && typeof detail === "object" ? detail : null;
 }
 
 Deno.serve(async (req: Request) => {
@@ -103,7 +115,7 @@ Deno.serve(async (req: Request) => {
       provider: "Immobiliare.it Insights",
       configured: settings.configured,
       environment,
-      capabilities: ["annunci in vendita", "venditore privato", "disponibilità numero telefonico"],
+      capabilities: ["offerte residenziali in vendita", "venditore privato", "disponibilità numero telefonico"],
       missingSecrets: [
         ["INSIGHTS_CLIENT_ID", settings.clientId],
         ["INSIGHTS_CLIENT_SECRET", settings.clientSecret],
@@ -144,10 +156,13 @@ Deno.serve(async (req: Request) => {
     const token = await getInsightsToken(baseUrl, settings);
     const candidates = new Map<string, Record<string, any>>();
     let resultsRead = 0;
+    let detailRead = 0;
+    let detailsFailed = 0;
     let pagesRead = 0;
+    const maxPages = 5;
 
-    for (let page = 1; page <= 3; page++) {
-      const response = await fetch(baseUrl + "/comparables/fullSearchByAttribute", {
+    for (let page = 1; page <= maxPages; page++) {
+      const response = await fetch(baseUrl + "/comparables/searchByAttribute", {
         method: "POST",
         headers: {
           "Authorization": "Bearer " + token,
@@ -159,7 +174,7 @@ Deno.serve(async (req: Request) => {
 
       if (!response.ok) {
         console.error("Immobiliare Insights search failed:", response.status);
-        throw new Error("Ricerca Insights non riuscita. Verificare che l'account abiliti Comps Finder e la ricerca per privato.");
+        throw new Error("Ricerca Insights non riuscita. Verificare che l'account abiliti Comps Finder e i filtri richiesti.");
       }
 
       const result = await response.json();
@@ -167,13 +182,27 @@ Deno.serve(async (req: Request) => {
       pagesRead++;
       resultsRead += items.length;
 
-      for (const item of items) {
-        const candidate = toCandidate(item, userData.user.id);
-        if (candidate) candidates.set(candidate.dedup_key, candidate);
+      for (let offset = 0; offset < items.length; offset += 4) {
+        const batch = items.slice(offset, offset + 4);
+        const details = await Promise.all(batch.map(async (item: Record<string, any>) => {
+          const uuid = typeof item.uuid === "string" ? item.uuid.trim() : "";
+          if (!uuid) return null;
+          return await fetchComparableDetail(baseUrl, token, uuid);
+        }));
+
+        for (const detail of details) {
+          if (!detail) {
+            detailsFailed++;
+            continue;
+          }
+          detailRead++;
+          const candidate = toCandidate(detail, userData.user.id);
+          if (candidate) candidates.set(candidate.dedup_key, candidate);
+        }
       }
 
-      const nextPage = result?._metadata?.pages?.next;
-      if (!nextPage || page >= 3) break;
+      const lastPage = Number(result?._metadata?.pages?.last || page);
+      if (page >= lastPage || items.length === 0) break;
     }
 
     const rows = [...candidates.values()];
@@ -197,12 +226,14 @@ Deno.serve(async (req: Request) => {
       lookbackDays,
       pagesRead,
       resultsRead,
+      detailRead,
+      detailsFailed,
       candidatesMatched: rows.length,
       privateCandidatesMatched: rows.filter((row) => row.tipo_venditore === "Privato").length,
       candidatesNeedingReview: rows.filter((row) => row.tipo_venditore === "Da verificare").length,
       inserted,
       alreadyPresent: Math.max(0, rows.length - inserted),
-      note: "La ricerca filtra i privati con numero disponibile. L'API non restituisce il numero stesso nel mapping documentato: il link del portale resta la via di contatto."
+      note: "La ricerca utilizza i filtri ufficiali clientTypeID=1 (Privato) e phoneNumberProvided=true. Il numero telefonico non è restituito dal mapping API documentato: il link dell'annuncio resta il canale di contatto."
     });
   } catch (error) {
     console.error("Immobiliare Insights sync error:", error instanceof Error ? error.message : "unknown error");
