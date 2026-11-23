@@ -20,6 +20,9 @@ Applicazione web per la raccolta, la verifica e la gestione di opportunità immo
 - Deduplicazione tramite ID Gmail.
 - Analisi di mercato OMI: importazione CSV ufficiali VALORI per le province marchigiane AN, MC, FM e AP, filtri per comune/zona/tipologia/semestre e confronto tra prezzo richiesto al m² e intervallo OMI.
 - Registro separato delle schede-atto della Consultazione Valori Immobiliari Dichiarati: corrispettivo complessivo dell'atto, mese, tipologia e numero di immobili; nessuna ripartizione automatica del prezzo su singole unità.
+- Analisi di mercato: importazione del CSV ufficiale OMI VALORI per le province marchigiane, filtri per comune/zona/tipologia/stato e confronto del prezzo richiesto con le fasce OMI.
+- Registro dei compravenduti dichiarati: salva il corrispettivo dell'intero atto e il numero degli immobili; calcola il €/m² solo se l'atto riguarda una singola unità, il corrispettivo è confermato come attribuibile, i dati sono verificati e la superficie è espressa in m².
+- Comparabili dei compravenduti: mediana e intervallo minimo/massimo €/m² raggruppati per comune, zona OMI, tipologia e categoria catastale; gli atti non attribuibili restano consultabili ma esclusi dai confronti.
 - Esportazione CSV ed Excel dell'archivio e della coda candidati.
 
 ## Come funziona la raccolta Gmail
@@ -64,6 +67,20 @@ La **priorità di acquisizione** (0–100) ordina il lavoro commerciale: vendito
 La **qualità dei dati** (0–100) misura la completezza della scheda: comune (15), prezzo (15), tipologia (10), superficie (15), locali (5), link specifico (15), data di pubblicazione (10), venditore privato verificato con confidenza almeno 90% (10) e contatto inserito (5).
 
 Il rapporto **prezzo richiesto / m²** viene mostrato solo quando entrambi i dati sono presenti. È un indicatore descrittivo dell'annuncio, non una comparazione con i valori di mercato né una valutazione della convenienza economica.
+
+## Analisi di mercato: quotazioni OMI e compravenduti
+
+Le quotazioni OMI sono intervalli semestrali minimi/massimi in euro al metro quadro per zona omogenea, tipologia e stato conservativo. Non sono prezzi realizzati su una singola compravendita e non sostituiscono una valutazione professionale. La fonte va citata come **Agenzia Entrate - OMI**.
+
+Per caricare i dati, scaricare dall'Agenzia delle Entrate il file CSV **VALORI** del semestre scelto (non il file ZONE), quindi caricarlo nella sezione Analisi di mercato. Il parser controlla il tracciato, gestisce codifica e delimitatori, conserva semestre/nome file e importa le sole province AN, MC, FM e AP. Le chiavi univoche impediscono di duplicare righe in caso di reimportazione dello stesso semestre.
+
+Il confronto di un immobile usa la quotazione del semestre più recente disponibile per comune, zona, tipologia ed eventuale stato conservativo. La base di superficie OMI (lorda/netta) viene mostrata perché non si devono confrontare direttamente valori che usano superfici diverse.
+
+Il registro dei **Valori Immobiliari Dichiarati** è separato dalle quotazioni OMI. Si inseriscono i dati non identificativi della scheda-atto consultata: il corrispettivo dichiarato viene sempre conservato come importo complessivo dell'atto, insieme al numero di immobili. Non viene ripartito automaticamente tra più unità.
+
+NMRE calcola un prezzo €/m² attribuibile soltanto quando sono vere tutte le condizioni: un solo immobile nell'atto, attribuzione del corrispettivo confermata manualmente, dati verificati sulla fonte e superficie catastale effettivamente espressa in m². Le consistenze in vani non vengono convertite. I comparabili mostrano mediana e minimo/massimo per comune, zona, tipologia e categoria catastale, sempre con il numero di atti nel campione.
+
+La Consultazione Valori Immobiliari Dichiarati mostra i risultati in forma anonimizzata e richiede almeno cinque atti nella ricerca; per questo NMRE non effettua scraping del servizio e non salva nominativi o indirizzi privati. Gli atti vengono registrati manualmente dopo la consultazione ufficiale. Riferimenti: [Guida al servizio](https://servizionline.agenziaentrate.gov.it/pdf/OMI_ConsultazioneValoriImmobiliariDichiarati_GUIDA_AL_SERVIZIO.pdf), [Informazioni per l'utilizzo dei dati](https://servizionline.agenziaentrate.gov.it/pdf/OMI_ConsultazioneValoriImmobiliariDichiarati_INFO_UTILIZZO_DATI.pdf), [tracciato CSV VALORI](https://telematici.agenziaentrate.gov.it/pdf/guidaFornitureOMI.pdf).
 
 ## Architettura e sicurezza
 
