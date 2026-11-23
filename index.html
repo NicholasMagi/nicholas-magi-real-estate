@@ -1103,6 +1103,50 @@ function acquisitionIntelligence(item,now=new Date()){
  else if(item.contatto)next="Verificare se il venditore gestisce direttamente l'immobile";
  return {score:Math.min(100,score),level,signals,history,next,base,radar};
 }
+function buildAcquisitionStrategy(item){
+ const title=String(item.titolo||item.tipologia_immobile||"immobile").trim();
+ const town=String(item.comune||"").trim();
+ const history=priceHistoryAnalysis(item);
+ const latestDrop=history.drops[history.drops.length-1]||null;
+ const agency=item.altre_agenzie||"da_verificare";
+ const timeline=item.tempistiche_vendita||"";
+ const motivation=String(item.vendita_motivazione||"").trim();
+ const negotiability=item.prezzo_trattabile||"";
+ const exclusive=agency==="esclusiva";
+ const opening=["Buongiorno, sono Nicholas Magi, consulente immobiliare.","La contatto in merito al Suo annuncio relativo a "+title+(town?" a "+town:"")+"."]; 
+ if(latestDrop){
+  const prev=Number(latestDrop.entry.previous_price),curr=Number(latestDrop.entry.listing_price);
+  if(prev>curr&&curr>0)opening.push("Ho notato un aggiornamento della richiesta da "+formatCurrency(prev)+" a "+formatCurrency(curr)+". Non vorrei trarre conclusioni: mi interesserebbe capire come sta procedendo la vendita dopo questa modifica.");
+ }else opening.push("Vorrei capire come sta procedendo la vendita e se la sta gestendo direttamente.");
+ opening.push("Posso farLe alcune domande per capire se e in che modo potrei esserLe utile?");
+ const questions=[];
+ if(item.tipo_venditore!=="Privato")questions.push("È Lei il proprietario o una persona incaricata di seguire la vendita?");
+ questions.push("Da quanto tempo sta proponendo l'immobile e quali riscontri ha ricevuto finora?");
+ questions.push("Quante visite ha già effettuato e ha ricevuto proposte concrete?");
+ if(!motivation)questions.push("C'è una ragione o una scadenza particolare che La porta a vendere?");
+ else questions.push("Per quanto riguarda la motivazione che mi ha indicato, ci sono tempistiche che dobbiamo tenere in considerazione?");
+ if(!timeline)questions.push("Entro quando idealmente vorrebbe concludere la vendita?");
+ if(agency==="da_verificare"||agency==="in_trattativa")questions.push("Ha già affidato l'immobile ad altre agenzie? Se sì, con quale tipo di accordo e fino a quando?");
+ else if(agency==="nessuna")questions.push("Ha valutato in passato di affidarsi a un professionista oppure preferisce continuare autonomamente?");
+ else if(agency==="non_esclusiva")questions.push("Come sta funzionando la collaborazione con le altre agenzie e cosa ritiene manchi nella promozione attuale?");
+ if(!negotiability)questions.push("La richiesta è ferma oppure valuterebbe una proposta concreta in linea con il mercato?");
+ else if(negotiability==="si"||negotiability==="parzialmente")questions.push("Quali condizioni dovrebbe avere una proposta per essere presa seriamente in considerazione?");
+ else if(negotiability==="no")questions.push("Quali elementi ritiene fondamentali per confermare la richiesta attuale?");
+ questions.push("Se emergesse un progetto concreto e coerente con i Suoi obiettivi, sarebbe disponibile a incontrarci per una valutazione e un confronto?");
+ const objections=[
+  ["Non voglio pagare commissioni","La comprendo. Prima di parlare di costi, preferisco mostrarLe con chiarezza cosa comprende il servizio, quali attività svolgiamo e quali condizioni economiche applichiamo. Poi sarà Lei a valutare liberamente se il valore proposto giustifica l'investimento."],
+  ["Non voglio firmare un'esclusiva","Capisco la prudenza. L'esclusiva ha senso solo se accompagnata da un progetto preciso, impegni verificabili e una durata concordata. Se vuole, all'appuntamento Le illustro cosa farei concretamente e potrà decidere senza pressione."],
+  ["Ho già avuto brutte esperienze con le agenzie","Mi dispiace. Posso chiederLe cosa non ha funzionato? Preferisco capire quali aspetti per Lei sono irrinunciabili e spiegare in modo trasparente come lavorerei, senza promettere risultati che nessuno può garantire."]
+ ];
+ const next=exclusive
+  ?"Non proporre un incarico concorrente: chiarire con rispetto la durata e le condizioni dell'esclusiva in essere, senza interferire nel rapporto contrattuale."
+  :"Proporre un incontro conoscitivo e una valutazione documentata, senza anticipare un prezzo non supportato da comparabili.";
+ const close=exclusive
+  ?"La ringrazio per la chiarezza. Non intendo interferire con l'accordo che ha già sottoscritto. Se in futuro desiderasse un confronto, sarò lieto di esserLe utile nel rispetto dei Suoi impegni."
+  :"Le propongo un incontro breve, senza impegno, per analizzare l'immobile, il posizionamento della richiesta e le attività necessarie per venderlo. Preferisce un giorno in settimana o nel fine settimana?";
+ const lines=["STRATEGIA TELEFONICA NMRE","Immobile: "+title+(town?" · "+town:""),"", "APERTURA",...opening,"","DOMANDE DI QUALIFICAZIONE",...questions.map((q,i)=>(i+1)+". "+q),"","GESTIONE DELLE OBIEZIONI",...objections.flatMap(([q,a])=>[q,a,""]),"PROSSIMA MOSSA",next,"","CHIUSURA",close];
+ return {opening:opening.join(" "),questions,objections,next,close,text:lines.join("\n"),exclusive,history};
+}
 function renderAcquisitionIntelligence(candidates=candidateCache){
  const box=$("acquisitionIntelList");if(!box)return;
  const all=(Array.isArray(candidates)?candidates:[]).filter(item=>item.tipo_venditore!=="Agenzia");
@@ -1126,20 +1170,26 @@ function renderAcquisitionIntelligence(candidates=candidateCache){
   const historyLine=history.drops.length
    ?history.drops.length+" ribassi documentati · ultimo "+safe(new Date(history.drops[history.drops.length-1].date).toLocaleDateString("it-IT"))
    :history.observations.length?history.observations.length+" prezzi rilevati, nessun ribasso esplicito":"Nessuno storico prezzi sufficiente";
-  const script=sellerRadarCallScript(item);
+  const strategy=buildAcquisitionStrategy(item);
   return '<article class="seller-radar-item"><div class="seller-radar-item-top"><span class="dash-lead-rank">'+(index===0?"Prima opportunità":"Priorità "+(index+1))+'</span><span class="seller-radar-score '+(intel.level==="high"?"seller-radar-score-high":"")+'">'+intel.score+'/100</span></div>'
    +'<div class="seller-radar-title">'+title+'</div><div class="seller-radar-meta">'+meta+'<br>'+safe(seller)+' · '+safe(price)+'<br>'+safe(historyLine)+'</div>'
    +'<div class="seller-radar-signals">'+signals+'</div><div class="hint"><strong>Prossima azione:</strong> '+safe(intel.next)+'</div>'
-   +'<details><summary>Prepara la telefonata</summary><p class="seller-radar-script-text">'+safe(script)+'</p><button type="button" class="secondary" data-intel-copy="'+safe(item.id)+'">Copia copione</button></details>'
+   +'<details class="nmre-strategy"><summary>Strategia completa: apertura, domande e obiezioni</summary>'
+   +'<div class="hint"><strong>Apertura consigliata</strong><p>'+safe(strategy.opening)+'</p></div>'
+   +'<strong>Domande da porre</strong><ol>'+strategy.questions.map(q=>'<li>'+safe(q)+'</li>').join("")+'</ol>'
+   +'<strong>Obiezioni frequenti</strong>'+strategy.objections.map(([q,a])=>'<div class="crm-entry"><strong>'+safe(q)+'</strong><span>'+safe(a)+'</span></div>').join("")
+   +'<div class="hint"><strong>Prossima mossa:</strong> '+safe(strategy.next)+'</div>'
+   +'<div class="hint"><strong>Chiusura:</strong> '+safe(strategy.close)+'</div>'
+   +'<button type="button" class="secondary" data-intel-copy="'+safe(item.id)+'">Copia strategia completa</button></details>'
    +'<div class="actions"><button type="button" class="gold" data-intel-open="'+safe(item.id)+'">Apri opportunità</button></div></article>';
  }).join("")+'</div>';
  box.querySelectorAll("[data-intel-open]").forEach(button=>button.addEventListener("click",()=>openDashboardCandidate(button.dataset.intelOpen)));
  box.querySelectorAll("[data-intel-copy]").forEach(button=>button.addEventListener("click",async()=>{
   const item=(candidateCache||[]).find(row=>String(row.id)===String(button.dataset.intelCopy));
   if(!item)return;
-  const script=sellerRadarCallScript(item);
-  try{await navigator.clipboard.writeText(script);button.textContent="Copiato";}
-  catch{window.prompt("Copi il copione della telefonata:",script);}
+  const strategy=buildAcquisitionStrategy(item);
+  try{await navigator.clipboard.writeText(strategy.text);button.textContent="Strategia copiata";}
+  catch{window.prompt("Copi la strategia telefonica:",strategy.text);}
  }));
 }
 
