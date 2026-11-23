@@ -1495,7 +1495,9 @@ $("dashboardRefresh").addEventListener("click",async()=>{
   button.disabled=true;
   button.textContent="Aggiornamento...";
   try{
-    await Promise.all([loadListings(),loadCandidates(),loadGmailSyncStatus()]);
+    await loadListings();
+    await loadCandidates();
+    await loadGmailSyncStatus();
     await checkInsightsApi();
   }finally{
     button.disabled=false;
@@ -3421,7 +3423,7 @@ async function confirmCandidate(id,button){
   });
   if(error){msg("candidateMsg",error.message,"error");button.disabled=false;return;}
   msg("candidateMsg","Annuncio confermato e trasferito nell'archivio.","success");
-  await loadCandidates();await loadListings();
+  await loadListings();await loadCandidates();
 }
 
 async function discardCandidate(id,button){
@@ -3578,6 +3580,20 @@ async function loadListings(){
     data.push(...(page||[]));
     if(!page||page.length<pageSize)break;
   }
+  const retainedHistory=new Map((Array.isArray(listingCache)?listingCache:[])
+    .filter(item=>Array.isArray(item.notification_history)&&item.notification_history.length)
+    .map(item=>[String(item.id),{
+      notification_history:item.notification_history,
+      notification_count:item.notification_count,
+      price_drop_percent:item.price_drop_percent,
+      previous_price:item.previous_price,
+      price_drop_amount:item.price_drop_amount,
+      current_price_at_drop:item.current_price_at_drop
+    }]));
+  data.forEach(item=>{
+    const history=retainedHistory.get(String(item.id));
+    if(history)Object.assign(item,history);
+  });
   listingCache=data;
   renderDashboard();
   renderListings();
