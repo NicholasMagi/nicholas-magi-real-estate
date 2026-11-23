@@ -1,5 +1,5 @@
 import {
-  municipality,price,listingUrl,propertyEmail,listingTitle,propertyType,
+  municipality,price,listingPrice,listingUrl,propertyEmail,listingTitle,propertyType,
   surface,rooms,bedrooms,bathrooms,resolveListingUrl,sellerClassificationDetails
 } from "./_shared/parser.ts";
 import { collectHistoryMessageIds } from "./_shared/history.ts";
@@ -424,7 +424,7 @@ export default {
           if (typeof candidate.source_email_id !== "string" || !candidate.url_originale) return false;
           if (candidate.seller_manual_override === true) return false;
           if (Number(candidate.seller_classification_version || 0) < 3) return true;
-          if (Number(candidate.data_extraction_version || 0) < 3) return true;
+          if (Number(candidate.data_extraction_version || 0) < 4) return true;
           if (!candidate.url) return true;
           try {
             const link = new URL(candidate.url);
@@ -514,13 +514,13 @@ export default {
           owner_id: owner,
           titolo: listingTitle(email),
           comune: municipality(text),
-          prezzo: price(text),
+          prezzo: listingPrice(text, listingTitle(email)),
           tipologia_immobile: propertyType(text),
           superficie_mq: surface(text),
           locali: rooms(text),
           camere: bedrooms(text),
           bagni: bathrooms(text),
-          data_extraction_version: 3,
+          data_extraction_version: 4,
           tipo_venditore: seller.classification,
           seller_confidence: seller.confidence,
           seller_evidence: seller.evidence,

@@ -1,5 +1,5 @@
 import {
-  municipality,price,listingUrl,propertyEmail,propertyType,surface,rooms,
+  municipality,price,listingPrice,listingUrl,propertyEmail,propertyType,surface,rooms,
   bedrooms,bathrooms,sellerClassification,resolveListingUrl
 } from "./_shared/parser.ts";
 
@@ -15,6 +15,8 @@ Deno.test("prezzo italiano con separatore migliaia",()=>{
   assertEquals(price("€ 63.000 48 m²"),63000,"prezzo con metratura a due cifre");
   assertEquals(price("€ 246.000 118 m² | 4 locali"),246000,"non ingloba metratura a tre cifre");
   assertEquals(price("€ 112.950 214 m²"),112950,"prezzo prima di superficie a tre cifre");
+  assertEquals(listingPrice("notifica senza importo","Quadrilocale € 246.000 118 m²"),246000,"recupera prezzo dal titolo dell’annuncio");
+  assertEquals(listingPrice("notifica senza importo","Appartamento in vendita 118 m²"),null,"non inventa il prezzo mancante");
 });
 Deno.test("estrazione tipologia, metratura e vani",()=>{
   assertEquals(propertyType("Appartamento trilocale con balcone"),"Trilocale","tipologia trilocale");
