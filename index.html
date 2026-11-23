@@ -1866,12 +1866,14 @@ async function nmreCrmSaveContactInteraction(event,form){
  const payload={owner_id:currentUser.id,contact_id:contactId,property_id:String(fd.get("property_id")||"")||null,interaction_type:String(fd.get("interaction_type")||"telefonata"),outcome_code:String(fd.get("outcome_code")||"")||null,outcome:String(fd.get("outcome")||"").trim()||null,notes:String(fd.get("notes")||"").trim()||null,next_contact_at:String(fd.get("next_contact_at")||"")||null};
  const button=form.querySelector('button[type="submit"]'),status=form.querySelector("[data-crm-history-msg]");
  button.disabled=true;status.textContent="Salvataggio…";
- const {error}=await supabase.from("nmre_contact_interactions").insert(payload);
+ const {data,error}=await supabase.from("nmre_contact_interactions").insert(payload).select("id,contact_id,property_id,interaction_type,outcome_code,created_at").single();
  button.disabled=false;
  if(error){status.textContent="Errore: "+error.message;return;}
  status.textContent="Interazione registrata.";
+ if(data)nmreCrmInteractions=[data,...nmreCrmInteractions].filter(item=>Date.now()-Date.parse(item.created_at)<=90*86400000);
+ renderSalesPerformance();
  form.reset();
- await Promise.all([nmreCrmLoadContactHistory(contactId),loadCrmWorkspace()]);
+ await nmreCrmLoadContactHistory(contactId);
 }
 function nmreCrmRenderProperties(){
  const q=$("nmreCrmPropertySearch").value.toLocaleLowerCase("it"),f=$("nmreCrmPropertyFilter").value;
