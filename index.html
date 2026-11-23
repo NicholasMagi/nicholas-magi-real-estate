@@ -1102,6 +1102,15 @@ function finiteOmiValue(value){
   return Number.isFinite(number)?number:null;
 }
 
+function inferOmiDestinationFromCsv(tipology){
+  const text=normalizedMatchText(tipology);
+  if(/abitazion|ville e villini|villini|box|posti auto|autorimesse|residenzial/.test(text))return "Residenziale";
+  if(/negozi|botteghe|laboratori|centri commerciali|commercial/.test(text))return "Commerciale";
+  if(/uffici|ufficio|pensioni|alberghi|terziar|direzional/.test(text))return "Terziaria";
+  if(/capannoni|capannone|opifici|produttiv|industr/.test(text))return "Produttiva";
+  return "Non classificata";
+}
+
 async function syncOmiOpenData(){
   if(omiImportBusy||!currentUser||!supabase)return;
   const button=$("syncOmiOpenData");
@@ -1150,7 +1159,7 @@ async function syncOmiOpenData(){
                 dizione:String(zone.dizione||""),
                 link_zona:String(zone.link_zona||zone.url_omi||""),
                 destinazione:String(destination),
-                cod_tip:String(destination)+"|"+typology,
+                cod_tip:typology,
                 tipologia:typology,
                 stato:state,
                 stato_prevalente:state,
@@ -1195,7 +1204,7 @@ async function syncOmiOpenData(){
     for(let offset=0;offset<rows.length;offset+=200){
       const chunk=rows.slice(offset,offset+200);
       const {error}=await supabase.from("nmre_omi_quotazioni")
-        .upsert(chunk,{onConflict:"owner_id,semestre,comune_istat,zona,cod_tip,stato"});
+        .upsert(chunk,{onConflict:"owner_id,semestre,comune_istat,zona,destinazione,cod_tip,stato"});
       if(error)throw new Error("Salvataggio OMI non riuscito: "+error.message);
       saved+=chunk.length;
       button.textContent="Salvati "+saved.toLocaleString("it-IT")+" / "+rows.length.toLocaleString("it-IT");
@@ -1251,6 +1260,7 @@ async function importOmiCsv(){
       const zone=get("ZONA");
       const tipCode=get("COD_TIP");
       const tipology=get("DESCR_TIPOLOGIA");
+      const destination=get("DESTINAZIONE")||get("DESCR_DESTINAZIONE")||inferOmiDestinationFromCsv(tipology);
       const buyMin=parseOmiNumber(get("COMPR_MIN"));
       const buyMax=parseOmiNumber(get("COMPR_MAX"));
       const rentMin=parseOmiNumber(get("LOCMIN"));
@@ -1259,15 +1269,15 @@ async function importOmiCsv(){
       rows.push({
         owner_id:currentUser.id,semestre:Number(semester),provincia:province,comune_istat:communeIstat,
         comune,fascia:get("FASCIA"),zona,dizione:get("DIZIONE")||get("DESCRIZIONE_ZONA")||"",
-        destinazione:get("DESTINAZIONE")||get("DESCR_DESTINAZIONE")||"",
+        destinazione,
         link_zona:get("LINK_ZONA")||communeIstat+":"+zone,
-        cod_tip:tipCode,tipologia:tipology||"Non indicata",stato:get("STATO"),
+        cod_tip:tipology||tipCode,tipologia:tipology||"Non indicata",stato:get("STATO"),
         stato_prevalente:get("STATO_PREVALENTE"),compr_min:buyMin,compr_max:buyMax,
         sup_nl_compr:get("SUP_NL_COMPR"),loc_min:rentMin,loc_max:rentMax,
         sup_nl_loc:get("SUP_NL_LOC"),source_file:file.name,
         source_label:"Agenzia delle Entrate - OMI",
         source_license:"Agenzia delle Entrate - OMI (citazione della fonte richiesta)",
-        raw_data:{area_territoriale:get("AREA_TERRITORIALE"),regione:get("REGIONE"),comune_cat:get("COMUNE_CAT")}
+        raw_data:{area_territoriale:get("AREA_TERRITORIALE"),regione:get("REGIONE"),comune_cat:get("COMUNE_CAT"),cod_tip_ufficiale:tipCode,destinazione_esplicita:!!(get("DESTINAZIONE")||get("DESCR_DESTINAZIONE"))}
       });
     }
     if(!rows.length)throw new Error("Non ho trovato righe valide per le province AN, MC, FM o AP. Verifichi di aver caricato il file VALORI della zona geografica corretta.");
@@ -1275,7 +1285,7 @@ async function importOmiCsv(){
     const chunkSize=200;
     for(let offset=0;offset<rows.length;offset+=chunkSize){
       const chunk=rows.slice(offset,offset+chunkSize);
-      const {error}=await supabase.from("nmre_omi_quotazioni").upsert(chunk,{onConflict:"owner_id,semestre,comune_istat,zona,cod_tip,stato"});
+      const {error}=await supabase.from("nmre_omi_quotazioni").upsert(chunk,{onConflict:"owner_id,semestre,comune_istat,zona,destinazione,cod_tip,stato"});
       if(error)throw new Error("Errore nel salvataggio del blocco "+(Math.floor(offset/chunkSize)+1)+": "+error.message);
       saved+=chunk.length;
       button.textContent="Importati "+saved.toLocaleString("it-IT")+" / "+rows.length.toLocaleString("it-IT");
