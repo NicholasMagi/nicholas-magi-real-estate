@@ -81,11 +81,11 @@ export type ListingPriceReduction = {
 /** Reads only explicit portal price-reduction notation. */
 export function priceReduction(value:string):ListingPriceReduction|null {
   const text=normalizePropertyText(value);
-  const amount=String.raw\`((?:\\d{1,3}(?:\\.\\d{3})+|\\d+)(?:,\\d{1,2})?)\`;
+  const amount="((?:\\d{1,3}(?:\\.\\d{3})+|\\d+)(?:,\\d{1,2})?)";
   const pattern=new RegExp(
-    String.raw\`(?:€|eur)\\s*\`+amount+
-    String.raw\`\\s*(?:€|eur)\\s*\`+amount+
-    String.raw\`\\s*\\(\\s*[-−]\\s*(\\d{1,2}(?:[.,]\\d{1,2})?)\\s*%\\s*\\)\`,
+    "(?:€|eur)\\s*"+amount+
+    "\\s*(?:€|eur)\\s*"+amount+
+    "\\s*\\(\\s*[-−]\\s*(\\d{1,2}(?:[.,]\\d{1,2})?)\\s*%\\s*\\)",
     "i"
   );
   const match=text.match(pattern);
@@ -98,12 +98,7 @@ export function priceReduction(value:string):ListingPriceReduction|null {
   const reductionAmount=previousPrice-currentPrice;
   const calculatedPercent=(reductionAmount/previousPrice)*100;
   if(Math.abs(calculatedPercent-declaredPercent)>0.75)return null;
-  return {
-    currentPrice,
-    previousPrice,
-    reductionAmount,
-    reductionPercent:Math.round(calculatedPercent*100)/100
-  };
+  return {currentPrice,previousPrice,reductionAmount,reductionPercent:Math.round(calculatedPercent*100)/100};
 }
 
 export function propertyType(s:string):string|null {
