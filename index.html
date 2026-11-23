@@ -43,6 +43,22 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .gmail-email{padding:12px 0;border-top:1px solid var(--line);font-size:13px;line-height:1.5;overflow-wrap:anywhere}
 .gmail-email b{display:block;margin-bottom:5px}
 .gmail-email .gmail-meta{color:var(--muted);font-size:12px}.crm{margin-top:12px;padding:12px;background:#f8f9fb;border:1px solid var(--line);border-radius:10px}.crm summary{cursor:pointer;font-weight:bold;font-size:13px}.crm textarea{width:100%;min-height:68px;border:1px solid #d9dfe8;border-radius:9px;padding:10px;font:inherit;font-size:13px;resize:vertical}.crm-entry{padding:8px 0;border-top:1px solid var(--line);font-size:12px}.crm-entry strong{display:block}.crm-history{margin-top:10px}.due{color:#a15c00;font-weight:bold}
+.seller-timeline-summary{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 12px}
+.seller-timeline-summary span{padding:5px 8px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--muted);font-size:10px;font-weight:700}
+.seller-timeline{position:relative;display:grid;gap:0;padding-left:4px}
+.seller-timeline-event{position:relative;display:grid;grid-template-columns:12px minmax(0,1fr);gap:9px;padding:0 0 14px}
+.seller-timeline-event:not(:last-child):before{content:"";position:absolute;left:5px;top:11px;bottom:-2px;width:1px;background:var(--line)}
+.seller-timeline-marker{width:11px;height:11px;margin-top:3px;border:2px solid var(--gold,#b38a45);border-radius:50%;background:#fff;z-index:1}
+.seller-timeline-price_drop .seller-timeline-marker{border-color:#b7791f;background:#fff8e8}
+.seller-timeline-planned .seller-timeline-marker{border-color:#527b9b;background:#eef6fc}
+.seller-timeline-content{min-width:0;padding:0 0 9px;border-bottom:1px solid var(--line);font-size:12px}
+.seller-timeline-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.seller-timeline-tag{font-size:9px;letter-spacing:.07em;font-weight:800;color:var(--muted)}
+.seller-timeline-top time{font-size:10px;color:var(--muted)}
+.seller-timeline-content>strong{display:block;font-size:12px;color:var(--ink);text-transform:capitalize}
+.seller-timeline-detail{display:block;margin-top:3px;color:var(--ink)}
+.seller-timeline-content p{margin:5px 0;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}
+
 .seller-registry-list{display:grid;gap:7px;margin-top:10px}
 .seller-registry-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:11px}
 .seller-registry-item strong{display:block;color:var(--ink);font-size:11px;overflow-wrap:anywhere}
@@ -3980,10 +3996,53 @@ async function saveCallTask(id,card,button){
 
 async function loadInteractions(annuncioId,details){
   const box=details.querySelector("[data-interaction-history]");
-  const {data,error}=await supabase.from("annunci_interazioni").select("*").eq("annuncio_id",annuncioId).order("created_at",{ascending:false}).limit(30);
+  if(!box||!currentUser)return;
+  box.innerHTML='<div class="hint">Caricamento cronologia commerciale...</div>';
+  const {data,error}=await supabase.from("annunci_interazioni").select("*")
+    .eq("annuncio_id",annuncioId).eq("owner_id",currentUser.id)
+    .order("created_at",{ascending:false}).limit(100);
   if(error){box.textContent="Storico non disponibile: "+error.message;return;}
-  if(!data?.length){box.textContent="Nessuna interazione registrata.";return;}
-  box.innerHTML=data.map(entry=>`<div class="crm-entry"><strong>${safe(entry.tipo)} · ${safe(entry.esito||"Nessun esito")}</strong><span>${safe(new Date(entry.created_at).toLocaleString("it-IT"))}</span><div>${safe(entry.note||"")}</div>${entry.prossimo_contatto_il?'<div class="due">Richiamare il: '+safe(entry.prossimo_contatto_il)+'</div>':""}</div>`).join("");
+  const item=(Array.isArray(listingCache)?listingCache:[]).find(row=>String(row.id)===String(annuncioId));
+  const events=(data||[]).filter(entry=>entry.created_at&&Number.isFinite(Date.parse(entry.created_at))).map(entry=>({
+    date:entry.created_at,kind:"interaction",title:(entry.tipo||"Interazione").replaceAll("_"," "),
+    detail:entry.esito||"Nessun esito registrato",note:entry.note||"",
+    followup:entry.prossimo_contatto_il||null
+  }));
+  if(item){
+    const history=priceHistoryAnalysis(item);
+    history.drops.forEach(row=>events.push({
+      date:row.date,kind:"price_drop",title:"Ribasso prezzo documentato",
+      detail:formatCurrency(Number(row.entry.previous_price))+" → "+formatCurrency(Number(row.entry.listing_price))+
+        " · −"+Number(row.entry.price_drop_percent).toLocaleString("it-IT")+"%",
+      note:"Variazione rilevata nelle notifiche ricevute dal sistema."
+    }));
+    if(item.prossimo_contatto_il&&/^\\d{4}-\\d{2}-\\d{2}$/.test(item.prossimo_contatto_il)){
+      events.push({date:item.prossimo_contatto_il+"T12:00:00",kind:"planned",title:item.stato_contatto==="appuntamento"?"Appuntamento programmato":"Prossimo richiamo programmato",
+        detail:"Data prevista: "+new Date(item.prossimo_contatto_il+"T12:00:00").toLocaleDateString("it-IT"),
+        note:"Attività futura registrata nella scheda CRM."});
+    }
+  }
+  events.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
+  const interactionCount=(data||[]).length;
+  const dropCount=events.filter(event=>event.kind==="price_drop").length;
+  const plannedCount=events.filter(event=>event.kind==="planned").length;
+  const summary='<div class="seller-timeline-summary"><span>'+interactionCount+' interazioni</span><span>'+dropCount+' ribassi documentati</span><span>'+plannedCount+' attività programmate</span></div>';
+  if(!events.length){
+    box.innerHTML=summary+'<div class="hint">Nessun evento ancora registrato. Le prossime telefonate, note e variazioni di prezzo compariranno qui.</div>';
+    return;
+  }
+  const visible=events.slice(0,40);
+  box.innerHTML=summary+'<div class="seller-timeline">'+visible.map(event=>{
+    const date=new Date(event.date);
+    const label=event.kind==="price_drop"?"MERCATO":event.kind==="planned"?"IN PROGRAMMA":"CONTATTO";
+    const dateLabel=event.kind==="planned"?date.toLocaleDateString("it-IT"):date.toLocaleString("it-IT",{dateStyle:"medium",timeStyle:"short"});
+    return '<article class="seller-timeline-event seller-timeline-'+event.kind+'"><div class="seller-timeline-marker"></div><div class="seller-timeline-content">'+
+      '<div class="seller-timeline-top"><span class="seller-timeline-tag">'+label+'</span><time>'+safe(dateLabel)+'</time></div>'+
+      '<strong>'+safe(event.title)+'</strong><span class="seller-timeline-detail">'+safe(event.detail)+'</span>'+
+      (event.note?'<p>'+safe(event.note)+'</p>':"")+
+      (event.followup?'<div class="due">Prossimo richiamo concordato: '+safe(new Date(event.followup+"T12:00:00").toLocaleDateString("it-IT"))+'</div>':"")+
+      '</div></article>';
+  }).join("")+'</div>'+(events.length>visible.length?'<div class="hint">Visualizzati gli ultimi 40 eventi su '+events.length+'.</div>':"");
 }
 async function saveCrm(id,details){
   const value=field=>details.querySelector('[data-crm-field="'+field+'"]').value;
