@@ -413,9 +413,9 @@ export default {
       // portal homepage instead of an individual listing.
       const { data: candidatesToRepair, error: repairQueryError } = await ctx.supabaseAdmin
         .from("annunci_candidati")
-        .select("source_email_id,url,url_originale,seller_classification_version,data_extraction_version,seller_manual_override,deduplication_version,listing_key")
+        .select("source_email_id,url,url_originale,stato,seller_classification_version,data_extraction_version,seller_manual_override,deduplication_version,listing_key")
         .eq("owner_id", owner)
-        .in("stato", ["da_verificare","scartato"])
+        .eq("stato", "da_verificare")
         .not("source_email_id", "is", null)
         .limit(200);
 
@@ -423,8 +423,8 @@ export default {
       const repairIds = (candidatesToRepair || [])
         .filter((candidate: any) => {
           if (typeof candidate.source_email_id !== "string") return false;
-          // Le verifiche manuali già archiviate come scartate restano definitive.
-          if (candidate.seller_manual_override === true && candidate.stato === "scartato") return false;
+          // Non rielaborare classificazioni impostate manualmente dall'utente.
+          if (candidate.seller_manual_override === true) return false;
           // Ogni email legacy viene rielaborata una sola volta per assegnare
           // un'identità stabile alla scheda, anche se non contiene un link diretto.
           if (Number(candidate.deduplication_version || 0) < 1) return true;
