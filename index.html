@@ -1268,7 +1268,7 @@ async function importOmiCsv(){
       if(!commune||!communeIstat||!zone||!tipCode||(![buyMin,buyMax,rentMin,rentMax].some(value=>value!==null)))continue;
       rows.push({
         owner_id:currentUser.id,semestre:Number(semester),provincia:province,comune_istat:communeIstat,
-        comune,fascia:get("FASCIA"),zona,dizione:get("DIZIONE")||get("DESCRIZIONE_ZONA")||"",
+        comune:commune,fascia:get("FASCIA"),zona,dizione:get("DIZIONE")||get("DESCRIZIONE_ZONA")||"",
         destinazione,
         link_zona:get("LINK_ZONA")||communeIstat+":"+zone,
         cod_tip:tipology||tipCode,tipologia:tipology||"Non indicata",stato:get("STATO"),
