@@ -1349,7 +1349,9 @@ function renderTerritoryScanner(all=listingCache,candidates=candidateCache,now=n
    if(isRecentRecord(item))town.recent++;
   }
   if(!["incarico_acquisito","non_interessato"].includes(item.stato_contatto||"da_contattare")&&item.altre_agenzie!=="esclusiva")town.crmActive++;
-  town.items.push({item,kind:"crm",isRecent:isRecentRecord(item),dropCount:0});
+  const history=priceHistoryAnalysis(item);
+  if(!listingKeys.has(key)&&history.drops.length){town.dropProperties++;town.dropEvents+=history.drops.length;}
+  town.items.push({item,kind:"crm",isRecent:isRecentRecord(item),dropCount:history.drops.length});
  };
  (Array.isArray(candidates)?candidates:[]).forEach(addCandidate);
  (Array.isArray(all)?all:[]).forEach(addCrm);
