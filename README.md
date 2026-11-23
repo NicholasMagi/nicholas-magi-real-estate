@@ -18,6 +18,8 @@ Applicazione web per la raccolta, la verifica e la gestione di opportunità immo
 - Estrazione migliorata di comune, prezzo, tipologia, superficie, locali, camere e bagni, con gestione dei formati italiani (€, euro, mila, mq, m²) e più categorie immobiliari.
 - Versionamento dell'estrazione: le notifiche Gmail ancora in coda vengono rielaborate una sola volta quando cambia il parser; le classificazioni manuali dei venditori restano protette.
 - Deduplicazione tramite ID Gmail.
+- Analisi di mercato OMI: importazione CSV ufficiali VALORI per le province marchigiane AN, MC, FM e AP, filtri per comune/zona/tipologia/semestre e confronto tra prezzo richiesto al m² e intervallo OMI.
+- Registro separato delle schede-atto della Consultazione Valori Immobiliari Dichiarati: corrispettivo complessivo dell'atto, mese, tipologia e numero di immobili; nessuna ripartizione automatica del prezzo su singole unità.
 - Esportazione CSV ed Excel dell'archivio e della coda candidati.
 
 ## Come funziona la raccolta Gmail
@@ -44,6 +46,16 @@ La vecchia funzione di lettura diretta nmre-gmail-reader è dismessa: non restit
 I campi strutturati disponibili su candidati e archivio sono: tipologia immobile, superficie in m², numero locali, camere e bagni. L'estrazione è euristica e i campi mancanti restano vuoti per la correzione manuale. L'approvazione del candidato trasferisce questi dati nell'archivio definitivo.
 
 Il parser e l'adattatore Gmail History sono separati nella cartella supabase/functions/nmre-gmail-scheduled/_shared e coperti da test automatici. Il workflow Validate application code esegue i test Deno del parser e della cronologia Gmail, i test del connettore Insights, controlla la sintassi JavaScript incorporata in index.html e verifica che gli ID HTML siano univoci.
+
+## Analisi OMI e compravendite dichiarate
+
+La sezione **Analisi di mercato** mantiene separati tre livelli informativi:
+
+1. **Quotazioni OMI**: l'utente scarica il file CSV VALORI dall'area ufficiale Forniture dati OMI dell'Agenzia delle Entrate e lo importa nell'app. Il parser riconosce il tracciato VALORI (comune, codice ISTAT, provincia, fascia, zona, link zona, tipologia, stato, compravendita min/max €/m² e locazione min/max €/m²/mese), gestisce delimitatori e numeri nel formato italiano e importa le province AN, MC, FM e AP. Il file ZONE da solo non contiene i valori economici e viene rifiutato.
+2. **Confronto OMI**: consente di confrontare il prezzo richiesto per m² con l'intervallo OMI dell'ultimo semestre importato per comune, zona, tipologia e stato conservativo. Viene mostrato anche il riferimento alla superficie OMI (lorda/netta). È un confronto orientativo, non una perizia e non un prezzo di singola transazione.
+3. **Compravendite dichiarate**: il registro consente di annotare manualmente i dati non identificativi delle schede-atto consultate presso l'Agenzia delle Entrate. Il campo corrispettivo resta riferito all'intero atto; quando l'atto include più immobili, NMRE non lo divide per la superficie né attribuisce prezzi individuali alle unità. Non sono richiesti nomi, codici fiscali o indirizzi esatti.
+
+Le tabelle `nmre_omi_quotazioni` e `nmre_compravendite_atti` hanno RLS attiva e policy di proprietà: ogni utente autenticato può leggere e modificare soltanto i propri dati. Le quotazioni conservano semestre, comune, zona, fonte, file importato e campi grezzi essenziali per la tracciabilità. Per l'uso dei dati OMI va citata la fonte “Agenzia Entrate - OMI”.
 
 ## Punteggi della coda candidati
 
