@@ -1,6 +1,7 @@
 import {
   municipality,price,listingPrice,listingUrl,propertyEmail,listingTitle,propertyType,
-  surface,rooms,bedrooms,bathrooms,resolveListingUrl,sellerClassificationDetails,canonicalListingKey
+  surface,rooms,bedrooms,bathrooms,resolveListingUrl,sellerClassificationDetails,canonicalListingKey,
+  priceReduction
 } from "./_shared/parser.ts";
 import { collectHistoryMessageIds } from "./_shared/history.ts";
 import { withSupabase } from "npm:@supabase/server@^1";
@@ -505,6 +506,8 @@ export default {
       const rows = await Promise.all(classified.map(async ({ email, text, seller }) => {
         const originalUrl = listingUrl(text);
         const url = await resolveListingUrl(text);
+        const title = listingTitle(email);
+        const explicitPriceReduction = priceReduction(text + " " + title);
         let portal: string | null = null;
         try {
           const portalUrl = url || originalUrl;
@@ -518,9 +521,10 @@ export default {
 
         return {
           owner_id: owner,
-          titolo: listingTitle(email),
+          titolo: title,
           comune: municipality(text),
-          prezzo: listingPrice(text, listingTitle(email)),
+          prezzo: listingPrice(text, title),
+          explicit_price_reduction: explicitPriceReduction,
           tipologia_immobile: propertyType(text),
           superficie_mq: surface(text),
           locali: rooms(text),
@@ -691,6 +695,35 @@ export default {
         }
 
         if (!candidateId) throw new Error("Impossibile associare la notifica all'immobile");
+
+        // Il vecchio prezzo viene memorizzato solo se dichiarato dal portale
+        // oppure se una notifica precedente dello stesso annuncio prova un importo maggiore.
+        let previousPrice: number | null = row.explicit_price_reduction?.previousPrice ?? null;
+        if (previousPrice === null && Number(row.prezzo) > 0) {
+          const { data: priorSnapshot, error: priorSnapshotError } = await ctx.supabaseAdmin
+            .from("annunci_candidati_notifiche")
+            .select("listing_price")
+            .eq("owner_id", owner)
+            .eq("candidate_id", candidateId)
+            .neq("source_email_id", row.source_email_id)
+            .not("listing_price", "is", null)
+            .order("notified_at", { ascending: false })
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (priorSnapshotError) throw new Error("Lettura dello storico prezzi non riuscita");
+          const lastPrice = Number(priorSnapshot?.listing_price);
+          if (Number.isFinite(lastPrice) && lastPrice > Number(row.prezzo)) previousPrice = lastPrice;
+        }
+
+        const currentPrice = row.explicit_price_reduction?.currentPrice
+          ?? (Number(row.prezzo) > 0 ? Number(row.prezzo) : null);
+        const hasPriceDrop = currentPrice !== null && previousPrice !== null && previousPrice > currentPrice;
+        const priceDropAmount = hasPriceDrop ? previousPrice - currentPrice : null;
+        const priceDropPercent = hasPriceDrop
+          ? Math.round((priceDropAmount! / previousPrice!) * 10000) / 100
+          : null;
+
         const { error: notificationError } = await ctx.supabaseAdmin
           .from("annunci_candidati_notifiche")
           .upsert({
@@ -700,8 +733,15 @@ export default {
             notification_sender: row.notification_sender,
             email_subject: row.email_subject,
             notified_at: row.data_pubblicazione,
-            listing_url: row.url || row.url_originale
-          }, { onConflict: "owner_id,source_email_id", ignoreDuplicates: true });
+            listing_url: row.url || row.url_originale,
+            listing_price: currentPrice,
+            previous_price: hasPriceDrop ? previousPrice : null,
+            price_drop_amount: priceDropAmount,
+            price_drop_percent: priceDropPercent,
+            listing_surface_mq: row.superficie_mq,
+            listing_title: row.titolo,
+            listing_municipality: row.comune
+          }, { onConflict: "owner_id,source_email_id" });
         if (notificationError) throw new Error("Salvataggio dello storico notifiche non riuscito");
         notificationEventsLinked++;
       }
