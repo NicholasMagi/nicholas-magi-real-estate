@@ -421,7 +421,7 @@ export default {
       if (repairQueryError) throw new Error("Lettura dei link da correggere non riuscita");
       const repairIds = (candidatesToRepair || [])
         .filter((candidate: any) => {
-          if (typeof candidate.source_email_id !== "string" || !candidate.url_originale) return false;
+          if (typeof candidate.source_email_id !== "string") return false;
           // Le verifiche manuali già archiviate come scartate restano definitive.
           if (candidate.seller_manual_override === true && candidate.stato === "scartato") return false;
           // Ogni email legacy viene rielaborata una sola volta per assegnare
@@ -487,6 +487,19 @@ export default {
 
         if (discardError) throw new Error("Pulizia delle notifiche non pertinenti non riuscita");
         discardedExisting = discarded?.length || 0;
+
+        // Una verifica manuale prevale anche se, con la nuova classificazione,
+        // l'email originale non è più considerata un avviso immobiliare.
+        const { error: manualRepairError } = await ctx.supabaseAdmin
+          .from("annunci_candidati")
+          .update({
+            deduplication_version: 1,
+            updated_at: new Date().toISOString()
+          })
+          .eq("owner_id", owner)
+          .eq("seller_manual_override", true)
+          .in("dedup_key", discardedKeys);
+        if (manualRepairError) throw new Error("Aggiornamento dello stato di deduplicazione manuale non riuscito");
       }
 
       const rows = await Promise.all(classified.map(async ({ email, text, seller }) => {
