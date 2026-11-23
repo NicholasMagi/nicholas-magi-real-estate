@@ -578,6 +578,16 @@ button:disabled{opacity:.55;cursor:not-allowed}
     <div id="acquisitionPipelineMilestones" class="sales-performance-funnel"></div>
     <p class="hint" id="acquisitionPipelineNote">I conteggi sono basati su immobili e attività collegati; le attività prive di un immobile o contatto collegabile non vengono attribuite a una fase.</p>
   </section>
+  <section class="dash-card dash-action-plan" id="conversionIntelligencePanel" style="margin:14px 0">
+    <div class="dash-card-head"><div><h2>NMRE Conversion Intelligence</h2><div class="dash-card-sub">Dove si interrompe il percorso commerciale e quali situazioni meritano un nuovo approfondimento</div></div><span class="small" id="conversionIntelligencePeriod">Periodo selezionato</span></div>
+    <div class="seller-radar-intro">Analisi descrittiva di contatti, appuntamenti, valutazioni e incarichi collegati. Le differenze tra fasi sono segnali da verificare, non motivi di perdita né conversioni di coorte.</div>
+    <div id="conversionIntelligenceMetrics" class="dash-overview" style="margin:12px 0"></div>
+    <h3 style="margin:16px 0 8px">Punti da approfondire</h3>
+    <div id="conversionIntelligenceActions"></div>
+    <h3 style="margin:16px 0 8px">Motivazioni annotate nei contatti non interessati</h3>
+    <div id="conversionIntelligenceReasons"></div>
+    <p class="hint" id="conversionIntelligenceNote">Sono utilizzati soltanto eventi collegati a un contatto o immobile e registrati nel periodo selezionato.</p>
+  </section>
   <section class="dash-card dash-action-plan" style="margin:14px 0">
     <div class="dash-card-head"><div><h2>NMRE Acquisition Command Center</h2><div class="dash-card-sub">Le 10 azioni commerciali più importanti, ordinate per urgenza e segnali verificabili</div></div><span class="small" id="dashActionPlanCount">Analisi attività</span></div>
     <div class="seller-radar-intro">Priorità operative costruite su richiami, appuntamenti, interazioni, ribassi documentati e qualità dei dati. Non sono previsioni di incarico. Le attività vengono aggiornate quando si sincronizzano CRM e opportunità.</div>
@@ -2531,6 +2541,62 @@ const nmreCrmLabels={
 function nmreCrmOption(id,rows,placeholder,label){const el=$(id),old=el.value;el.replaceChildren(new Option(placeholder,""));rows.forEach(r=>el.add(new Option(label(r),r.id)));if(rows.some(r=>r.id===old))el.value=old;}
 function nmreCrmSetTab(tab){document.querySelectorAll("[data-crm-tab]").forEach(b=>b.classList.toggle("active",b.dataset.crmTab===tab));document.querySelectorAll("[data-crm-pane]").forEach(p=>p.hidden=p.dataset.crmPane!==tab);}
 function nmreCrmPercent(value,total){return total?Math.round(value/total*100):0;}
+function renderConversionIntelligence(){
+ const metricsBox=$("conversionIntelligenceMetrics"),actionsBox=$("conversionIntelligenceActions"),reasonsBox=$("conversionIntelligenceReasons");
+ if(!metricsBox||!actionsBox||!reasonsBox)return;
+ const range=Number($("salesPerformanceRange")?.value||30);
+ const from=new Date();from.setDate(from.getDate()-range+1);from.setHours(0,0,0,0);
+ const inRange=row=>{const t=Date.parse(row.created_at||row.starts_at||"");return Number.isFinite(t)&&t>=from.getTime();};
+ const crm=(nmreCrmInteractions||[]).filter(inRange);
+ const archive=(nmreListingInteractions||[]).filter(inRange).map(row=>({
+  interaction_type:row.tipo,outcome_code:row.outcome_code,created_at:row.created_at,
+  property_id:row.annuncio_id,contact_id:null,notes:row.note||row.notes||null,outcome:row.esito||null
+ }));
+ const events=[...crm,...archive];
+ const key=row=>row.property_id?"property:"+row.property_id:row.contact_id?"contact:"+row.contact_id:null;
+ const unique=rows=>new Set(rows.map(key).filter(Boolean));
+ const responseCodes=new Set(["parlato","richiamare","interessato","appuntamento_fissato","valutazione_fissata","valutazione_completata","incarico_acquisito","non_interessato"]);
+ const conversations=unique(events.filter(row=>row.interaction_type==="telefonata"&&responseCodes.has(row.outcome_code)));
+ const appointmentRows=(nmreCrmAppointments||[]).filter(row=>inRange(row)&&row.status!=="annullato"&&["appuntamento","visita"].includes(row.appointment_type));
+ const completedAppointments=unique(appointmentRows.filter(row=>row.status==="completato"));
+ const valuationRows=(nmreCrmAppointments||[]).filter(row=>inRange(row)&&row.appointment_type==="valutazione"&&row.status==="completato");
+ const completedValuations=unique([...events.filter(row=>row.outcome_code==="valutazione_completata"),...valuationRows]);
+ const mandates=unique(events.filter(row=>row.outcome_code==="incarico_acquisito"));
+ const notInterested=unique(events.filter(row=>row.outcome_code==="non_interessato"));
+ const metrics=[
+  ["Conversazioni effettive",conversations.size],
+  ["Appuntamenti completati",completedAppointments.size],
+  ["Valutazioni completate",completedValuations.size],
+  ["Incarichi registrati",mandates.size],
+  ["Non interessati registrati",notInterested.size]
+ ];
+ metricsBox.innerHTML=metrics.map(([label,value])=>'<div class="dash-overview-item"><strong>'+value+'</strong><span>'+safe(label)+'</span></div>').join("");
+ const completedWithoutValuation=[...completedAppointments].filter(k=>!completedValuations.has(k)).length;
+ const valuationWithoutMandate=[...completedValuations].filter(k=>!mandates.has(k)).length;
+ const actions=[
+  ["Appuntamenti completati senza valutazione registrata",completedWithoutValuation,"Verificare se la valutazione è stata svolta e se l'esito è stato aggiornato nel CRM"],
+  ["Valutazioni completate senza incarico registrato",valuationWithoutMandate,"Riprendere il confronto su prezzo, tempistiche, obiettivi e prossimi passi"],
+  ["Contatti che hanno espresso non interesse",notInterested.size,"Rivedere le note e verificare se esiste una ragione documentata per un ricontatto futuro"]
+ ];
+ actionsBox.innerHTML=actions.map(([label,value,advice])=>'<article class="nmre-crm-item"><div><strong>'+safe(label)+'</strong><p>'+safe(advice)+'</p></div><div class="nmre-crm-item-side"><strong>'+value+'</strong></div></article>').join("");
+ const reasonEvents=events.filter(row=>row.outcome_code==="non_interessato"&&(row.notes||row.outcome));
+ const seen=new Set(),snippets=[];
+ reasonEvents.forEach(row=>{
+  const note=String(row.notes||row.outcome||"").trim().replace(/\s+/g," ");
+  if(!note)return;
+  const normalized=note.toLocaleLowerCase("it");
+  if(seen.has(normalized))return;
+  seen.add(normalized);
+  const contact=(nmreCrmContacts||[]).find(item=>item.id===row.contact_id);
+  const property=(nmreCrmProperties||[]).find(item=>item.id===row.property_id);
+  snippets.push({note,who:contact?.full_name||property?.title||"Contatto senza nominativo",date:row.created_at});
+ });
+ reasonsBox.innerHTML=snippets.length?snippets.slice(0,5).map(item=>'<article class="nmre-crm-item"><div><strong>'+safe(item.who)+'</strong><p>'+safe(item.note)+'</p></div><div class="nmre-crm-item-side"><span>'+safe(item.date?new Date(item.date).toLocaleDateString("it-IT"):"")+'</span></div></article>').join(""):'<div class="nmre-crm-empty">Nessuna motivazione testuale registrata per i contatti non interessati nel periodo.';
+ const period=$("conversionIntelligencePeriod");if(period)period.textContent="Ultimi "+range+" giorni";
+ const note=$("conversionIntelligenceNote");
+ if(note)note.textContent="Base dati: interazioni CRM e archivio disponibili (fino a 90 giorni) e appuntamenti in agenda. I conteggi richiedono un contatto o immobile collegato; una fase successiva non prova che la precedente sia stata completata nello stesso percorso.";
+}
+
 function renderAcquisitionPipeline(){
  const stockBox=$("acquisitionPipelineStock"),milestoneBox=$("acquisitionPipelineMilestones");
  if(!stockBox||!milestoneBox)return;
@@ -2587,6 +2653,7 @@ function renderAcquisitionPipeline(){
  const period=$("acquisitionPipelinePeriod");if(period)period.textContent="Ultimi "+range+" giorni";
  const note=$("acquisitionPipelineNote");
  if(note)note.textContent="Portafoglio: "+properties.length+" immobili CRM. Traguardi: contano identificativi distinti collegati alle attività nel periodo; gli eventi senza property_id o contact_id sono esclusi. Appuntamenti e valutazioni da agenda sono conteggiati separatamente dagli esiti telefonici.";
+ renderConversionIntelligence();
 }
 
 function renderSalesPerformance(){
