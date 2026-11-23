@@ -185,7 +185,7 @@ export async function resolveListingUrl(s:string):Promise<string|null> {
         if(isSpecificListingUrl(initial))return initial.toString();
         continue;
       }
-      const response=await fetch(candidate,{redirect:"follow",headers:{Accept:"text/html"},signal:AbortSignal.timeout(6000)});
+      const response=await fetch(candidate,{method:"GET",redirect:"follow",headers:{Accept:"text/html"},signal:AbortSignal.timeout(6000)});
       const finalUrl=new URL(response.url||candidate);
       if(isSpecificListingUrl(finalUrl))return finalUrl.toString();
     }catch{}
