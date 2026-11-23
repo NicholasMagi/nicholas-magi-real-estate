@@ -116,7 +116,8 @@ function safeNumber(value: unknown): number | null {
 export function toCandidate(
   item: Record<string, any>,
   ownerId: string,
-  clientTypeID: 1 | 2 = 1
+  clientTypeID: 1 | 2 = 1,
+  phoneNumberProvided: boolean | null = true
 ) {
   // The official Search by Attribute request filters clientTypeID:
   // 1 = Privato, 2 = Professionista. Do not infer seller type from missing text.
@@ -145,7 +146,9 @@ export function toCandidate(
   const rawBathrooms = safeNumber(item.features?.numberOfBathrooms ?? item.numberOfBathrooms);
   const seller = clientTypeID === 1 ? "Privato" : "Agenzia";
   const sellerEvidence = clientTypeID === 1
-    ? "Immobiliare.it Insights: filtro ufficiale clientTypeID=1 (Privato); phoneNumberProvided=true"
+    ? (phoneNumberProvided === true
+      ? "Immobiliare.it Insights: filtro ufficiale clientTypeID=1 (Privato) e phoneNumberProvided=true"
+      : "Immobiliare.it Insights: filtro ufficiale clientTypeID=1 (Privato); disponibilità telefono non verificata")
     : "Immobiliare.it Insights: filtro ufficiale clientTypeID=2 (Professionista)";
 
   return {
