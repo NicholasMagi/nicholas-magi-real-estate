@@ -17,8 +17,12 @@ function normalizePropertyText(value:string):string {
 
 
 export function municipality(s:string):string|null {
-  const n=" "+normalizePropertyText(s).toLocaleLowerCase("it").replace(/[^\p{L}\p{N}]+/gu," ")+" ";
-  return TOWNS.find(t=>n.includes(" "+t.toLocaleLowerCase("it")+" "))||null;
+  const normalizeTown=(value:string)=>normalizePropertyText(value)
+    .toLocaleLowerCase("it")
+    .replace(/[^\p{L}\p{N}]+/gu," ")
+    .trim();
+  const n=" "+normalizeTown(s)+" ";
+  return TOWNS.find(t=>n.includes(" "+normalizeTown(t)+" "))||null;
 }
 
 
