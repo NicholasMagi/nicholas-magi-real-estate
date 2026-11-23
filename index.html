@@ -1054,7 +1054,7 @@ function renderCandidates(){
   }).join("");
   box.querySelectorAll("[data-confirm]").forEach(btn=>btn.addEventListener("click",()=>confirmCandidate(btn.dataset.confirm,btn)));
   box.querySelectorAll("[data-save-seller]").forEach(btn=>btn.addEventListener("click",()=>saveCandidateSeller(btn.dataset.saveSeller,btn)));
-  box.querySelectorAll("[data-discard]").forEach(btn=>btn.addEventListener("click",()=>discardCandidate(btn.dataset.discard)));
+  box.querySelectorAll("[data-discard]").forEach(btn=>btn.addEventListener("click",()=>discardCandidate(btn.dataset.discard,btn)));
   const recognized=visible.filter(item=>item.tipo_venditore==="Privato").length;
   const review=visible.length-recognized;
   msg("candidateMsg",visible.length+" annunci visualizzati · "+recognized+" privati riconosciuti · "+review+" da verificare.","success");
@@ -1135,11 +1135,52 @@ async function confirmCandidate(id,button){
   await loadCandidates();await loadListings();
 }
 
-async function discardCandidate(id){
-  if(!confirm("Scartare questo candidato?"))return;
-  const {error}=await supabase.from("annunci_candidati").update({stato:"scartato",updated_at:new Date().toISOString()}).eq("id",id);
-  if(error){msg("candidateMsg",error.message,"error");return;}
+async function discardCandidate(id,button){
+  const target=(candidateCache||[]).find(item=>String(item.id)===String(id));
+  if(!target){
+    msg("candidateMsg","Non trovo più questo candidato. Aggiorni la lista e riprovi.","error");
+    return;
+  }
+
+  // Le notifiche email possono creare più record per lo stesso annuncio.
+  // Usiamo il link canonico già impiegato dalla deduplicazione della lista,
+  // così lo scarto riguarda tutte le copie dello stesso immobile.
+  const canonical=canonicalCandidateUrl(target.url);
+  const matching=(candidateCache||[]).filter(item=>
+    canonical && canonicalCandidateUrl(item.url)===canonical
+  );
+  const ids=[...new Set([String(id),...matching.map(item=>String(item.id))])];
+
+  const prompt=ids.length>1
+    ? "Scartare questo immobile e tutte le sue "+(ids.length-1)+" copie presenti nella lista?"
+    : "Scartare questo candidato?";
+  if(!confirm(prompt))return;
+
+  if(button)button.disabled=true;
+  const {data,error}=await supabase
+    .from("annunci_candidati")
+    .update({stato:"scartato",updated_at:new Date().toISOString()})
+    .in("id",ids)
+    .eq("stato","da_verificare")
+    .select("id");
+
+  if(error){
+    msg("candidateMsg","Impossibile scartare l'annuncio: "+error.message,"error");
+    if(button)button.disabled=false;
+    return;
+  }
+
+  const discardedCount=Array.isArray(data)?data.length:0;
+  if(discardedCount===0){
+    msg("candidateMsg","Nessun record è stato modificato. Aggiorni la lista e riprovi.","error");
+    if(button)button.disabled=false;
+    return;
+  }
+
   await loadCandidates();
+  msg("candidateMsg",discardedCount===1
+    ?"Annuncio scartato correttamente."
+    :"Immobile scartato: rimosse "+discardedCount+" notifiche duplicate dalla coda.", "success");
 }
 
 function renderListings(){
