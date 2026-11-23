@@ -557,6 +557,11 @@ button:disabled{opacity:.55;cursor:not-allowed}
     <div id="dashActionPlan"><div class="dash-empty">Preparazione del piano operativo…</div></div>
   </section>
   <section class="dash-card dash-action-plan" style="margin:14px 0">
+    <div class="dash-card-head"><div><h2>NMRE Intelligence Engine</h2><div class="dash-card-sub">Le opportunità da approfondire, ordinate con segnali commerciali verificabili</div></div><span class="small" id="acquisitionIntelCount">Analisi in corso</span></div>
+    <div id="acquisitionIntelList"><div class="dash-empty">Analisi delle opportunità…</div></div>
+    <p class="hint">Il punteggio è un ordine di lavorazione, non una previsione di vendita. Ribassi e contatti sono mostrati solo se presenti nei dati; l'assenza di informazioni non viene interpretata come disponibilità del proprietario.</p>
+  </section>
+  <section class="dash-card dash-action-plan" style="margin:14px 0">
     <div class="dash-card-head"><div><h2>Qualificazione proprietari</h2><div class="dash-card-sub">Priorità basata su informazioni confermate durante il contatto, non su supposizioni</div></div><span class="small" id="ownerQualificationCount">0 schede</span></div>
     <div id="ownerQualificationList"><div class="dash-empty">Caricamento qualificazioni…</div></div>
   </section>
@@ -1064,6 +1069,80 @@ function renderDailyActionPlan(all,candidates,today){
  }));
 }
 
+function acquisitionIntelligence(item,now=new Date()){
+ const history=priceHistoryAnalysis(item);
+ const base=candidatePriority(item,now);
+ const radar=sellerRadarPriority(item,now);
+ const signals=[];
+ let score=0;
+ const add=(points,label)=>{score+=points;signals.push(label);};
+ if(item.tipo_venditore==="Privato")add(25,"Privato verificato");
+ else if(item.tipo_venditore==="Da verificare")add(6,"Identità del venditore da verificare");
+ if(history.drops.length){
+  const latest=history.drops[history.drops.length-1];
+  const pct=Number(latest.entry.price_drop_percent)||0;
+  add(pct>=10?25:18,"Ribasso documentato del "+pct.toLocaleString("it-IT")+"%");
+  if(history.drops.length>=2)add(10,history.drops.length+" ribassi documentati");
+ }
+ if(history.observations.length>=3)add(7,"Storico con "+history.observations.length+" prezzi rilevati");
+ const town=normalizedMatchText(item.comune);
+ if(["ancona","osimo","castelfidardo","jesi"].includes(town))add(15,"Territorio operativo principale");
+ else if(["loreto","recanati","camerano","numana","sirolo","falconara marittima","porto recanati","filottrano","polverigi","agugliano","offagna","chiaravalle","montemarciano","monte urano","civitanova marche","porto sant elpidio","monte san vito","santa maria nuova","monsano","macerata","fermo","senigallia"].includes(town))add(8,"Territorio operativo esteso");
+ if(String(item.contatto||"").trim())add(15,"Recapito presente");
+ if(Number(item.prezzo)>0&&Number(item.superficie_mq)>0)add(5,"Prezzo e superficie disponibili");
+ const latestDate=history.observations.length?Date.parse(history.observations[history.observations.length-1].date):NaN;
+ if(Number.isFinite(latestDate)){
+  const age=Math.max(0,Math.floor((now.getTime()-latestDate)/86400000));
+  if(age<=7)add(5,"Aggiornamento prezzo negli ultimi 7 giorni");
+ }
+ const level=score>=65?"high":score>=40?"medium":"low";
+ let next="Verificare identità del venditore, recapito e situazione della vendita";
+ if(history.drops.length>=2)next="Contattare per capire visite, proposte ricevute e strategia di prezzo";
+ else if(history.drops.length===1)next="Chiedere come sta andando la vendita dopo l'aggiornamento della richiesta";
+ else if(item.tipo_venditore==="Privato"&&item.contatto)next="Qualificare tempistiche, visite e gestione diretta della vendita";
+ else if(item.contatto)next="Verificare se il venditore gestisce direttamente l'immobile";
+ return {score:Math.min(100,score),level,signals,history,next,base,radar};
+}
+function renderAcquisitionIntelligence(candidates=candidateCache){
+ const box=$("acquisitionIntelList");if(!box)return;
+ const all=(Array.isArray(candidates)?candidates:[]).filter(item=>item.tipo_venditore!=="Agenzia");
+ const rows=all.map(item=>({item,intel:acquisitionIntelligence(item)}))
+  .filter(row=>row.intel.signals.length>=2)
+  .sort((a,b)=>b.intel.score-a.intel.score||(Date.parse(b.item.created_at||"")||0)-(Date.parse(a.item.created_at||"")||0))
+  .slice(0,5);
+ const count=$("acquisitionIntelCount");
+ if(count)count.textContent=rows.length+" opportunità selezionate";
+ if(!rows.length){
+  box.innerHTML='<div class="dash-empty">Nessuna opportunità ha ancora segnali sufficienti per una priorità attendibile. Verifichi i nuovi annunci e registri venditore, recapito e informazioni raccolte al telefono.</div>';
+  return;
+ }
+ box.innerHTML='<div class="seller-radar-list">'+rows.map(({item,intel},index)=>{
+  const history=intel.history;
+  const title=safe(item.titolo||"Immobile senza titolo");
+  const meta=safe([item.comune,item.portale].filter(Boolean).join(" · ")||"Territorio da verificare");
+  const price=Number(item.prezzo)>0?formatCurrency(Number(item.prezzo)):"Prezzo non indicato";
+  const seller=item.tipo_venditore==="Privato"?"Privato verificato":"Venditore da verificare";
+  const signals=intel.signals.slice(0,4).map(signal=>'<span class="seller-radar-signal">'+safe(signal)+'</span>').join("");
+  const historyLine=history.drops.length
+   ?history.drops.length+" ribassi documentati · ultimo "+safe(new Date(history.drops[history.drops.length-1].date).toLocaleDateString("it-IT"))
+   :history.observations.length?history.observations.length+" prezzi rilevati, nessun ribasso esplicito":"Nessuno storico prezzi sufficiente";
+  const script=sellerRadarCallScript(item);
+  return '<article class="seller-radar-item"><div class="seller-radar-item-top"><span class="dash-lead-rank">'+(index===0?"Prima opportunità":"Priorità "+(index+1))+'</span><span class="seller-radar-score '+(intel.level==="high"?"seller-radar-score-high":"")+'">'+intel.score+'/100</span></div>'
+   +'<div class="seller-radar-title">'+title+'</div><div class="seller-radar-meta">'+meta+'<br>'+safe(seller)+' · '+safe(price)+'<br>'+safe(historyLine)+'</div>'
+   +'<div class="seller-radar-signals">'+signals+'</div><div class="hint"><strong>Prossima azione:</strong> '+safe(intel.next)+'</div>'
+   +'<details><summary>Prepara la telefonata</summary><p class="seller-radar-script-text">'+safe(script)+'</p><button type="button" class="secondary" data-intel-copy="'+safe(item.id)+'">Copia copione</button></details>'
+   +'<div class="actions"><button type="button" class="gold" data-intel-open="'+safe(item.id)+'">Apri opportunità</button></div></article>';
+ }).join("")+'</div>';
+ box.querySelectorAll("[data-intel-open]").forEach(button=>button.addEventListener("click",()=>openDashboardCandidate(button.dataset.intelOpen)));
+ box.querySelectorAll("[data-intel-copy]").forEach(button=>button.addEventListener("click",async()=>{
+  const item=(candidateCache||[]).find(row=>String(row.id)===String(button.dataset.intelCopy));
+  if(!item)return;
+  const script=sellerRadarCallScript(item);
+  try{await navigator.clipboard.writeText(script);button.textContent="Copiato";}
+  catch{window.prompt("Copi il copione della telefonata:",script);}
+ }));
+}
+
 function sellerQualification(item){
  let score=0;const signals=[];
  const add=(n,label)=>{score+=n;signals.push(label);};
@@ -1100,6 +1179,7 @@ function renderDashboard(){
   const candidates=Array.isArray(candidateCache)?candidateCache:[];
   renderSellerRadar(candidates);
   renderPriceHistoryRadar(candidates);
+  renderAcquisitionIntelligence(candidates);
   const today=new Date();
   today.setHours(0,0,0,0);
   const weekEnd=new Date(today);
