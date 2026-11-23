@@ -759,11 +759,15 @@ async function syncInsightsApi(){
     if(!data?.success)throw new Error(data?.error||"Importazione non riuscita.");
     $("insightsApiStatus").textContent="Ultima ricerca completata · "+data.resultsRead+" risultati analizzati";
     const resultParts=[
-      data.inserted+" nuovi annunci privati importati",
+      data.inserted+" nuovi annunci privati con telefono importati",
       data.matchedEmailAsPrivate+" annunci email riconosciuti come privati",
+      data.matchedEmailAsPrivateWithPhone+" privati con telefono disponibile",
       data.matchedEmailAsProfessional+" annunci email riconosciuti come professionisti e rimossi dalla coda",
       data.alreadyPresent+" già presenti"
     ];
+    if(!data.phoneFilterAvailable){
+      resultParts.push("verifica disponibilità telefono non completata");
+    }
     if(!data.professionalLookupAvailable){
       resultParts.push("verifica professionisti non completata (API "+(data.professionalLookupStatus||"non disponibile")+")");
     }
