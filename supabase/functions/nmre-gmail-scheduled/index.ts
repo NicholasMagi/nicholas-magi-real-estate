@@ -15,8 +15,13 @@ function b64(bytes: Uint8Array): string {
   return btoa(value);
 }
 
-function unb64(value: string): Uint8Array {
-  return Uint8Array.from(atob(value), character => character.charCodeAt(0));
+function unb64(value: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
 }
 
 async function encryptionKey(secret: string): Promise<CryptoKey> {
@@ -427,7 +432,7 @@ export default {
 
     try {
       const owner = Deno.env.get("NMRE_ALLOWED_USER_ID");
-      ownerForLog = owner;
+      ownerForLog = owner || null;
       const encryptionSecret = Deno.env.get("INTEGRATION_TOKEN_ENCRYPTION_KEY");
       if (!owner || !/^[0-9a-f-]{36}$/i.test(owner) || !encryptionSecret) {
         throw new Error("Configurazione server incompleta");
@@ -823,7 +828,7 @@ export default {
         const currentPrice = row.explicit_price_reduction?.currentPrice
           ?? (Number(row.prezzo) > 0 ? Number(row.prezzo) : null);
         const hasPriceDrop = currentPrice !== null && previousPrice !== null && previousPrice > currentPrice;
-        const priceDropAmount = hasPriceDrop ? previousPrice - currentPrice : null;
+        const priceDropAmount = hasPriceDrop ? Number(previousPrice) - currentPrice : null;
         const priceDropPercent = hasPriceDrop
           ? Math.round((priceDropAmount! / previousPrice!) * 10000) / 100
           : null;
