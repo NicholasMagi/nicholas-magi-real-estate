@@ -87,6 +87,23 @@ button:disabled{opacity:.55;cursor:not-allowed}
 
 .candidate{border-top:1px solid var(--line);padding:14px 0}.candidate input{margin:5px 0}.candidate-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.candidate-priority{display:flex;align-items:center;gap:12px;padding:10px 12px;margin:10px 0;border:1px solid #e5e9ef;border-radius:10px;background:#f8f9fb}.candidate-priority-score{min-width:54px;text-align:center;color:#26364d}.candidate-priority-score strong{font-family:Georgia,serif;font-size:25px;line-height:1}.candidate-priority-score span{font-size:10px;color:var(--muted);margin-left:2px}.candidate-priority-info{display:grid;gap:3px;min-width:0}.candidate-priority-info strong{font-size:12px;color:#35435a}.candidate-priority-info>span{font-size:11px;color:#58667a}.candidate-priority-info small{font-size:10px;line-height:1.45;color:#7b8797}.candidate-priority-high{border-left:4px solid #b8955b}.candidate-priority-medium{border-left:4px solid #7890ad}.candidate-priority-low{border-left:4px solid #b9c1cc}.candidate-priority-summary{font-size:11px;color:var(--muted);margin:8px 0}.candidate-priority-legend{font-size:11px;color:var(--muted);line-height:1.5;margin:8px 0 12px}.candidate-source-details{margin-top:10px}.candidate-source-original{margin-top:10px}.candidate-source-original pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;font:inherit;font-size:12px;line-height:1.5;padding:10px;border-radius:8px;background:var(--panel,#f5f5f5)}
 .candidate-quality{padding:10px 12px;margin:10px 0;border:1px solid #e4e8ee;border-radius:9px;background:#fafbfc;font-size:11px;line-height:1.55;color:#526075}.candidate-quality strong{color:#35435a}.candidate-quality-warning{border-left:4px solid #bd8950;background:#fffaf2}.candidate-quality-review{border-left:4px solid #8194ad}.candidate-quality-ok{border-left:4px solid #8eaa98;background:#f8fbf8}.candidate-link-warning{font-size:11px;color:#9a642f;font-weight:700;align-self:center}.candidate-price-drop{border-left:4px solid #4c8a62;background:#f5faf6;color:#315b3d}.candidate-price-drop strong{color:#285638}
+
+.candidate-recovery-panel{margin:14px 0;padding:14px;border:1px solid #e2e7ee;border-radius:12px;background:#fbfcfe}
+.candidate-recovery-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.candidate-recovery-head h3{margin:0;font-size:15px;color:var(--ink)}
+.candidate-recovery-head p{margin:4px 0 0;font-size:11px;color:var(--muted);line-height:1.5;max-width:650px}
+.candidate-recovery-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}
+.candidate-recovery-metric{padding:10px;border:1px solid var(--line);border-radius:9px;background:#fff;min-width:0}
+.candidate-recovery-metric strong{display:block;font-size:20px;line-height:1.2;color:var(--ink)}
+.candidate-recovery-metric span{display:block;margin-top:4px;font-size:10px;line-height:1.35;color:var(--muted)}
+.candidate-recovery-list{display:grid;gap:8px}
+.candidate-recovery-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid var(--line);border-radius:9px;background:#fff}
+.candidate-recovery-item-main{display:grid;gap:4px;min-width:0}
+.candidate-recovery-item-main strong{font-size:12px;line-height:1.4;color:var(--ink)}
+.candidate-recovery-item-main span,.candidate-recovery-item-main small{font-size:10px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
+.candidate-recovery-score{flex:0 0 auto;font-size:11px;font-weight:700;color:#526075;white-space:nowrap}
+@media(max-width:520px){.candidate-recovery-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.candidate-recovery-metric{padding:8px}.candidate-recovery-metric strong{font-size:17px}.candidate-recovery-item{align-items:flex-start;flex-wrap:wrap}}
+
 .market-source-links{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 16px}.market-source-links a{display:inline-flex;padding:8px 10px;border:1px solid var(--line);border-radius:8px;text-decoration:none;color:#41516a;font-size:11px;font-weight:700;background:#fafbfc}.market-block{border-top:1px solid var(--line);padding:16px 0 6px;margin-top:12px}.market-block h3{font-size:15px;margin:0 0 4px}.market-block-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.market-import{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(180px,.8fr) minmax(130px,.6fr) auto;gap:10px;align-items:end;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fafbfc}.market-import-field{min-width:0}.market-import-field label{display:block;font-size:10px;margin-bottom:5px}.market-import-field input{padding:9px;font-size:11px}.market-import-static{padding:10px 0;font-size:12px;font-weight:700;letter-spacing:.7px;color:#536176}.market-import-action button{white-space:nowrap}.market-stat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:12px 0}.market-stat{background:#f7f8fa;border:1px solid var(--line);border-radius:9px;padding:11px}.market-stat strong{display:block;font-family:Georgia,serif;font-size:21px;font-variant-numeric:tabular-nums}.market-stat span{display:block;color:var(--muted);font-size:10px;margin-top:3px}.market-table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:9px;margin:10px 0}.market-table{width:100%;border-collapse:collapse;min-width:780px;font-size:11px}.market-table th,.market-table td{padding:9px 10px;text-align:left;border-bottom:1px solid #edf0f4;white-space:nowrap}.market-table th{background:#f7f8fa;color:#526075;font-weight:700}.market-table tr:last-child td{border-bottom:0}.market-table td strong{color:#26364d}.market-attribution{font-size:10px;line-height:1.5;color:var(--muted);margin:9px 0}.market-notice{border:1px solid #e7d8bb;background:#fffaf2;border-left:4px solid #bd8950;border-radius:9px;padding:11px 13px;margin:12px 0;font-size:11px;line-height:1.55;color:#66533b}.market-result{border:1px solid var(--line);background:#fafbfc;border-radius:10px;padding:13px;margin:12px 0;font-size:12px;line-height:1.6}.market-result-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:8px 0}.market-result-grid>div{padding:9px;background:#fff;border:1px solid var(--line);border-radius:8px}.market-result-grid strong{display:block;font-size:15px}.market-result-grid span{display:block;font-size:10px;color:var(--muted)}.market-deed-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:11px;border-bottom:1px solid #edf0f4;font-size:11px}.market-deed-row:last-child{border-bottom:0}.market-deed-row strong{display:block;font-size:12px;margin-bottom:3px}.market-deed-row span{display:block;color:var(--muted);line-height:1.45}.market-deed-amount{text-align:right;font-weight:700;white-space:nowrap}.market-compare-grid{margin-bottom:10px}
 .market-deed-checks{display:grid;gap:8px;border:1px solid var(--line);background:#fafbfc;border-radius:9px;padding:11px;margin:12px 0}
 .market-deed-checks label{display:flex;gap:9px;align-items:flex-start;font-size:11px;line-height:1.5;color:#46536a}
@@ -936,7 +953,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
     <div class="search-filter-field"><label for="candidateTypeFilter">Tipologia</label><select id="candidateTypeFilter"><option value="">Tutte le tipologie</option></select></div>
     <div class="search-filter-field"><label for="candidatePortalFilter">Portale</label><select id="candidatePortalFilter"><option value="">Tutti i portali</option></select></div>
     <div class="search-filter-field"><label for="candidateSellerFilter">Venditore</label><select id="candidateSellerFilter"><option value="">Tutti</option><option value="Privato">Privato riconosciuto</option><option value="Da verificare">Da verificare</option></select></div>
-    <div class="search-filter-field"><label for="candidateQualityFilter">Controllo qualità</label><select id="candidateQualityFilter"><option value="">Tutti gli annunci</option><option value="duplicates">Possibili duplicati</option><option value="priceDrop">Ribassi di prezzo documentati</option><option value="link">Link da verificare</option><option value="stale">Email ricevuta oltre 30 giorni fa</option><option value="incomplete">Dati incompleti</option></select></div>
+    <div class="search-filter-field"><label for="candidateQualityFilter">Controllo qualità</label><select id="candidateQualityFilter"><option value="">Tutti gli annunci</option><option value="duplicates">Possibili duplicati</option><option value="priceDrop">Ribassi di prezzo documentati</option><option value="link">Link da verificare</option><option value="stale">Email ricevuta oltre 30 giorni fa</option><option value="incomplete">Dati incompleti</option><option value="recovery">Da recuperare (dati immobile o link)</option></select></div>
     <div class="search-filter-field"><label for="candidatePriceMin">Prezzo minimo (€)</label><input id="candidatePriceMin" type="number" min="0" step="1000" placeholder="Nessun minimo"></div>
     <div class="search-filter-field"><label for="candidatePriceMax">Prezzo massimo (€)</label><input id="candidatePriceMax" type="number" min="0" step="1000" placeholder="Nessun massimo"></div>
     <div class="search-filter-field"><label for="candidateSurfaceMin">Superficie minima (m²)</label><input id="candidateSurfaceMin" type="number" min="0" step="5" placeholder="Qualsiasi"></div>
@@ -946,6 +963,18 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
   </div>
   <div class="search-filter-actions"><span id="candidateFilterCount" class="search-filter-count">Caricamento risultati…</span><button class="secondary" id="candidateResetFilters" type="button">Azzera filtri</button></div>
 </div>
+<section class="candidate-recovery-panel" aria-labelledby="candidateRecoveryTitle">
+  <div class="candidate-recovery-head">
+    <div><h3 id="candidateRecoveryTitle">Coda intelligente · Recupero dati</h3><p>Mostra prima gli annunci con informazioni dell'immobile da recuperare o con un link specifico da verificare. Telefono ed email del proprietario restano facoltativi e non bloccano la scheda.</p></div>
+    <button class="secondary" id="candidateRecoveryShowAll" type="button">Apri tutta la coda</button>
+  </div>
+  <div class="candidate-recovery-metrics">
+    <div class="candidate-recovery-metric"><strong id="candidateRecoveryDataCount">—</strong><span>Schede con dati immobile mancanti</span></div>
+    <div class="candidate-recovery-metric"><strong id="candidateRecoveryLinkCount">—</strong><span>Link da verificare</span></div>
+    <div class="candidate-recovery-metric"><strong id="candidateRecoveryContactCount">—</strong><span>Recapiti diretti facoltativi</span></div>
+  </div>
+  <div id="candidateRecoveryList" class="candidate-recovery-list" aria-live="polite"><p class="hint">La coda si aggiornerà con le opportunità caricate.</p></div>
+</section>
 <p class="candidate-priority-legend">Due indicatori separati: la priorità di acquisizione ordina il lavoro in base a venditore riconosciuto, freschezza, territorio, contatto e dati essenziali; la qualità dei dati misura la completezza della scheda. Il prezzo al m² è solo il rapporto tra richiesta e superficie: non è una valutazione di mercato e non dimostra da solo la convenienza dell'immobile.</p><p id="candidatePrioritySummary" class="candidate-priority-summary"></p><div id="candidateList"><p class="hint">Nessun candidato caricato.</p></div>
 <div id="candidateMsg" class="status"></div>
 </section>
@@ -3838,6 +3867,45 @@ function renderSourceDetails(item){
   return '<details class="candidate-quality candidate-source-details"><summary>Dettagli estratti automaticamente · '+rows.length+' campi · '+safe(source.provider||"Fonte registrata")+'</summary>'+rowsHtml+excerpt+'</details>';
 }
 
+function candidateRecoveryGaps(item,quality){
+  const gaps=[];
+  if(!String(item.comune||"").trim())gaps.push("comune");
+  if(!(Number(item.prezzo)>0))gaps.push("prezzo");
+  if(!String(item.tipologia_immobile||"").trim())gaps.push("tipologia");
+  if(!(Number(item.superficie_mq)>0))gaps.push("superficie");
+  if(!(Number(item.locali)>0))gaps.push("locali");
+  if(!quality.specificLink)gaps.push("link specifico all'annuncio");
+  return gaps;
+}
+
+function renderCandidateRecoveryQueue(data,qualityById){
+  const list=$("candidateRecoveryList");
+  if(!list)return;
+  const rows=(data||[]).map(item=>{
+    const quality=qualityById.get(String(item.id));
+    const gaps=candidateRecoveryGaps(item,quality);
+    return {item,quality,gaps,priority:candidatePriority(item)};
+  });
+  const dataGaps=rows.filter(row=>row.gaps.some(gap=>gap!=="link specifico all'annuncio")).length;
+  const linkGaps=rows.filter(row=>row.gaps.includes("link specifico all'annuncio")).length;
+  const contactGaps=rows.filter(row=>!String(row.item.contatto||"").trim()).length;
+  $("candidateRecoveryDataCount").textContent=String(dataGaps);
+  $("candidateRecoveryLinkCount").textContent=String(linkGaps);
+  $("candidateRecoveryContactCount").textContent=String(contactGaps);
+  const queue=rows.filter(row=>row.gaps.length)
+    .sort((a,b)=>b.priority.score-a.priority.score||a.gaps.length-b.gaps.length
+      ||new Date(b.item.created_at||0)-new Date(a.item.created_at||0));
+  if(!queue.length){
+    list.innerHTML='<p class="hint">Nessuna lacuna essenziale rilevata. Può concentrarsi sulla verifica del venditore e sul contatto.</p>';
+    return;
+  }
+  list.innerHTML=queue.slice(0,5).map(({item,gaps,priority})=>{
+    const details=[item.comune,item.prezzo>0?formatCurrency(item.prezzo):null,item.tipologia_immobile,item.superficie_mq>0?item.superficie_mq+" m²":null].filter(Boolean).join(" · ");
+    return '<article class="candidate-recovery-item"><div class="candidate-recovery-item-main"><strong>'+safe(item.titolo||"Annuncio immobiliare")+'</strong><span>'+safe(details||"Dettagli immobile ancora da verificare")+'</span><small>Da recuperare: '+safe(gaps.join(", "))+'</small></div><span class="candidate-recovery-score">'+priority.score+'/100</span><button class="secondary" type="button" data-recovery-open="'+safe(item.id)+'">Apri scheda</button></article>';
+  }).join("");
+  list.querySelectorAll("[data-recovery-open]").forEach(button=>button.addEventListener("click",()=>openDashboardCandidate(button.dataset.recoveryOpen)));
+}
+
 function renderCandidates(){
   const box=$("candidateList");
   const data=candidateCache||[];
@@ -3851,6 +3919,7 @@ function renderCandidates(){
   const seller=$("candidateSellerFilter").value;
   const qualityFilter=$("candidateQualityFilter").value;
   const qualityById=new Map(data.map(item=>[String(item.id),candidateQuality(item,data,listingCache)]));
+  renderCandidateRecoveryQueue(data,qualityById);
   const qualityMatches=(quality,item)=>{
     if(!qualityFilter)return true;
     if(qualityFilter==="duplicates")return !!quality.duplicate;
@@ -3859,6 +3928,7 @@ function renderCandidates(){
     if(qualityFilter==="link")return !quality.specificLink;
     if(qualityFilter==="stale")return quality.oldNotification;
     if(qualityFilter==="incomplete")return quality.incomplete||!quality.hasNotificationDate;
+    if(qualityFilter==="recovery")return candidateRecoveryGaps(item,quality).length>0;
     return true;
   };
   const visible=data.filter(item=>{
@@ -4949,6 +5019,11 @@ candidateSelectFilters.forEach(id=>$(id).addEventListener("change",renderCandida
 $("candidateResetFilters").addEventListener("click",()=>{
   [...candidateTextFilters,...candidateSelectFilters].forEach(id=>$(id).value="");
   renderCandidates();
+});
+$("candidateRecoveryShowAll").addEventListener("click",()=>{
+  $("candidateQualityFilter").value="recovery";
+  renderCandidates();
+  dashboardScroll("candidateList");
 });
 $("refreshCandidates").addEventListener("click",loadCandidates);
 
