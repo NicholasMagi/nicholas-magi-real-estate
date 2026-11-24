@@ -212,6 +212,12 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .call-task-contact .call-link{background:#edf0f5;color:var(--ink)}
 .call-task-contact .whatsapp-link{background:#eef5ef;color:#315c3d}
 .call-task-missing{font-size:11px;color:#9b6b34}
+.call-task-entry{margin-top:10px;border:1px solid var(--line);border-radius:9px;background:#fafbfc;overflow:hidden}
+.call-task-entry>summary{cursor:pointer;list-style:none;padding:10px 12px;color:#725b36;font-size:11px;font-weight:800}
+.call-task-entry>summary::-webkit-details-marker{display:none}
+.call-task-entry>summary::after{content:"＋";float:right}
+.call-task-entry[open]>summary::after{content:"−"}
+.call-task-entry[open]>.call-task-form{margin:0;padding:11px;border-top:1px solid #edf0f4}
 .call-task-form{display:grid;grid-template-columns:minmax(130px,1fr) minmax(150px,1fr) minmax(130px,.85fr) minmax(170px,1.3fr) auto;gap:8px;align-items:end;margin-top:11px;padding-top:10px;border-top:1px solid #edf0f4}
 .call-task-form label{margin:0 0 4px;font-size:10px}
 .call-task-form select,.call-task-form input,.call-task-form textarea{padding:9px 10px;font-size:11px;min-width:0;width:100%;border:1px solid #d9dfe8;border-radius:8px;font:inherit}
@@ -4911,12 +4917,18 @@ function renderCallCenter(){
     const noContact=!phone&&!email
       ?'<span class="call-task-missing">Nessun recapito riconosciuto: verifichi la scheda prima del contatto.</span>'
       :'';
+    const callFormSummary=entry.kind==="overdue"?"Registra il richiamo scaduto":
+      entry.kind==="today"?"Registra l’esito della chiamata di oggi":
+      entry.kind==="new"?"Registra il primo contatto":
+      item.stato_contatto==="appuntamento"?"Aggiorna l’appuntamento":
+      "Registra esito e prossimo passo";
     return '<article class="call-task call-task-'+entry.kind+'" data-call-task="'+safe(item.id)+'">'
       +'<div class="call-task-head"><div><div class="call-task-title">'+safe(item.titolo||"Immobile senza titolo")+'</div>'
       +'<div class="call-task-meta">'+safe([item.comune,item.tipologia_immobile,item.portale].filter(Boolean).join(" · "))+'<br>'+safe(euro(item.prezzo))+' · '+safe(item.tipo_venditore||"Venditore da verificare")+'<br>'+safe(last)+'<br>'+safe(nextContact)+'</div></div>'
       +'<div class="call-task-badges"><span class="call-task-status">'+safe(callQueueDateLabel(entry))+'</span><span class="call-task-priority" title="Punteggio di priorità commerciale, non probabilità di acquisizione">Priorità '+safe(entry.priority)+'/100</span></div></div>'
       +'<div class="call-task-contact">'+phone+whatsapp+email+noContact+'<button type="button" class="secondary" data-open-call-crm="'+safe(item.id)+'">Apri scheda CRM</button></div>'
       +'<div class="hint call-followup-advice"><strong>Prossima mossa · '+safe(followUpIntelligence(item,entry).title)+'</strong><br>'+safe(followUpIntelligence(item,entry).detail)+'</div>'
+      +'<details class="call-task-entry"><summary>'+safe(callFormSummary)+'</summary>'
       +'<div class="call-task-form">'
       +'<div><label>Stato commerciale</label><select data-call-status>'
       +'<option value="da_contattare"'+(item.stato_contatto==="da_contattare"||!item.stato_contatto?" selected":"")+'>Da contattare</option>'
@@ -4930,7 +4942,7 @@ function renderCallCenter(){
       +'<div><label data-call-followup-label>'+(item.stato_contatto==="appuntamento"?"Data appuntamento":"Prossimo richiamo")+'</label><input data-call-followup type="date" value="'+safe(item.prossimo_contatto_il||"")+'"></div>'
       +'<div class="call-task-note"><label>Note della conversazione</label><textarea data-call-note maxlength="5000" placeholder="Es. proprietario assente, richiama venerdì..."></textarea></div>'
       +'<button type="button" class="gold" data-save-call>Registra esito</button>'
-      +'</div></article>';
+      +'</div></details></article>';
   }).join("");
   box.querySelectorAll("[data-open-call-crm]").forEach(button=>button.addEventListener("click",()=>openCallCrm(button.dataset.openCallCrm)));
   box.querySelectorAll("[data-call-task]").forEach(card=>{
