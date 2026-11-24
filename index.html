@@ -2,7 +2,13 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101a2b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icon.svg">
 <title>Nicholas Magi | Real Estate</title>
 <style>
 :root{--navy:#101a2b;--gold:#c9a96e;--paper:#f5f6f8;--ink:#182235;--muted:#687386;--line:#e4e8ee}
@@ -340,6 +346,30 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .nmre-ai-typing{font-size:11px;color:#687386;padding:0 14px 8px}
 @media(max-width:560px){.nmre-ai-launcher{right:14px;bottom:14px;padding:11px 14px}.nmre-ai-panel{right:8px;bottom:72px;width:calc(100vw - 16px);height:min(650px,calc(100dvh - 90px))}}
 
+
+.nmre-unread-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;margin-left:5px;border-radius:20px;background:#c9a96e;color:#172033;font-size:10px}
+.nmre-notification-actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+.nmre-notification-actions button{font-size:12px}
+.nmre-notification-preferences{border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:14px}
+.nmre-notification-preferences h3,.nmre-notification-history-head h3{font-size:14px;margin:0 0 10px}
+.nmre-notification-option{display:flex;align-items:flex-start;gap:10px;padding:11px 2px;border-top:1px solid #edf0f4;margin:0;cursor:pointer}
+.nmre-notification-option input{width:18px;height:18px;flex:0 0 18px;margin:2px 0 0;accent-color:#101a2b}
+.nmre-notification-option span{display:grid;gap:3px}
+.nmre-notification-option strong{font-size:12px;color:var(--ink)}
+.nmre-notification-option small{font-size:11px;color:var(--muted);font-weight:400}
+.nmre-notification-history-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 8px}
+.nmre-notification-history-head button{font-size:11px;padding:8px 10px}
+.nmre-notification-list{display:grid;gap:8px}
+.nmre-notification-item{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.nmre-notification-item.is-unread{border-left:3px solid var(--gold);background:#fffdf8}
+.nmre-notification-copy{min-width:0}
+.nmre-notification-copy strong{display:block;font-size:12px}
+.nmre-notification-copy p{font-size:12px;color:#526075;margin:4px 0;overflow-wrap:anywhere}
+.nmre-notification-copy small{font-size:10px;color:var(--muted)}
+.nmre-notification-item-actions{flex:0 0 auto}
+.nmre-notification-item-actions button{font-size:10px;padding:7px 9px}
+@media(max-width:600px){.nmre-notification-item{flex-direction:column}.nmre-notification-item-actions{align-self:flex-end}}
+
 </style>
 </head>
 <body>
@@ -389,6 +419,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   <aside class="nmre-sidebar" aria-label="Navigazione gestionale">
     <div class="nmre-sidebar-title">MENU OPERATIVO</div>
     <button type="button" class="nmre-nav-link active" data-nmre-nav="dashboard">Panoramica</button>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="notificationsSection">Notifiche <span id="nmreUnreadBadge" class="nmre-unread-badge" hidden>0</span></button>
     <button type="button" class="nmre-nav-link" data-nmre-nav="nmreCrm">CRM · Contatti</button>
     <button type="button" class="nmre-nav-link" data-nmre-nav="candidateSection">Acquisizione</button>
     <button type="button" class="nmre-nav-link" data-nmre-nav="archiveSection">Archivio immobili</button>
@@ -398,6 +429,24 @@ button:disabled{opacity:.55;cursor:not-allowed}
     <div class="nmre-sidebar-note">Nicholas Magi<br>Real Estate</div>
   </aside>
   <div class="nmre-workspace-main">
+<section class="panel dash-section-anchor" id="notificationsSection">
+  <div class="topline"><div><div class="nmre-crm-kicker">CENTRO NOTIFICHE</div><h2>Avvisi e preferenze</h2><p class="hint">Scelga cosa ricevere. Le notifiche push possono arrivare anche quando NMRE è chiusa, dopo aver installato l’app sulla schermata Home e autorizzato gli avvisi.</p></div><span id="nmrePushState" class="pill">Push da configurare</span></div>
+  <div class="nmre-notification-actions"><button id="nmreEnablePush" class="gold" type="button">Attiva notifiche su questo iPhone</button><button id="nmreTestPush" class="secondary" type="button">Invia notifica di prova</button><button id="nmreDisablePush" class="secondary" type="button">Disattiva su questo dispositivo</button></div>
+  <div id="nmrePushHelp" class="status">Per iPhone: apra NMRE in Safari, scelga Condividi → Aggiungi alla schermata Home, poi apra l’icona installata e attivi le notifiche.</div>
+  <div class="nmre-notification-preferences"><h3>Quali notifiche desidera ricevere?</h3>
+    <label class="nmre-notification-option"><input type="checkbox" id="nmreNotifyNewOpportunities" checked><span><strong>Nuove opportunità</strong><small>Nuovi annunci candidati importati tramite Gmail</small></span></label>
+    <label class="nmre-notification-option"><input type="checkbox" id="nmreNotifyVerifiedPrivate" checked><span><strong>Privati verificati</strong><small>Un venditore privato viene confermato e archiviato</small></span></label>
+    <label class="nmre-notification-option"><input type="checkbox" id="nmreNotifyPriceDrops" checked><span><strong>Ribassi di prezzo</strong><small>Riduzioni di prezzo rilevate sugli annunci monitorati</small></span></label>
+    <label class="nmre-notification-option"><input type="checkbox" id="nmreNotifyNewContacts" checked><span><strong>Nuovi contatti</strong><small>Nuovi proprietari o contatti inseriti nel CRM</small></span></label>
+    <label class="nmre-notification-option"><input type="checkbox" id="nmreNotifyAppointments" checked><span><strong>Appuntamenti</strong><small>Nuovi appuntamenti registrati in agenda</small></span></label>
+    <label class="nmre-notification-option"><input type="checkbox" id="nmreNotifyCallbacks" checked><span><strong>Richiami</strong><small>Nuovi richiami programmati</small></span></label>
+    <label class="nmre-notification-option"><input type="checkbox" id="nmreNotifySyncIssues" checked><span><strong>Errori di sincronizzazione</strong><small>Problemi durante la raccolta automatica</small></span></label>
+    <div class="actions"><button id="nmreSaveNotificationPrefs" class="gold" type="button">Salva preferenze</button></div><div id="nmreNotificationPrefsMsg" class="status"></div>
+  </div>
+  <div class="nmre-notification-history-head"><h3>Notifiche recenti</h3><button id="nmreRefreshNotifications" class="secondary" type="button">Aggiorna</button></div>
+  <div id="nmreNotificationList" class="nmre-notification-list"><p class="hint">Caricamento notifiche…</p></div>
+</section>
+
 <section class="panel nmre-crm" id="nmreCrm">
   <div class="nmre-crm-head">
     <div><div class="nmre-crm-kicker">GESTIONALE</div><h2>CRM · Relazioni e portafoglio</h2><p class="hint">Contatti, immobili gestiti e attività in un unico spazio operativo.</p></div>
@@ -2627,6 +2676,8 @@ async function showApp(session){
   await loadSellerRegistry();
   await loadGmailSyncStatus();
   await loadMarketData();
+  await loadNotificationCenter();
+  registerNmreServiceWorker();
   checkInsightsApi();
   if(!candidateRefreshTimer){
     candidateRefreshTimer=setInterval(()=>{
