@@ -1487,7 +1487,8 @@ function isSubitoListingCandidate(row){
   if(!raw)return false;
   try{
     const parsed=new URL(raw);
-    const path=parsed.pathname.toLowerCase().replace(/\\/+$/,"")||"/";
+    let path=parsed.pathname.toLowerCase();
+    while(path.length>1&&path.endsWith("/"))path=path.slice(0,-1);
     const blocked=["/","/vendere","/subitopiu","/verify-email","/login","/register","/registrazione","/account","/search","/ricerca"];
     if(blocked.some(value=>path===value||path.startsWith(value+"/")))return false;
     return true;
