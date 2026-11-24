@@ -8,6 +8,9 @@ self.addEventListener("push",event=>{
     icon:"./icon.svg",
     badge:"./icon.svg",
     tag:data.notificationId||"nmre-update",
+    requireInteraction:true,
+    silent:false,
+    renotify:true,
     data:{url:data.url||"/"}
   }));
 });
