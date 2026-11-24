@@ -1231,21 +1231,46 @@ async function refreshNmreNotifications(){
 }
 async function enableNmrePush(){
  const help=$("nmrePushHelp");
+ const state=$("nmrePushState");
  try{
+  if(help)help.textContent="Avvio dell’attivazione delle notifiche…";
+  if(state)state.textContent="Configurazione in corso";
+  if(!currentUser||!supabase)throw new Error("Accesso a NMRE non disponibile. Acceda nuovamente all’app.");
   if(!("serviceWorker" in navigator)||!("PushManager" in window)||!("Notification" in window))throw new Error("Questo browser non supporta le notifiche push.");
-  if(/iPhone|iPad|iPod/.test(navigator.userAgent)&&!window.matchMedia("(display-mode: standalone)").matches&&!window.navigator.standalone)throw new Error("Su iPhone prima aggiunga NMRE alla schermata Home da Safari e apra l’icona installata.");
-  const permission=await Notification.requestPermission();if(permission!=="granted")throw new Error("Permesso notifiche non concesso.");
-  const reg=nmreServiceWorkerRegistration||await navigator.serviceWorker.ready;
+  if(/iPhone|iPad|iPod/.test(navigator.userAgent)&&!window.matchMedia("(display-mode: standalone)").matches&&!window.navigator.standalone)throw new Error("Su iPhone apra NMRE dall’icona installata sulla schermata Home.");
+  if(Notification.permission!=="granted"){
+   if(help)help.textContent="In attesa del permesso per inviare notifiche…";
+   const permission=await Notification.requestPermission();
+   if(permission!=="granted")throw new Error("Permesso notifiche non concesso. Controlli Impostazioni iPhone → Notifiche.");
+  }
+  if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
+  let reg=nmreServiceWorkerRegistration;
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js");
+  nmreServiceWorkerRegistration=reg;
+  await navigator.serviceWorker.ready;
+  reg=await navigator.serviceWorker.getRegistration("./")||reg;
+  if(!reg.pushManager)throw new Error("Il servizio notifiche non è disponibile. Chiuda e riapra NMRE dalla schermata Home.");
   const projectUrl=localStorage.getItem(URL_KEY);const apiKey=localStorage.getItem(API_KEY);
-  const response=await fetch(projectUrl+"/functions/v1/nmre-push-send",{headers:{apikey:apiKey}});const config=await response.json();
+  if(!projectUrl||!apiKey)throw new Error("Configurazione di collegamento a Supabase non trovata. Effettui nuovamente l’accesso.");
+  if(help)help.textContent="Verifica della chiave push sul server…";
+  const response=await fetch(projectUrl+"/functions/v1/nmre-push-send",{headers:{apikey:apiKey}});
+  const config=await response.json().catch(()=>({}));
   if(!response.ok||!config.publicKey)throw new Error(config.error||"Chiave pubblica push non configurata sul server.");
+  if(help)help.textContent="Registrazione del dispositivo presso Apple…";
   let subscription=await reg.pushManager.getSubscription();
   if(!subscription)subscription=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:nmreBase64UrlBytes(config.publicKey)});
   const value=subscription.toJSON();
+  if(!value.endpoint||!value.keys||!value.keys.p256dh||!value.keys.auth)throw new Error("Apple non ha restituito i dati completi per la registrazione push. Riprovi ad attivare le notifiche.");
+  if(help)help.textContent="Salvataggio del dispositivo nel Suo profilo NMRE…";
   const {error}=await supabase.from("nmre_push_subscriptions").upsert({owner_id:currentUser.id,endpoint:value.endpoint,p256dh:value.keys.p256dh,auth_secret:value.keys.auth,user_agent:navigator.userAgent,updated_at:new Date().toISOString()},{onConflict:"owner_id,endpoint"});
   if(error)throw error;
-  help.textContent="Dispositivo registrato. Può ricevere notifiche anche con NMRE chiusa.";await refreshNmrePushState();
- }catch(error){help.textContent=error.message||String(error);}
+  if(help)help.textContent="Dispositivo registrato correttamente. NMRE può inviarLe notifiche anche quando l’app è chiusa.";
+  await refreshNmrePushState();
+ }catch(error){
+  const message=error?.message||String(error);
+  if(help)help.textContent="Attivazione non completata: "+message;
+  if(state)state.textContent="Push non ancora attive";
+ }
 }
 async function disableNmrePush(){
  try{const reg=nmreServiceWorkerRegistration||await navigator.serviceWorker.ready;const sub=await reg.pushManager.getSubscription();if(sub){await supabase.from("nmre_push_subscriptions").delete().eq("owner_id",currentUser.id).eq("endpoint",sub.endpoint);await sub.unsubscribe();}await refreshNmrePushState();$("nmrePushHelp").textContent="Notifiche disattivate su questo dispositivo.";}
