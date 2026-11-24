@@ -4074,7 +4074,8 @@ function renderListings(){
       +'<label>Disponibilità a valutare una revisione del prezzo</label><select data-crm-field="prezzo_trattabile"><option value="da_verificare" '+((item.prezzo_trattabile||"da_verificare")==="da_verificare"?"selected":"")+'>Da verificare</option><option value="si" '+(item.prezzo_trattabile==="si"?"selected":"")+'>Sì</option><option value="parzialmente" '+(item.prezzo_trattabile==="parzialmente"?"selected":"")+'>In parte</option><option value="no" '+(item.prezzo_trattabile==="no"?"selected":"")+'>No</option></select>'
       +'<div class="actions"><button class="gold" data-save-crm>Salva scheda</button></div>'
       +'<hr><b>Registra una nuova interazione</b>'
-      +'<div class="row"><div><label>Tipo</label><select data-new-type><option value="telefonata">Telefonata</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="appuntamento">Appuntamento</option><option value="nota">Nota</option><option value="altro">Altro</option></select></div><div><label>Esito</label><input data-new-outcome maxlength="180" placeholder="Es. Non risponde, interessato..."></div></div>'
+      +'<div class="row"><div><label>Tipo</label><select data-new-type><option value="telefonata">Telefonata</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="appuntamento">Appuntamento</option><option value="nota">Nota</option><option value="altro">Altro</option></select></div><div><label>Esito sintetico</label><input data-new-outcome maxlength="180" placeholder="Es. Richiede informazioni, richiamare..."></div></div>'
+      +'<label>Esito commerciale strutturato</label><select data-new-outcome-code><option value="">Non classificato</option><option value="nessuna_risposta">Nessuna risposta</option><option value="parlato">Conversazione avvenuta</option><option value="richiamare">Richiamare</option><option value="interessato">Interessato</option><option value="appuntamento_fissato">Appuntamento fissato</option><option value="valutazione_fissata">Valutazione fissata</option><option value="valutazione_completata">Valutazione completata</option><option value="incarico_acquisito">Incarico acquisito</option><option value="non_interessato">Non interessato</option><option value="numero_errato">Numero errato</option><option value="altro">Altro</option></select>'
       +'<label>Dettagli</label><textarea data-new-note maxlength="5000" placeholder="Riassunto della conversazione"></textarea>'
       +'<label>Richiamare il</label><input type="date" data-new-followup>'
       +'<div class="actions"><button class="secondary" data-add-interaction>Registra interazione</button></div>'
@@ -4540,13 +4541,13 @@ async function saveCrm(id,details){
   msg("listMsg","Scheda CRM aggiornata.","success"); await loadListings();
 }
 async function addInteraction(id,details){
-  const tipo=details.querySelector("[data-new-type]").value, esito=details.querySelector("[data-new-outcome]").value.trim()||null, note=details.querySelector("[data-new-note]").value.trim()||null, followup=details.querySelector("[data-new-followup]").value||null;
-  const {error}=await supabase.from("annunci_interazioni").insert({owner_id:currentUser.id,annuncio_id:id,tipo,esito,note,prossimo_contatto_il:followup});
+  const tipo=details.querySelector("[data-new-type]").value, esito=details.querySelector("[data-new-outcome]").value.trim()||null, outcome_code=details.querySelector("[data-new-outcome-code]").value||null, note=details.querySelector("[data-new-note]").value.trim()||null, followup=details.querySelector("[data-new-followup]").value||null;
+  const {error}=await supabase.from("annunci_interazioni").insert({owner_id:currentUser.id,annuncio_id:id,tipo,esito,outcome_code,note,prossimo_contatto_il:followup});
   if(error){msg("listMsg","Registrazione interazione non riuscita: "+error.message,"error");return;}
   const update={ultimo_contatto_il:new Date().toISOString()}; if(followup)update.prossimo_contatto_il=followup;
   const {error:updateError}=await supabase.from("annunci").update(update).eq("id",id).eq("owner_id",currentUser.id);
   msg("listMsg",updateError?"Interazione registrata, ma promemoria non aggiornato.":"Interazione registrata nello storico.",updateError?"error":"success");
-  details.querySelector("[data-new-outcome]").value=""; details.querySelector("[data-new-note]").value=""; details.querySelector("[data-new-followup]").value="";
+  details.querySelector("[data-new-outcome]").value=""; details.querySelector("[data-new-outcome-code]").value=""; details.querySelector("[data-new-note]").value=""; details.querySelector("[data-new-followup]").value="";
   await loadInteractions(id,details); await loadListings();
 }
 async function deleteListing(id){
