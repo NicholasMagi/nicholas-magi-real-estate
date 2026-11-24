@@ -1067,6 +1067,34 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div id="gmailMsg" class="status">Gmail lavora in background. Gli annunci ambigui richiedono la Sua approvazione.</div>
 </section>
 
+<section class="panel" id="subitoSourcePanel">
+  <div class="topline">
+    <div><h2>Subito.it · Avvisi di ricerca</h2><p class="hint">NMRE riconosce gli avvisi immobiliari ricevuti nella casella Gmail già collegata. Non usa robot per navigare Subito, non estrae le pagine del portale e non invia messaggi agli inserzionisti.</p></div>
+    <span class="pill">Fonte email</span>
+  </div>
+  <div class="gmail-sync-monitor">
+    <div class="gmail-sync-monitor-top">
+      <div><strong id="subitoSourceStatus">Verifica della fonte Subito…</strong><div id="subitoSourceLast" class="gmail-sync-last-run">Lettura delle schede già ricevute da Gmail.</div></div>
+      <button class="secondary" id="refreshSubitoStatus" type="button">Aggiorna stato</button>
+    </div>
+    <div class="gmail-sync-grid">
+      <div class="gmail-sync-stat"><strong id="subitoSourceTotal">—</strong><span>Annunci Subito riconosciuti</span></div>
+      <div class="gmail-sync-stat"><strong id="subitoSourceReview">—</strong><span>Da verificare</span></div>
+      <div class="gmail-sync-stat"><strong id="subitoSourcePrivate">—</strong><span>Privati riconosciuti</span></div>
+    </div>
+    <div class="actions">
+      <button class="gold" id="openSubitoOpportunities" type="button">Apri opportunità Subito</button>
+      <a class="secondary" href="https://assistenza.subito.it/hc/it/articles/360002172138-Salvare-una-ricerca" target="_blank" rel="noopener noreferrer">Guida ufficiale: salvare una ricerca</a>
+      <a class="secondary" href="https://www.subito.it/" target="_blank" rel="noopener noreferrer">Apri Subito.it</a>
+    </div>
+  </div>
+  <div class="hint">
+    <strong>Ricerche consigliate da salvare su Subito:</strong>
+    vendita · residenziale · Ancona, Osimo, Castelfidardo, Loreto e Recanati. Attivi l'avviso via email per ogni ricerca e utilizzi la casella Gmail collegata a NMRE.
+  </div>
+  <p class="small">Subito invia le email per le ricerche salvate quando sono disponibili nuovi annunci. La classificazione del venditore resta prudenziale: un annuncio non viene considerato privato senza elementi sufficienti.</p>
+</section>
+
 <section class="panel">
 <div class="topline"><h2>Collegamenti API dei portali</h2><span class="pill">Fonti ufficiali</span></div>
 <p class="hint">Oltre agli avvisi Gmail, NMRE può interrogare le API dei portali che rilasciano accessi professionali. Le credenziali restano sul server Supabase e non vengono salvate nel browser.</p>
@@ -1454,6 +1482,47 @@ async function loadSellerRegistry(){
   renderSellerRegistry();
 }
 
+function isSubitoListingCandidate(row){
+  const raw=String(row.url||row.url_originale||"").trim();
+  if(!raw)return false;
+  try{
+    const parsed=new URL(raw);
+    const path=parsed.pathname.toLowerCase().replace(/\\/+$/,"")||"/";
+    const blocked=["/","/vendere","/subitopiu","/verify-email","/login","/register","/registrazione","/account","/search","/ricerca"];
+    if(blocked.some(value=>path===value||path.startsWith(value+"/")))return false;
+    return true;
+  }catch{return false;}
+}
+async function loadSubitoSourceStatus(){
+  if(!currentUser||!supabase)return;
+  const status=$("subitoSourceStatus");
+  const last=$("subitoSourceLast");
+  if(!status||!last)return;
+  const {data,error}=await supabase.from("annunci_candidati")
+    .select("id,tipo_venditore,stato,url,url_originale,created_at")
+    .ilike("portale","%subito%")
+    .order("created_at",{ascending:false})
+    .limit(200);
+  if(error){
+    status.textContent="Stato Subito non disponibile";
+    last.textContent=error.message||"Errore di lettura.";
+    return;
+  }
+  const records=(data||[]).filter(isSubitoListingCandidate);
+  const active=records.filter(row=>row.stato!=="scartato");
+  const review=active.filter(row=>row.stato==="da_verificare"&&row.tipo_venditore!=="Agenzia").length;
+  const privates=active.filter(row=>row.tipo_venditore==="Privato").length;
+  $("subitoSourceTotal").textContent=String(active.length);
+  $("subitoSourceReview").textContent=String(review);
+  $("subitoSourcePrivate").textContent=String(privates);
+  const latest=active[0];
+  status.textContent=active.length
+    ?"Fonte Subito collegata · "+active.length+" annunci rilevati"
+    :"In attesa del primo avviso immobiliare Subito";
+  last.textContent=latest
+    ?"Ultima scheda riconosciuta: "+new Intl.DateTimeFormat("it-IT",{dateStyle:"medium",timeStyle:"short"}).format(new Date(latest.created_at))
+    :"Nessun annuncio immobiliare Subito valido trovato nello storico. Le email di benvenuto e le email promozionali vengono escluse.";
+}
 async function loadGmailSyncStatus(){
   if(!currentUser||!supabase)return;
   const title=$("gmailSyncTitle");
@@ -2319,6 +2388,12 @@ $("dashboardRefresh").addEventListener("click",async()=>{
     button.textContent="Aggiorna dati";
   }
 });
+$("refreshSubitoStatus").addEventListener("click",loadSubitoSourceStatus);
+$("openSubitoOpportunities").addEventListener("click",()=>{
+  ["candidatePortalFilter","candidateSearch","candidateSellerFilter","candidateQualityFilter"].forEach(id=>{const field=$(id);if(field)field.value="";});
+  renderCandidates();
+  dashboardScroll("candidateSection");
+});
 $("refreshGmailSyncStatus").addEventListener("click",async()=>{
   const button=$("refreshGmailSyncStatus");
   button.disabled=true;
@@ -3100,6 +3175,7 @@ async function showApp(session){
   await loadCandidates();
   await loadSellerRegistry();
   await loadGmailSyncStatus();
+  await loadSubitoSourceStatus();
   await loadMarketData();
   await loadNotificationCenter();
   registerNmreServiceWorker();
@@ -3113,6 +3189,7 @@ async function showApp(session){
       if(currentUser && document.visibilityState==="visible"){
         loadCandidates();
         loadGmailSyncStatus();
+        loadSubitoSourceStatus();
       }
     },60*1000);
   }
