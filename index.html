@@ -636,6 +636,13 @@ button:disabled{opacity:.55;cursor:not-allowed}
         <option value="plan">Da pianificare</option>
         <option value="stale">Da riprendere · oltre 7 giorni</option>
       </select>
+      <select id="callWhatsappTemplate" aria-label="Modello del messaggio WhatsApp">
+        <option value="auto">WhatsApp · automatico per stato</option>
+        <option value="first">WhatsApp · primo contatto</option>
+        <option value="followup">WhatsApp · ricontatto</option>
+        <option value="valuation">WhatsApp · proposta valutazione</option>
+        <option value="appointment">WhatsApp · conferma appuntamento</option>
+      </select>
     </div>
     <div id="callQueueList" class="call-queue"><div class="call-center-empty">La lista apparirà dopo il caricamento dell'archivio.</div></div>
     <p class="call-center-foot">La lista usa soltanto i recapiti già presenti nell'archivio. La chiamata o il messaggio partono solo quando seleziona il relativo collegamento; nessun contatto viene inviato automaticamente.</p>
@@ -2074,6 +2081,7 @@ $("dashboard").querySelectorAll("[data-dashboard-action]").forEach(button=>{
 });
 $("dashboardMarketAnalysis").addEventListener("click",()=>dashboardScroll("marketAnalysisSection"));
 $("callQueueFilter").addEventListener("change",renderCallCenter);
+$("callWhatsappTemplate").addEventListener("change",renderCallCenter);
 $("callCenterOpenArchive").addEventListener("click",()=>dashboardScroll("archiveSection"));
 $("dashOpenArchive").addEventListener("click",()=>dashboardScroll("archiveSection"));
 $("dashOpenCandidates").addEventListener("click",()=>dashboardScroll("candidateSection"));
@@ -4711,7 +4719,7 @@ function followUpIntelligence(item,entry){
   channel:"Contatto"
  };
 }
-function buildWhatsappMessage(item){
+function buildWhatsappMessage(item,templateMode="auto"){
  const title=String(item?.titolo||"l'immobile").trim();
  const town=String(item?.comune||"").trim();
  const portal=String(item?.portale||"").trim();
@@ -4720,9 +4728,13 @@ function buildWhatsappMessage(item){
  const status=item?.stato_contatto||"da_contattare";
  const date=item?.prossimo_contatto_il?new Date(item.prossimo_contatto_il+"T00:00:00"):null;
  const dateLabel=date&&!Number.isNaN(date.getTime())?date.toLocaleDateString("it-IT"):"";
- if(status==="appuntamento")return "Buongiorno, sono Nicholas Magi. Le scrivo per confermare il nostro appuntamento relativo a "+property+(dateLabel?" previsto per il "+dateLabel:"")+". Mi conferma cortesemente che sia tutto confermato? La ringrazio e Le auguro una buona giornata.";
- if(status==="interessato")return "Buongiorno, sono Nicholas Magi, consulente immobiliare. La ricontatto in merito a "+property+". Come anticipato, mi farebbe piacere approfondire la situazione e illustrarLe un possibile percorso di vendita. Possiamo concordare un breve incontro? La ringrazio.";
- if(status==="primo_contatto")return "Buongiorno, sono Nicholas Magi, consulente immobiliare. La ricontatto in merito al nostro precedente contatto relativo a "+property+". Se per Lei è ancora attuale, possiamo sentirci "+(dateLabel?"il "+dateLabel:"nei prossimi giorni") +" per aggiornarci sulla vendita. La ringrazio.";
+ const mode=templateMode==="auto"?(
+  status==="appuntamento"?"appointment":
+  status==="interessato"||status==="primo_contatto"?"followup":"first"
+ ):templateMode;
+ if(mode==="appointment")return "Buongiorno, sono Nicholas Magi. Le scrivo per confermare il nostro appuntamento relativo a "+property+(dateLabel?" previsto per il "+dateLabel:"")+". Mi conferma cortesemente che l'orario concordato sia ancora comodo? La ringrazio e Le auguro una buona giornata.";
+ if(mode==="valuation")return "Buongiorno, sono Nicholas Magi, consulente immobiliare. In merito a "+property+", se lo desidera posso preparare una prima analisi del valore di mercato, sulla base delle caratteristiche dell'immobile e dei recenti riferimenti della zona. Sarebbe disponibile per una breve telefonata conoscitiva? La ringrazio.";
+ if(mode==="followup")return "Buongiorno, sono Nicholas Magi, consulente immobiliare. La ricontatto in merito a "+property+". Vorrei sapere se la vendita è ancora attuale e se ci sono stati aggiornamenti rispetto alla nostra precedente conversazione. Se Le fa piacere, possiamo concordare un breve confronto. La ringrazio.";
  return "Buongiorno, sono Nicholas Magi, consulente immobiliare. La contatto per il Suo annuncio relativo a "+property+source+". Vorrei chiederLe qualche informazione e capire se posso esserLe utile nella vendita. Quando Le sarebbe più comodo sentirci? La ringrazio e Le auguro una buona giornata.";
 }
 
@@ -4740,6 +4752,7 @@ function renderCallCenter(){
     ?all.filter(entry=>entry.item.stato_contatto==="appuntamento")
     :all.filter(entry=>entry.kind===filter);
   $("callQueueCount").textContent=visible.length+" attività visualizzate · "+all.length+" attività da gestire";
+  const whatsappTemplate=$("callWhatsappTemplate")?.value||"auto";
   const box=$("callQueueList");
   if(!visible.length){
     const message=all.length
@@ -4761,7 +4774,7 @@ function renderCallCenter(){
       ?'<a class="call-link" href="tel:'+safe(contact.phone.tel)+'">Chiama '+safe(contact.phone.raw)+'</a>'
       :'';
     const whatsapp=contact.phone?.whatsapp
-      ?'<a class="whatsapp-link" href="'+safe("https://wa.me/"+contact.phone.whatsapp+"?text="+encodeURIComponent(buildWhatsappMessage(item)))+'" target="_blank" rel="noopener noreferrer" aria-label="Prepara un messaggio WhatsApp per '+safe(item.titolo||"questo annuncio")+'">WhatsApp · messaggio pronto</a>'
+      ?'<a class="whatsapp-link" href="'+safe("https://wa.me/"+contact.phone.whatsapp+"?text="+encodeURIComponent(buildWhatsappMessage(item,whatsappTemplate)))+'" target="_blank" rel="noopener noreferrer" aria-label="Prepara un messaggio WhatsApp per '+safe(item.titolo||"questo annuncio")+'">WhatsApp · messaggio pronto</a>'
       :'';
     const email=contact.email
       ?'<a class="call-link" href="mailto:'+safe(contact.email)+'">Email</a>'
