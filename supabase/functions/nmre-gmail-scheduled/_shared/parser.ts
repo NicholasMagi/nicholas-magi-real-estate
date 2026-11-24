@@ -301,6 +301,36 @@ export function sellerClassification(value:string):SellerClassification {
   return sellerClassificationDetails(value).classification;
 }
 
+export function extractAdditionalPropertyDetails(value:string):Record<string,unknown> {
+  const text=normalizePropertyText(value);
+  const result:Record<string,unknown>={};
+  const address=text.match(/\b(?:via|viale|v\.le|piazza|p\.zza|corso|c\.so|vicolo|vico|strada|contrada|località|loc\.)\s+[^,;|]{2,70}/i);
+  if(address) result.indirizzo_rilevato=address[0].trim().slice(0,100);
+  const floor=text.match(/\b(?:piano\s+(?:terra|rialzato|ammezzato|primo|secondo|terzo|quarto|quinto|ultimo|[0-9]{1,2}°?)|[0-9]{1,2}°\s+piano)\b/i);
+  if(floor) result.piano=floor[0].trim();
+  const energy=text.match(/\bclasse energetica\s*[:\-]?\s*(A4|A3|A2|A1|A|B|C|D|E|F|G)\b/i);
+  if(energy) result.classe_energetica=energy[1].toUpperCase();
+  const year=text.match(/\b(?:anno\s+(?:di\s+)?costruzione|costruito\s+nel|edificato\s+nel)\s*[:\-]?\s*((?:19|20)\d{2})\b/i);
+  if(year) result.anno_costruzione=Number(year[1]);
+  const heating=text.match(/\briscaldamento\s*[:\-]?\s*(autonomo|centralizzato|a\s+pavimento|pompa\s+di\s+calore|assente)\b/i);
+  if(heating) result.riscaldamento=heating[1].toLocaleLowerCase("it");
+  const condition=text.match(/\b(da\s+ristrutturare|ristrutturato(?:\s+(?:a\s+nuovo|recentemente))?|ottimo\s+stato|buono\s+stato|abitabile|nuova\s+costruzione|in\s+costruzione)\b/i);
+  if(condition) result.stato_immobile=condition[1].toLocaleLowerCase("it");
+  if(/\b(?:con\s+ascensore|ascensore\s+presente)\b/i.test(text)) result.ascensore=true;
+  else if(/\b(?:senza\s+ascensore|ascensore\s+assente)\b/i.test(text)) result.ascensore=false;
+  const extras:string[]=[];
+  const patterns:Array<[string,RegExp]>=[
+    ["balcone",/\bbalconi?\b/i],["terrazzo",/\bterrazzi?\b/i],
+    ["giardino",/\bgiardino\b/i],["garage",/\bgarage\b/i],
+    ["posto auto",/\bposto\s+auto\b/i],["cantina",/\bcantina\b/i]
+  ];
+  for(const [label,pattern] of patterns) if(pattern.test(text)) extras.push(label);
+  if(extras.length) result.dotazioni_rilevate=extras;
+  if(/\b(?:arredat[oa]|completamente\s+arredat[oa])\b/i.test(text)) result.arredamento="arredato";
+  else if(/\bnon\s+arredat[oa]\b/i.test(text)) result.arredamento="non arredato";
+  return result;
+}
+
 
 /**
  * Stable key for a verified portal listing.
