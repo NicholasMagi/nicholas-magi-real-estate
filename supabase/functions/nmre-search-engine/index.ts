@@ -116,6 +116,7 @@ Deno.serve(async (req: Request) => {
         owner_id: userData.user.id,
         titolo: titolo.slice(0, 250),
         comune: comune.slice(0, 150),
+        indirizzo: optionalText(body.indirizzo)?.slice(0, 220) ?? null,
         prezzo,
         contatto: optionalText(body.contatto),
         tipo_venditore: optionalText(body.tipo_venditore) ?? "Da verificare",
