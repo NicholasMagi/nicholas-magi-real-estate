@@ -94,7 +94,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .gmail-sync-details{margin-top:10px;font-size:11px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
 @media(max-width:650px){.gmail-sync-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
-.candidate{border-top:1px solid var(--line);padding:14px 0}.candidate input{margin:5px 0}.candidate-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.candidate-priority{display:flex;align-items:center;gap:12px;padding:10px 12px;margin:10px 0;border:1px solid #e5e9ef;border-radius:10px;background:#f8f9fb}.candidate-priority-score{min-width:54px;text-align:center;color:#26364d}.candidate-priority-score strong{font-family:Georgia,serif;font-size:25px;line-height:1}.candidate-priority-score span{font-size:10px;color:var(--muted);margin-left:2px}.candidate-priority-info{display:grid;gap:3px;min-width:0}.candidate-priority-info strong{font-size:12px;color:#35435a}.candidate-priority-info>span{font-size:11px;color:#58667a}.candidate-priority-info small{font-size:10px;line-height:1.45;color:#7b8797}.candidate-priority-high{border-left:4px solid #b8955b}.candidate-priority-medium{border-left:4px solid #7890ad}.candidate-priority-low{border-left:4px solid #b9c1cc}.candidate-priority-summary{font-size:11px;color:var(--muted);margin:8px 0}.candidate-priority-legend{font-size:11px;color:var(--muted);line-height:1.5;margin:8px 0 12px}.candidate-source-details{margin-top:10px}.candidate-source-original{margin-top:10px}.candidate-source-original pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;font:inherit;font-size:12px;line-height:1.5;padding:10px;border-radius:8px;background:var(--panel,#f5f5f5)}
+.candidate{border-top:1px solid var(--line);padding:14px 0}.candidate input{margin:5px 0}.candidate-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.candidate-quick-summary{margin:9px 0 12px}.candidate-quick-summary h3{font-size:15px;line-height:1.4;margin:8px 0 4px;color:var(--ink)}.candidate-quick-facts{font-size:11px;line-height:1.5;color:var(--muted);margin:0}.candidate-quick-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.candidate-quick-tag{display:inline-flex;align-items:center;border-radius:20px;padding:4px 8px;background:#f1f3f6;color:#526075;font-size:10px;font-weight:700}.candidate-quick-tag-price{background:#f5faf6;color:#315b3d}.candidate-detail-panel{border:1px solid var(--line);border-radius:10px;background:#fff;margin:10px 0;overflow:hidden}.candidate-detail-panel>summary{cursor:pointer;list-style:none;padding:11px 12px;color:#725b36;font-size:11px;font-weight:800}.candidate-detail-panel>summary::-webkit-details-marker{display:none}.candidate-detail-panel>summary::after{content:"＋";float:right}.candidate-detail-panel[open]>summary::after{content:"−"}.candidate-detail-content{padding:0 12px 12px;border-top:1px solid #edf0f4}.candidate-actions-primary{align-items:center}.candidate-actions-primary .gold{min-width:180px}.candidate-detail-actions{padding-top:6px;border-top:1px solid #edf0f4}.candidate-priority{display:flex;align-items:center;gap:12px;padding:10px 12px;margin:10px 0;border:1px solid #e5e9ef;border-radius:10px;background:#f8f9fb}.candidate-priority-score{min-width:54px;text-align:center;color:#26364d}.candidate-priority-score strong{font-family:Georgia,serif;font-size:25px;line-height:1}.candidate-priority-score span{font-size:10px;color:var(--muted);margin-left:2px}.candidate-priority-info{display:grid;gap:3px;min-width:0}.candidate-priority-info strong{font-size:12px;color:#35435a}.candidate-priority-info>span{font-size:11px;color:#58667a}.candidate-priority-info small{font-size:10px;line-height:1.45;color:#7b8797}.candidate-priority-high{border-left:4px solid #b8955b}.candidate-priority-medium{border-left:4px solid #7890ad}.candidate-priority-low{border-left:4px solid #b9c1cc}.candidate-priority-summary{font-size:11px;color:var(--muted);margin:8px 0}.candidate-priority-legend{font-size:11px;color:var(--muted);line-height:1.5;margin:8px 0 12px}.candidate-source-details{margin-top:10px}.candidate-source-original{margin-top:10px}.candidate-source-original pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;font:inherit;font-size:12px;line-height:1.5;padding:10px;border-radius:8px;background:var(--panel,#f5f5f5)}
 .candidate-quality{padding:10px 12px;margin:10px 0;border:1px solid #e4e8ee;border-radius:9px;background:#fafbfc;font-size:11px;line-height:1.55;color:#526075}.candidate-quality strong{color:#35435a}.candidate-quality-warning{border-left:4px solid #bd8950;background:#fffaf2}.candidate-quality-review{border-left:4px solid #8194ad}.candidate-quality-ok{border-left:4px solid #8eaa98;background:#f8fbf8}.candidate-link-warning{font-size:11px;color:#9a642f;font-weight:700;align-self:center}.candidate-price-drop{border-left:4px solid #4c8a62;background:#f5faf6;color:#315b3d}.candidate-price-drop strong{color:#285638}
 
 .candidate-enrichment-result{margin-top:8px}.candidate-enrichment-result .candidate-quality{margin:8px 0}.candidate-enrichment-result .crm-entry{display:flex;justify-content:space-between;gap:12px}.candidate-enrichment-result .crm-entry strong{flex:0 0 115px}.candidate-enrichment-result .crm-entry span{text-align:right;overflow-wrap:anywhere}.candidate-enrichment-result .hint{margin:8px 0}
@@ -4143,15 +4143,38 @@ function renderCandidates(){
       +'<div class="candidate-analysis-item"><span>Qualità dei dati</span><strong>'+quality.qualityScore+'/100 · '+safe(qualityLabel)+'</strong></div>'
       +'<div class="candidate-analysis-item"><span>Prezzo richiesto al m²</span><strong>'+safe(pricePerSqmText)+'</strong><small>Indicatore descrittivo, non stima del valore di mercato</small></div>'
       +'</div>';
+    const quickFacts=[
+      c.comune||"Comune da verificare",
+      Number(c.prezzo)>0?formatCurrency(c.prezzo):"Prezzo da verificare",
+      c.tipologia_immobile||null,
+      Number(c.superficie_mq)>0?Number(c.superficie_mq).toLocaleString("it-IT")+" m²":null,
+      Number(c.locali)>0?Number(c.locali).toLocaleString("it-IT")+" locali":null
+    ].filter(Boolean).join(" · ");
+    const quickTags=[
+      '<span class="candidate-quick-tag">Qualità dati '+quality.qualityScore+'/100</span>',
+      latestPriceDrop?'<span class="candidate-quick-tag candidate-quick-tag-price">Ribasso documentato</span>':""
+    ].filter(Boolean).join("");
+    const verifyAction=isPrivate
+      ?'<button class="gold" type="button" data-confirm="'+safe(c.id)+'">Inserisci nell’archivio</button>'
+      :'<button class="gold" type="button" data-open-candidate-details="'+safe(c.id)+'">Verifica venditore</button>';
     return '<article class="candidate" data-candidate="'+safe(c.id)+'" data-url="'+safe(c.url||"")+'" data-url-originale="'+safe(c.url_originale||"")+'" data-portal="'+safe(c.portale||"Portale non indicato")+'">'
       +'<div class="candidate-priority candidate-priority-'+priority.level+'" aria-label="Priorità commerciale '+priority.score+' su 100">'
       +'<div class="candidate-priority-score"><strong>'+priority.score+'</strong><span>/100</span></div>'
       +'<div class="candidate-priority-info"><strong>Priorità acquisizione '+safe(priority.label)+'</strong><span>'+safe(priority.description)+'</span><small>'+safe(priority.reasons.join(" · "))+'</small></div>'
       +'</div>'
+      +'<div class="candidate-quick-summary">'
+      +'<div class="topline"><span class="meta">'+safe(c.portale||"Portale non indicato")+' · Email ricevuta: '+safe(notificationDate)+'</span><span class="pill">'+(isPrivate?"Privato riconosciuto":c.tipo_venditore==="Agenzia"?"Agenzia riconosciuta":"Venditore da verificare")+'</span></div>'
+      +'<h3>'+safe(c.titolo||"Annuncio immobiliare")+'</h3>'
+      +'<p class="candidate-quick-facts">'+safe(quickFacts||"Caratteristiche dell’immobile da completare")+'</p>'
+      +'<div class="candidate-quick-tags">'+quickTags+'</div>'
+      +'</div>'
+      +'<div class="candidate-actions candidate-actions-primary">'+verifyAction+linkHtml+'</div>'
+      +'<details class="candidate-detail-panel" data-candidate-details>'
+      +'<summary>Dettagli, verifica e modifica della scheda</summary>'
+      +'<div class="candidate-detail-content">'
       +analysisHtml
       +priceDropHtml
       +qualityHtml
-      +'<div class="topline"><span class="meta">'+safe(c.portale||"Portale non indicato")+' · Email ricevuta: '+safe(notificationDate)+'</span><span class="pill">'+(isPrivate?"Privato riconosciuto":c.tipo_venditore==="Agenzia"?"Agenzia riconosciuta":"Venditore da verificare")+'</span></div>'
       +'<div class="candidate-quality"><strong>Riconoscimento venditore:</strong> '+safe(c.seller_evidence||"Nessuna prova automatica disponibile")+' · '+(Number(c.seller_confidence)>0?Number(c.seller_confidence)+"% di confidenza":"Confidenza non determinabile")+(c.seller_manual_override?" · Verifica manuale":"")+'</div>'
       +historyHtml
       +renderSourceDetails(c)
@@ -4166,10 +4189,20 @@ function renderCandidates(){
       +'<div><label>Telefono / email diretto del venditore (facoltativo)</label><input data-field="contatto" value="'+safe(c.contatto||"")+'" placeholder="Inserisca solo un recapito verificato sull\'annuncio"></div></div>'
       +'<div><label>Nome del proprietario o ragione sociale dell\'agenzia (facoltativo)</label><input data-field="seller_identity" value="'+safe(c.seller_identity||"")+'" placeholder="Es. Mario Rossi oppure Agenzia XYZ"></div>'
       +'<div class="row"><div><label>Verifica tipo venditore</label><select data-field="venditore"><option value="Da verificare" '+(c.tipo_venditore==="Da verificare"?"selected":"")+'>Da verificare</option><option value="Privato" '+(c.tipo_venditore==="Privato"?"selected":"")+'>Privato</option><option value="Agenzia" '+(c.tipo_venditore==="Agenzia"?"selected":"")+'>Agente / Agenzia</option></select></div></div>'
-      +'<div class="candidate-actions"><button class="secondary" type="button" data-enrich="'+safe(c.id)+'">Analizza pagina originale</button><button class="secondary" data-save-seller="'+safe(c.id)+'">Salva verifica venditore</button><button class="gold" data-confirm="'+safe(c.id)+'">'+(isPrivate?"Inserisci nell\'archivio":"Accetta come privato e inserisci")+'</button><button class="danger" data-discard="'+safe(c.id)+'">Scarta</button>'+linkHtml+'</div><div class="candidate-enrichment-result" data-enrichment-result="'+safe(c.id)+'"></div>'
+      +'<div class="candidate-actions candidate-detail-actions"><button class="secondary" type="button" data-enrich="'+safe(c.id)+'">Analizza pagina originale</button><button class="secondary" type="button" data-save-seller="'+safe(c.id)+'">Salva verifica venditore</button><button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta</button></div>'
+      +'<div class="candidate-enrichment-result" data-enrichment-result="'+safe(c.id)+'"></div>'
+      +'</div></details>'
       +'</article>';
   }).join("");
   box.querySelectorAll("[data-confirm]").forEach(btn=>btn.addEventListener("click",()=>confirmCandidate(btn.dataset.confirm,btn)));
+  box.querySelectorAll("[data-open-candidate-details]").forEach(btn=>btn.addEventListener("click",()=>{
+    const card=btn.closest("[data-candidate]");
+    const details=card?.querySelector("[data-candidate-details]");
+    if(details)details.open=true;
+    const seller=card?.querySelector('[data-field="venditore"]');
+    seller?.scrollIntoView({behavior:"smooth",block:"center"});
+    seller?.focus({preventScroll:true});
+  }));
   box.querySelectorAll("[data-save-seller]").forEach(btn=>btn.addEventListener("click",()=>saveCandidateSeller(btn.dataset.saveSeller,btn)));
   box.querySelectorAll("[data-enrich]").forEach(btn=>btn.addEventListener("click",()=>analyzeCandidatePage(btn.dataset.enrich,btn)));
   box.querySelectorAll("[data-discard]").forEach(btn=>btn.addEventListener("click",()=>discardCandidate(btn.dataset.discard,btn)));
