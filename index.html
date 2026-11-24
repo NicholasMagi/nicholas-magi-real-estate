@@ -197,6 +197,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .call-task-title{font-size:13px;font-weight:700;color:var(--ink);line-height:1.4}
 .call-task-meta{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.55}
 .call-task-status{font-size:10px;font-weight:700;color:#536176;background:#f0f3f6;padding:5px 8px;border-radius:20px;white-space:nowrap}
+.call-task-badges{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}.call-task-priority{font-size:10px;font-weight:700;color:#43566b;background:#eaf0f5;padding:5px 8px;border-radius:20px;white-space:nowrap}
 .call-task-contact{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px}
 .call-task-contact a,.call-task-contact button{font-size:11px;padding:8px 10px;text-decoration:none;border-radius:8px}
 .call-task-contact .call-link{background:#edf0f5;color:var(--ink)}
@@ -613,7 +614,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 
   <section class="dash-card call-center" id="callCenter" aria-label="Centro operativo telefonate">
     <div class="dash-card-head">
-      <div><h2>Centro operativo telefonate</h2><div class="dash-card-sub">Prima i richiami scaduti, poi quelli di oggi e i nuovi proprietari da contattare</div></div>
+      <div><h2>Centro operativo telefonate</h2><div class="dash-card-sub">Urgenza dei richiami prima; a parità di urgenza, priorità commerciale più alta</div></div>
       <button class="dash-link" id="callCenterOpenArchive">Apri archivio CRM</button>
     </div>
     <div class="call-center-metrics">
@@ -4649,11 +4650,18 @@ function callQueueModel(data,now=new Date()){
     const days=due?Math.round((due-today)/86400000):null;
     const lastContact=item.ultimo_contatto_il?Date.parse(item.ultimo_contatto_il):NaN;
     const daysSinceContact=Number.isFinite(lastContact)?Math.max(0,Math.floor((today.getTime()-new Date(lastContact).setHours(0,0,0,0))/86400000)):null;
-    return {item,kind,sort,days,daysSinceContact,contact};
+    const priority=candidatePriority(item).score;
+    return {item,kind,sort,days,daysSinceContact,contact,priority};
   }).filter(Boolean).sort((a,b)=>{
     if(a.sort!==b.sort)return a.sort-b.sort;
     if(a.kind==="overdue"&&a.days!==b.days)return a.days-b.days;
     if(a.kind==="upcoming"&&a.days!==b.days)return a.days-b.days;
+    if(a.kind==="appointment"){
+      const aDue=String(a.item.prossimo_contatto_il||"9999-12-31");
+      const bDue=String(b.item.prossimo_contatto_il||"9999-12-31");
+      if(aDue!==bDue)return aDue.localeCompare(bDue);
+    }
+    if(a.priority!==b.priority)return b.priority-a.priority;
     const aDate=a.item.created_at?Date.parse(a.item.created_at):0;
     const bDate=b.item.created_at?Date.parse(b.item.created_at):0;
     return aDate-bDate;
@@ -4785,7 +4793,7 @@ function renderCallCenter(){
     return '<article class="call-task call-task-'+entry.kind+'" data-call-task="'+safe(item.id)+'">'
       +'<div class="call-task-head"><div><div class="call-task-title">'+safe(item.titolo||"Immobile senza titolo")+'</div>'
       +'<div class="call-task-meta">'+safe([item.comune,item.tipologia_immobile,item.portale].filter(Boolean).join(" · "))+'<br>'+safe(euro(item.prezzo))+' · '+safe(item.tipo_venditore||"Venditore da verificare")+'<br>'+safe(last)+'<br>'+safe(nextContact)+'</div></div>'
-      +'<span class="call-task-status">'+safe(callQueueDateLabel(entry))+'</span></div>'
+      +'<div class="call-task-badges"><span class="call-task-status">'+safe(callQueueDateLabel(entry))+'</span><span class="call-task-priority" title="Punteggio di priorità commerciale, non probabilità di acquisizione">Priorità '+safe(entry.priority)+'/100</span></div></div>'
       +'<div class="call-task-contact">'+phone+whatsapp+email+noContact+'<button type="button" class="secondary" data-open-call-crm="'+safe(item.id)+'">Apri scheda CRM</button></div>'
       +'<div class="hint call-followup-advice"><strong>Prossima mossa · '+safe(followUpIntelligence(item,entry).title)+'</strong><br>'+safe(followUpIntelligence(item,entry).detail)+'</div>'
       +'<div class="call-task-form">'
