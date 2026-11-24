@@ -1,7 +1,7 @@
 import {
   municipality,price,listingPrice,listingUrl,propertyEmail,listingTitle,propertyType,
   surface,rooms,bedrooms,bathrooms,resolveListingUrl,sellerClassificationDetails,canonicalListingKey,
-  priceReduction
+  priceReduction,extractAdditionalPropertyDetails
 } from "./_shared/parser.ts";
 import { collectHistoryMessageIds } from "./_shared/history.ts";
 import { withSupabase } from "npm:@supabase/server@^1";
@@ -15,8 +15,13 @@ function b64(bytes: Uint8Array): string {
   return btoa(value);
 }
 
-function unb64(value: string): Uint8Array {
-  return Uint8Array.from(atob(value), character => character.charCodeAt(0));
+function unb64(value: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
 }
 
 async function encryptionKey(secret: string): Promise<CryptoKey> {
@@ -270,7 +275,7 @@ async function readEmail(messageId: string, token: string): Promise<any | null> 
     subject: get("Subject"),
     date: get("Date"),
     snippet: (email.snippet || "").slice(0, 500),
-    bodyText: bodyParts(email.payload).join("\n").slice(0, 8000)
+    bodyText: bodyParts(email.payload).join("\n").slice(0, 30000)
   };
 }
 
@@ -360,6 +365,60 @@ function classifySellerWithRegistry(
   return registered;
 }
 
+
+async function ensureGmailWatch(
+  token: string,
+  admin: any
+): Promise<{ configured: boolean; active: boolean; expiration: string | null }> {
+  const topicName = Deno.env.get("GMAIL_PUBSUB_TOPIC_NAME");
+  if (!topicName) return { configured: false, active: false, expiration: null };
+  if (!/^projects\/[A-Za-z0-9:._-]+\/topics\/[A-Za-z0-9._~-]+$/.test(topicName)) {
+    console.error("GMAIL_PUBSUB_TOPIC_NAME non ha un formato valido");
+    return { configured: true, active: false, expiration: null };
+  }
+
+  try {
+    const { data: stateRows, error: stateError } = await admin.rpc("nmre_get_gmail_push_watch_state");
+    if (stateError) throw new Error("Lettura stato Gmail Watch non riuscita");
+    const state = Array.isArray(stateRows) ? stateRows[0] : stateRows;
+    const currentExpiration = state?.expiration ? new Date(state.expiration).getTime() : 0;
+    if (Number.isFinite(currentExpiration) && currentExpiration > Date.now() + 24 * 60 * 60 * 1000) {
+      return { configured: true, active: true, expiration: new Date(currentExpiration).toISOString() };
+    }
+
+    const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/watch", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ topicName }),
+      signal: AbortSignal.timeout(20000)
+    });
+    if (!response.ok) throw new Error("Registrazione Gmail Watch non riuscita (" + response.status + ")");
+    const watch = await response.json();
+    const historyId = String(watch.historyId || "");
+    const expirationMs = Number(watch.expiration || 0);
+    if (!/^[0-9]{1,30}$/.test(historyId) || !Number.isFinite(expirationMs) ||
+        expirationMs <= Date.now() || expirationMs > Date.now() + 8 * 24 * 60 * 60 * 1000) {
+      throw new Error("Risposta Gmail Watch non valida");
+    }
+    const expiration = new Date(expirationMs).toISOString();
+    const { error: saveError } = await admin.rpc("nmre_save_gmail_push_watch_state", {
+      p_history_id: historyId,
+      p_expiration: expiration
+    });
+    if (saveError) throw new Error("Salvataggio stato Gmail Watch non riuscito");
+    return { configured: true, active: true, expiration };
+  } catch (error) {
+    console.error(
+      "Gmail Push Watch non disponibile; resta attivo il controllo periodico:",
+      error instanceof Error ? error.message : "Errore sconosciuto"
+    );
+    return { configured: true, active: false, expiration: null };
+  }
+}
+
 export default {
   fetch: withSupabase({ auth: "secret" }, async (req, ctx) => {
     if (req.method !== "POST") {
@@ -369,14 +428,26 @@ export default {
     const startedAt = new Date();
     let ownerForLog: string | null = null;
     let syncModeForLog: "full_initial" | "full_recovery" | "incremental" | null = null;
+    let syncLockToken: string | null = null;
 
     try {
       const owner = Deno.env.get("NMRE_ALLOWED_USER_ID");
-      ownerForLog = owner;
+      ownerForLog = owner || null;
       const encryptionSecret = Deno.env.get("INTEGRATION_TOKEN_ENCRYPTION_KEY");
       if (!owner || !/^[0-9a-f-]{36}$/i.test(owner) || !encryptionSecret) {
         throw new Error("Configurazione server incompleta");
       }
+
+      const lockToken = crypto.randomUUID();
+      const { data: lockAcquired, error: lockError } = await ctx.supabaseAdmin.rpc(
+        "nmre_try_acquire_gmail_sync_lock",
+        { p_lock_token: lockToken, p_lease_seconds: 300 }
+      );
+      if (lockError) throw new Error("Acquisizione blocco sincronizzazione Gmail non riuscita");
+      if (lockAcquired !== true) {
+        return Response.json({ success: true, skipped: "sync_in_progress" }, { status: 202 });
+      }
+      syncLockToken = lockToken;
 
       const { data, error } = await ctx.supabaseAdmin.rpc("nmre_get_gmail_tokens");
       if (error || !data?.[0]?.token_ciphertext) throw new Error("Collegamento Gmail non trovato");
@@ -384,6 +455,7 @@ export default {
 
       const tokens = await decrypt(data[0].token_ciphertext, encryptionSecret);
       const token = await accessToken(tokens, data[0].expires_at, encryptionSecret, ctx.supabaseAdmin);
+      const pushWatch = await ensureGmailWatch(token, ctx.supabaseAdmin);
       const profileHistoryId = await gmailProfile(token);
       const cursor = await readSyncCursor(ctx.supabaseAdmin);
 
@@ -429,7 +501,7 @@ export default {
           // un'identità stabile alla scheda, anche se non contiene un link diretto.
           if (Number(candidate.deduplication_version || 0) < 1) return true;
           if (Number(candidate.seller_classification_version || 0) < 3) return true;
-          if (Number(candidate.data_extraction_version || 0) < 4) return true;
+          if (Number(candidate.data_extraction_version || 0) < 6) return true;
           return false;
         })
         .map((candidate: any) => candidate.source_email_id as string);
@@ -530,7 +602,31 @@ export default {
           locali: rooms(text),
           camere: bedrooms(text),
           bagni: bathrooms(text),
-          data_extraction_version: 4,
+          dati_estratti: {
+            ...extractAdditionalPropertyDetails(text),
+            riduzione_prezzo: explicitPriceReduction,
+            campi_immobile: {
+              titolo: title,
+              comune: municipality(text),
+              prezzo: listingPrice(text, title),
+              tipologia: propertyType(text),
+              superficie_mq: surface(text),
+              locali: rooms(text),
+              camere: bedrooms(text),
+              bagni: bathrooms(text)
+            }
+          },
+          dati_fonte: {
+            provider: "Gmail",
+            source_email_id: String(email.id),
+            received_at: email.date && !Number.isNaN(Date.parse(email.date)) ? new Date(email.date).toISOString() : null,
+            sender: String(email.from || "").slice(0,300) || null,
+            subject: String(email.subject || "").slice(0,500) || null,
+            snippet: String(email.snippet || "").slice(0,500),
+            body_text: String(email.bodyText || "").slice(0,30000),
+            captured_at: new Date().toISOString()
+          },
+          data_extraction_version: 6,
           tipo_venditore: seller.classification,
           seller_confidence: seller.confidence,
           seller_evidence: seller.evidence,
@@ -556,6 +652,7 @@ export default {
       let inserted = 0;
       let updated = 0;
       let notificationEventsLinked = 0;
+      let autoArchived = 0;
       for (const row of rows) {
         const { data: currentCandidate, error: currentError } = await ctx.supabaseAdmin
           .from("annunci_candidati")
@@ -605,6 +702,8 @@ export default {
               locali: row.locali,
               camere: row.camere,
               bagni: row.bagni,
+              dati_fonte: row.dati_fonte,
+              dati_estratti: row.dati_estratti,
               data_extraction_version: row.data_extraction_version
             });
             if (existingCandidate.seller_manual_override !== true) {
@@ -656,9 +755,12 @@ export default {
             if (markError) throw new Error("Aggiornamento dello stato di deduplicazione non riuscito");
           }
         } else {
+          // explicit_price_reduction is an internal parsing value, not a database column.
+          // Keep it on row for price-history processing, but omit it from the candidate INSERT.
+          const { explicit_price_reduction: _explicitPriceReduction, ...candidateInsert } = row;
           const { data: saved, error: insertError } = await ctx.supabaseAdmin
             .from("annunci_candidati")
-            .insert(row)
+            .insert(candidateInsert)
             .select("id")
             .maybeSingle();
 
@@ -726,7 +828,7 @@ export default {
         const currentPrice = row.explicit_price_reduction?.currentPrice
           ?? (Number(row.prezzo) > 0 ? Number(row.prezzo) : null);
         const hasPriceDrop = currentPrice !== null && previousPrice !== null && previousPrice > currentPrice;
-        const priceDropAmount = hasPriceDrop ? previousPrice - currentPrice : null;
+        const priceDropAmount = hasPriceDrop ? Number(previousPrice) - currentPrice : null;
         const priceDropPercent = hasPriceDrop
           ? Math.round((priceDropAmount! / previousPrice!) * 10000) / 100
           : null;
@@ -751,6 +853,14 @@ export default {
           }, { onConflict: "owner_id,source_email_id" });
         if (notificationError) throw new Error("Salvataggio dello storico notifiche non riuscito");
         notificationEventsLinked++;
+
+        // Archivia solo i privati con prova esplicita ad alta affidabilita o verifica manuale gia salvata.
+        if (row.tipo_venditore === "Privato") {
+          const { data: archiveResult, error: archiveError } = await ctx.supabaseAdmin
+            .rpc("nmre_auto_archive_private_candidate", { p_candidate_id: candidateId });
+          if (archiveError) throw new Error("Archiviazione automatica del privato non riuscita");
+          if (archiveResult?.archived === true) autoArchived++;
+        }
       }
 
       await saveSyncCursor(ctx.supabaseAdmin, nextHistoryId);
@@ -773,6 +883,7 @@ export default {
         discarded_existing_count: discardedExisting,
         inserted_count: inserted,
         updated_count: updated,
+        auto_archived_count: autoArchived,
         duplicates_or_existing_count: Math.max(0, rows.length - inserted - updated),
         missing_messages_count: emails.filter(email => !email).length,
         error_message: null
@@ -787,6 +898,7 @@ export default {
       return Response.json({
         success: true,
         account: ACCOUNT,
+        pushNotifications: pushWatch,
         syncMode,
         historyRecords,
         listed: messageIds.length,
@@ -798,6 +910,7 @@ export default {
         discardedExisting,
         inserted,
         updated,
+        autoArchived,
         notificationEventsLinked,
         reprocessedExistingListingLinks: repairIds.length,
         duplicatesOrExisting: Math.max(0, rows.length - inserted - updated),
@@ -836,6 +949,18 @@ export default {
         },
         { status: 500 }
       );
+    } finally {
+      if (syncLockToken) {
+        try {
+          const { error: releaseError } = await ctx.supabaseAdmin.rpc(
+            "nmre_release_gmail_sync_lock",
+            { p_lock_token: syncLockToken }
+          );
+          if (releaseError) console.error("Rilascio blocco Gmail non riuscito:", releaseError.message);
+        } catch (releaseError) {
+          console.error("Rilascio blocco Gmail non riuscito:", releaseError);
+        }
+      }
     }
   })
 };
