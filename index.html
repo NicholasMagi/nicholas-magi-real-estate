@@ -2940,8 +2940,15 @@ async function nmreCrmLoadContactHistory(contactId){
 async function nmreCrmSaveContactInteraction(event,form){
  event.preventDefault();
  const contactId=form.dataset.crmHistoryForm,fd=new FormData(form);
- const payload={owner_id:currentUser.id,contact_id:contactId,property_id:String(fd.get("property_id")||"")||null,interaction_type:String(fd.get("interaction_type")||"telefonata"),outcome_code:String(fd.get("outcome_code")||"")||null,outcome:String(fd.get("outcome")||"").trim()||null,notes:String(fd.get("notes")||"").trim()||null,next_contact_at:String(fd.get("next_contact_at")||"")||null};
+ const outcomeCode=String(fd.get("outcome_code")||"")||null;
+ const nextContact=String(fd.get("next_contact_at")||"")||null;
  const button=form.querySelector('button[type="submit"]'),status=form.querySelector("[data-crm-history-msg]");
+ if(outcomeCode==="richiamare"&&!nextContact){
+  const dateField=form.querySelector('[name="next_contact_at"]');
+  status.textContent="Per registrare un richiamo, indichi prima la data del prossimo contatto.";
+  dateField.focus();dateField.reportValidity();return;
+ }
+ const payload={owner_id:currentUser.id,contact_id:contactId,property_id:String(fd.get("property_id")||"")||null,interaction_type:String(fd.get("interaction_type")||"telefonata"),outcome_code:outcomeCode,outcome:String(fd.get("outcome")||"").trim()||null,notes:String(fd.get("notes")||"").trim()||null,next_contact_at:nextContact};
  button.disabled=true;status.textContent="Salvataggio…";
  const {data,error}=await supabase.from("nmre_contact_interactions").insert(payload).select("id,contact_id,property_id,interaction_type,outcome_code,outcome,notes,next_contact_at,created_at").single();
  button.disabled=false;
