@@ -272,7 +272,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .nmre-workspace{display:grid;grid-template-columns:205px minmax(0,1fr);gap:18px;align-items:start;margin-top:16px}
 .nmre-sidebar{position:sticky;top:14px;display:grid;gap:6px;padding:13px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 6px 20px rgba(16,26,43,.04)}
 .nmre-sidebar-title{font-size:9px;font-weight:800;letter-spacing:1.7px;color:#a2824d;padding:4px 9px 8px}
-.nmre-nav-link{width:100%;text-align:left;background:transparent;color:#46536a;border:1px solid transparent;padding:10px 11px;border-radius:8px;font-size:12px;font-weight:700}
+.nmre-nav-group-title{font-size:9px;font-weight:800;letter-spacing:1.25px;color:#a2824d;padding:12px 9px 3px;margin-top:3px;border-top:1px solid #edf0f4}
+.nmre-nav-link{width:100%;text-align:left;background:transparent;color:#46536a;border:1px solid transparent;padding:9px 11px;border-radius:8px;font-size:12px;font-weight:700}
 .nmre-nav-link:hover{background:#f5f6f8}
 .nmre-nav-link.active{background:#101a2b;color:#fff;border-color:#101a2b}
 .nmre-sidebar-note{border-top:1px solid var(--line);margin-top:8px;padding:12px 9px 3px;font-size:10px;line-height:1.5;color:var(--muted)}
@@ -281,6 +282,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .nmre-workspace-main>[id]{scroll-margin-top:16px}
 @media(max-width:900px){.nmre-workspace{grid-template-columns:1fr}.nmre-sidebar{position:relative;top:auto;display:flex;gap:6px;overflow-x:auto;align-items:center;padding:9px}.nmre-sidebar-title,.nmre-sidebar-note{display:none}.nmre-nav-link{width:auto;white-space:nowrap;flex:0 0 auto;padding:9px 11px}}
 @media(max-width:560px){.nmre-workspace{gap:10px}.nmre-nav-link{font-size:11px;padding:8px 9px}}
+@media(max-width:900px){.nmre-nav-group-title{display:none}}
 
 .seller-radar{margin:0 0 14px}
 .seller-radar-intro{font-size:11px;line-height:1.55;color:var(--muted);margin:-5px 0 13px}
@@ -460,13 +462,26 @@ button:disabled{opacity:.55;cursor:not-allowed}
   <aside class="nmre-sidebar" aria-label="Navigazione gestionale">
     <div class="nmre-sidebar-title">MENU OPERATIVO</div>
     <button type="button" class="nmre-nav-link active" data-nmre-nav="dashboard">Panoramica</button>
-    <button type="button" class="nmre-nav-link" data-nmre-nav="notificationsSection">Notifiche <span id="nmreUnreadBadge" class="nmre-unread-badge" hidden>0</span></button>
-    <button type="button" class="nmre-nav-link" data-nmre-nav="nmreCrm">CRM · Contatti</button>
-    <button type="button" class="nmre-nav-link" data-nmre-nav="candidateSection">Acquisizione</button>
-    <button type="button" class="nmre-nav-link" data-nmre-nav="archiveSection">Archivio immobili</button>
-    <button type="button" class="nmre-nav-link" data-nmre-nav="marketAnalysisSection">Analisi mercato</button>
-    <button type="button" class="nmre-nav-link" data-nmre-nav="automationSection">Gmail e API</button>
+
+    <div class="nmre-nav-group-title">01 · RICERCA IMMOBILI</div>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="automationSection">Gmail e collegamenti API</button>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="candidateSection">Nuove opportunità</button>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="archiveSection">Archivio annunci</button>
+
+    <div class="nmre-nav-group-title">02 · ACQUISIZIONE</div>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="callCenter">Centro telefonate</button>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="nmreCrm" data-nmre-crm-tab="contatti">CRM · Proprietari e contatti</button>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="followupSection">Agenda e richiami</button>
+
+    <div class="nmre-nav-group-title">03 · PORTAFOGLIO</div>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="nmreCrm" data-nmre-crm-tab="immobili">Immobili e incarichi</button>
     <button type="button" class="nmre-nav-link" data-nmre-nav="newListingSection">Registra immobile</button>
+
+    <div class="nmre-nav-group-title">04 · ANALISI</div>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="marketAnalysisSection">Analisi di mercato</button>
+
+    <div class="nmre-nav-group-title">STRUMENTI</div>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="notificationsSection">Notifiche <span id="nmreUnreadBadge" class="nmre-unread-badge" hidden>0</span></button>
     <div class="nmre-sidebar-note">Nicholas Magi<br>Real Estate</div>
   </aside>
   <div class="nmre-workspace-main">
@@ -5104,6 +5119,7 @@ document.querySelectorAll("[data-nmre-nav]").forEach(button=>{
   button.addEventListener("click",()=>{
     const target=document.getElementById(button.dataset.nmreNav);
     if(!target)return;
+    if(button.dataset.nmreCrmTab)nmreCrmSetTab(button.dataset.nmreCrmTab);
     document.querySelectorAll("[data-nmre-nav]").forEach(item=>item.classList.toggle("active",item===button));
     target.scrollIntoView({behavior:"smooth",block:"start"});
   });
