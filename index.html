@@ -2391,7 +2391,8 @@ $("dashboardRefresh").addEventListener("click",async()=>{
 });
 $("refreshSubitoStatus").addEventListener("click",loadSubitoSourceStatus);
 $("openSubitoOpportunities").addEventListener("click",()=>{
-  ["candidatePortalFilter","candidateSearch","candidateSellerFilter","candidateQualityFilter"].forEach(id=>{const field=$(id);if(field)field.value="";});
+  $("candidateSearch").value="subito.it";
+  ["candidatePortalFilter","candidateSellerFilter","candidateQualityFilter"].forEach(id=>{const field=$(id);if(field)field.value="";});
   renderCandidates();
   dashboardScroll("candidateSection");
 });
