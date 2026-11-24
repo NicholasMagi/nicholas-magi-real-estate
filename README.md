@@ -28,6 +28,9 @@ Applicazione web per la raccolta, la verifica e la gestione di opportunità immo
 - Analisi di mercato: importazione del CSV ufficiale OMI VALORI per le province marchigiane, filtri per comune/zona/tipologia/stato e confronto del prezzo richiesto con le fasce OMI.
 - Registro dei compravenduti dichiarati: salva il corrispettivo dell'intero atto e il numero degli immobili; calcola il €/m² solo se l'atto riguarda una singola unità, il corrispettivo è confermato come attribuibile, i dati sono verificati e la superficie è espressa in m².
 - Comparabili dei compravenduti: mediana e intervallo minimo/massimo €/m² raggruppati per comune, zona OMI, tipologia e categoria catastale; gli atti non attribuibili restano consultabili ma esclusi dai confronti.
+- Mappa immobili: vista geografica di immobili con incarico/in vendita, venduti e annunci in archivio; filtri e contatori per categoria, schede con collegamento all'annuncio, indirizzo modificabile e coordinate persistite per ogni record.
+- Geolocalizzazione manuale: l'utente avvia esplicitamente la ricerca; le coordinate trovate vengono memorizzate in Supabase. Se manca il civico, la posizione del comune è indicata come approssimativa. Coordinate e indirizzi restano protetti dalle policy RLS esistenti.
+- Fonte Subito: pannello in Fonti e automazioni con contatori e istruzioni per le ricerche salvate e gli avvisi email; gli avvisi vengono gestiti dalla sincronizzazione Gmail esistente. Nessuno scraping autonomo o contatto automatico agli inserzionisti.
 - Esportazione CSV ed Excel dell'archivio e della coda candidati.
 
 ## Come funziona la raccolta Gmail
