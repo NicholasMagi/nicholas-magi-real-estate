@@ -4358,10 +4358,7 @@ function renderCandidates(){
       +'<p class="candidate-quick-facts">'+safe(quickFacts||"Caratteristiche dell’immobile da completare")+'</p>'
       +'<div class="candidate-quick-tags">'+quickTags+'</div>'
       +'</div>'
-    const discardAction=!isPrivate
-      ?'<button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta</button>'
-      :"";
-      +'<div class="candidate-actions candidate-actions-primary">'+verifyAction+discardAction+linkHtml+'</div>'
+      +'<div class="candidate-actions candidate-actions-primary">'+verifyAction+(!isPrivate?'<button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta</button>':"")+linkHtml+'</div>'
       +'<details class="candidate-detail-panel" data-candidate-details>'
       +'<summary>Dettagli, verifica e modifica della scheda</summary>'
       +'<div class="candidate-detail-content">'
