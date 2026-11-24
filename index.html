@@ -3678,7 +3678,7 @@ function nmreCollectMapEntries(){
    property_type:row.property_type||""
   };
  }).filter(Boolean);
- const linked=new Set((nmreCrmProperties||[]).map(row=>String(row.source_listing_id||"")).filter(Boolean));
+ const linked=new Set(crm.map(row=>String(row.source_listing_id||"")).filter(Boolean));
  const archive=(listingCache||[]).filter(row=>!linked.has(String(row.id))).map(row=>{
   const category=row.stato_contatto==="incarico_acquisito"?"incarico":"archivio";
   return {
