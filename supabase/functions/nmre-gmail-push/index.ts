@@ -29,7 +29,7 @@ export default {
     }
 
     const authorization = req.headers.get("authorization") || "";
-    const bearer = authorization.match(/^Bearer\\s+(.+)$/i)?.[1];
+    const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
     if (!bearer) {
       return Response.json({ error: "Token OIDC Pub/Sub mancante" }, { status: 401 });
     }
