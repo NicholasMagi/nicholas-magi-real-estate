@@ -814,6 +814,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
     <div class="gmail-sync-stat"><strong id="gmailSyncRead">—</strong><span>Email esaminate</span></div>
     <div class="gmail-sync-stat"><strong id="gmailSyncProperty">—</strong><span>Notifiche immobiliari</span></div>
     <div class="gmail-sync-stat"><strong id="gmailSyncInserted">—</strong><span>Nuovi candidati</span></div>
+    <div class="gmail-sync-stat"><strong id="gmailSyncAutoArchived">—</strong><span>Privati archiviati</span></div>
     <div class="gmail-sync-stat"><strong id="gmailSyncReview">—</strong><span>Da verificare</span></div>
     <div class="gmail-sync-stat"><strong id="gmailSyncAgencies">—</strong><span>Agenzie escluse</span></div>
     <div class="gmail-sync-stat"><strong id="gmailSyncDuplicates">—</strong><span>Già presenti / duplicati</span></div>
@@ -1088,7 +1089,7 @@ async function loadGmailSyncStatus(){
   const details=$("gmailSyncDetails");
   const setCount=(id,value)=>$(id).textContent=Number(value||0).toLocaleString("it-IT");
   const {data,error}=await supabase.from("nmre_gmail_sync_runs")
-    .select("status,sync_mode,started_at,completed_at,duration_ms,read_count,property_notifications_count,inserted_count,needs_user_review_count,excluded_agencies_count,duplicates_or_existing_count,error_message")
+    .select("status,sync_mode,started_at,completed_at,duration_ms,read_count,property_notifications_count,inserted_count,auto_archived_count,needs_user_review_count,excluded_agencies_count,duplicates_or_existing_count,error_message")
     .order("completed_at",{ascending:false})
     .limit(200);
   title.classList.remove("gmail-sync-title-success","gmail-sync-title-error","gmail-sync-title-stale");
@@ -1102,7 +1103,7 @@ async function loadGmailSyncStatus(){
   if(!runs.length){
     title.textContent="In attesa della prima esecuzione registrata";
     lastRun.textContent="Non esiste ancora uno storico: il monitor si popolerà alla prossima sincronizzazione pianificata.";
-    ["gmailSyncRead","gmailSyncProperty","gmailSyncInserted","gmailSyncReview","gmailSyncAgencies","gmailSyncDuplicates","gmailSyncRuns24h","gmailSyncErrors24h","gmailSyncSuccessStreak"].forEach(id=>$(id).textContent="—");
+    ["gmailSyncRead","gmailSyncProperty","gmailSyncInserted","gmailSyncAutoArchived","gmailSyncReview","gmailSyncAgencies","gmailSyncDuplicates","gmailSyncRuns24h","gmailSyncErrors24h","gmailSyncSuccessStreak"].forEach(id=>$(id).textContent="—");
     details.textContent="La raccolta Gmail è configurata per un controllo server-side ogni 10 minuti. Nessun dato storico è stato ricostruito o inventato.";
     return;
   }
@@ -1134,6 +1135,7 @@ async function loadGmailSyncStatus(){
   setCount("gmailSyncRead",latest.read_count);
   setCount("gmailSyncProperty",latest.property_notifications_count);
   setCount("gmailSyncInserted",latest.inserted_count);
+  setCount("gmailSyncAutoArchived",latest.auto_archived_count);
   setCount("gmailSyncReview",latest.needs_user_review_count);
   setCount("gmailSyncAgencies",latest.excluded_agencies_count);
   setCount("gmailSyncDuplicates",latest.duplicates_or_existing_count);
@@ -1151,7 +1153,7 @@ async function loadGmailSyncStatus(){
   let activity="";
   if(success&&Number(latest.read_count||0)===0)activity="Nessun nuovo messaggio Gmail da elaborare in questo controllo.";
   else if(success&&Number(latest.property_notifications_count||0)===0)activity="Messaggi controllati, ma nessuna nuova notifica immobiliare riconosciuta.";
-  else if(success)activity=Number(latest.inserted_count||0)+" nuovi candidati inseriti; "+Number(latest.needs_user_review_count||0)+" da verificare.";
+  else if(success)activity=Number(latest.auto_archived_count||0)+" privati archiviati automaticamente; "+Number(latest.needs_user_review_count||0)+" annunci da verificare." ;
   details.textContent="Modalità: "+mode+" · Durata: "+duration+" · Ultime 24 ore: "+successes+" esecuzioni riuscite e "+failures+" errori. "+activity
     +(stale?" Controllo oltre 20 minuti fa: verifichi il job pianificato.":"")
     +(!success?" Dettaglio: "+(latest.error_message||"Errore non specificato"):"");
