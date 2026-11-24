@@ -367,7 +367,7 @@ async function ensureGmailWatch(
 ): Promise<{ configured: boolean; active: boolean; expiration: string | null }> {
   const topicName = Deno.env.get("GMAIL_PUBSUB_TOPIC_NAME");
   if (!topicName) return { configured: false, active: false, expiration: null };
-  if (!/^projects\\/[A-Za-z0-9:._-]+\\/topics\\/[A-Za-z0-9._~-]+$/.test(topicName)) {
+  if (!/^projects\/[A-Za-z0-9:._-]+\/topics\/[A-Za-z0-9._~-]+$/.test(topicName)) {
     console.error("GMAIL_PUBSUB_TOPIC_NAME non ha un formato valido");
     return { configured: true, active: false, expiration: null };
   }
