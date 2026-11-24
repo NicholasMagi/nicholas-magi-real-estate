@@ -3753,7 +3753,7 @@ async function nmreGeocodeMapEntry(item,button=null){
  try{
   const response=await fetch("https://nominatim.openstreetmap.org/search?"+params.toString(),{
    method:"GET",headers:{Accept:"application/json"},credentials:"omit",
-   referrerPolicy:"strict-origin-when-cross-origin",cache:"no-store"
+   referrerPolicy:"unsafe-url",cache:"no-store"
   });
   if(!response.ok)throw new Error("Servizio cartografico non disponibile ("+response.status+").");
   results=await response.json();
