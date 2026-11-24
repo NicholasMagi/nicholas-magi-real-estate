@@ -1060,6 +1060,75 @@ function euro(value){
   return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(Number(value));
 }
 
+
+const NMRE_NOTIFICATION_CATEGORIES={new_opportunities:"nmreNotifyNewOpportunities",verified_private:"nmreNotifyVerifiedPrivate",price_drops:"nmreNotifyPriceDrops",new_contacts:"nmreNotifyNewContacts",appointments:"nmreNotifyAppointments",callbacks:"nmreNotifyCallbacks",sync_issues:"nmreNotifySyncIssues"};
+let nmreNotificationPrefs={enabled:true,categories:{}};
+let nmreServiceWorkerRegistration=null;
+function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
+async function registerNmreServiceWorker(){
+ if(!("serviceWorker" in navigator))return;
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
+}
+async function refreshNmrePushState(){
+ const state=$("nmrePushState");if(!state)return;
+ if(!("Notification" in window)||!("PushManager" in window)){state.textContent="Non supportate dal browser";return;}
+ const reg=nmreServiceWorkerRegistration||await navigator.serviceWorker.ready;
+ const sub=await reg.pushManager.getSubscription();
+ state.textContent=sub?"Push attive su questo dispositivo":(Notification.permission==="denied"?"Permesso bloccato":"Push non ancora attive");
+}
+async function loadNotificationCenter(){
+ if(!currentUser||!supabase)return;
+ const {data:prefs,error:prefsError}=await supabase.from("nmre_notification_preferences").select("enabled,categories").eq("owner_id",currentUser.id).maybeSingle();
+ if(prefsError)msg("nmreNotificationPrefsMsg","Impossibile caricare le preferenze: "+prefsError.message,"error");
+ nmreNotificationPrefs={enabled:prefs?.enabled!==false,categories:prefs?.categories||{}};
+ Object.entries(NMRE_NOTIFICATION_CATEGORIES).forEach(([category,id])=>{const el=$(id);if(el)el.checked=nmreNotificationPrefs.enabled&&nmreNotificationPrefs.categories[category]!==false;});
+ await refreshNmreNotifications();await refreshNmrePushState();
+}
+async function saveNmreNotificationPreferences(){
+ if(!currentUser)return;
+ const categories={};Object.entries(NMRE_NOTIFICATION_CATEGORIES).forEach(([category,id])=>categories[category]=$(id).checked);
+ const {error}=await supabase.from("nmre_notification_preferences").upsert({owner_id:currentUser.id,enabled:true,categories,updated_at:new Date().toISOString()},{onConflict:"owner_id"});
+ if(error){msg("nmreNotificationPrefsMsg","Salvataggio non riuscito: "+error.message,"error");return;}
+ nmreNotificationPrefs={enabled:true,categories};msg("nmreNotificationPrefsMsg","Preferenze salvate. Le categorie disattivate non genereranno avvisi push.","success");
+}
+async function refreshNmreNotifications(){
+ const box=$("nmreNotificationList");if(!box||!currentUser)return;
+ const {data,error}=await supabase.from("nmre_notifications").select("id,category,title,body,target_url,read_at,created_at").is("archived_at",null).order("created_at",{ascending:false}).limit(40);
+ if(error){box.innerHTML='<p class="hint">Storico non disponibile: '+safe(error.message)+'</p>';return;}
+ const rows=data||[];const unread=rows.filter(row=>!row.read_at).length;const badge=$("nmreUnreadBadge");badge.textContent=unread>99?"99+":String(unread);badge.hidden=unread===0;
+ if(!rows.length){box.innerHTML='<p class="hint">Nessuna notifica. Quando si verificherà un nuovo evento, lo troverà qui.</p>';return;}
+ box.innerHTML=rows.map(row=>'<article class="nmre-notification-item '+(row.read_at?'is-read':'is-unread')+'"><div class="nmre-notification-copy"><strong>'+safe(row.title)+'</strong><p>'+safe(row.body)+'</p><small>'+safe(new Date(row.created_at).toLocaleString("it-IT"))+'</small></div><div class="nmre-notification-item-actions">'+(!row.read_at?'<button class="secondary" data-nmre-notification-read="'+safe(row.id)+'" type="button">Segna letta</button>':'<span class="small">Letta</span>')+'</div></article>').join("");
+ box.querySelectorAll("[data-nmre-notification-read]").forEach(button=>button.addEventListener("click",async()=>{const {error}=await supabase.from("nmre_notifications").update({read_at:new Date().toISOString()}).eq("id",button.dataset.nmreNotificationRead);if(error){msg("nmreNotificationPrefsMsg",error.message,"error");return;}await refreshNmreNotifications();}));
+}
+async function enableNmrePush(){
+ const help=$("nmrePushHelp");
+ try{
+  if(!("serviceWorker" in navigator)||!("PushManager" in window)||!("Notification" in window))throw new Error("Questo browser non supporta le notifiche push.");
+  if(/iPhone|iPad|iPod/.test(navigator.userAgent)&&!window.matchMedia("(display-mode: standalone)").matches&&!window.navigator.standalone)throw new Error("Su iPhone prima aggiunga NMRE alla schermata Home da Safari e apra l’icona installata.");
+  const permission=await Notification.requestPermission();if(permission!=="granted")throw new Error("Permesso notifiche non concesso.");
+  const reg=nmreServiceWorkerRegistration||await navigator.serviceWorker.ready;
+  const projectUrl=localStorage.getItem(URL_KEY);const apiKey=localStorage.getItem(API_KEY);
+  const response=await fetch(projectUrl+"/functions/v1/nmre-push-send",{headers:{apikey:apiKey}});const config=await response.json();
+  if(!response.ok||!config.publicKey)throw new Error(config.error||"Chiave pubblica push non configurata sul server.");
+  let subscription=await reg.pushManager.getSubscription();
+  if(!subscription)subscription=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:nmreBase64UrlBytes(config.publicKey)});
+  const value=subscription.toJSON();
+  const {error}=await supabase.from("nmre_push_subscriptions").upsert({owner_id:currentUser.id,endpoint:value.endpoint,p256dh:value.keys.p256dh,auth_secret:value.keys.auth,user_agent:navigator.userAgent,updated_at:new Date().toISOString()},{onConflict:"owner_id,endpoint"});
+  if(error)throw error;
+  help.textContent="Dispositivo registrato. Può ricevere notifiche anche con NMRE chiusa.";await refreshNmrePushState();
+ }catch(error){help.textContent=error.message||String(error);}
+}
+async function disableNmrePush(){
+ try{const reg=nmreServiceWorkerRegistration||await navigator.serviceWorker.ready;const sub=await reg.pushManager.getSubscription();if(sub){await supabase.from("nmre_push_subscriptions").delete().eq("owner_id",currentUser.id).eq("endpoint",sub.endpoint);await sub.unsubscribe();}await refreshNmrePushState();$("nmrePushHelp").textContent="Notifiche disattivate su questo dispositivo.";}
+ catch(error){$("nmrePushHelp").textContent=error.message||String(error);}
+}
+async function testNmrePush(){
+ const {error}=await supabase.functions.invoke("nmre-push-send",{body:{action:"test"}});
+ if(error){$("nmrePushHelp").textContent="Test non riuscito: "+error.message;return;}
+ $("nmrePushHelp").textContent="Test inviato. Se il dispositivo è registrato e le chiavi server sono configurate, riceverà l’avviso a breve.";await refreshNmreNotifications();
+}
+
 function normalizeSellerIdentifier(value){
   return String(value??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"")
     .toLocaleLowerCase("it").replace(/[^\p{L}\p{N}@.+]+/gu," ").replace(/\s+/g," ").trim();
@@ -4791,6 +4860,11 @@ document.querySelectorAll("[data-nmre-nav]").forEach(button=>{
   });
 });
 $("exportCandidatesCsv").addEventListener("click",exportCandidatesCsv);
+$("nmreSaveNotificationPrefs").addEventListener("click",saveNmreNotificationPreferences);
+$("nmreRefreshNotifications").addEventListener("click",refreshNmreNotifications);
+$("nmreEnablePush").addEventListener("click",enableNmrePush);
+$("nmreDisablePush").addEventListener("click",disableNmrePush);
+$("nmreTestPush").addEventListener("click",testNmrePush);
 
 
 async function exportXlsx(rows,columns,sheetName,fileName,messageId){
