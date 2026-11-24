@@ -5127,7 +5127,7 @@ function nmreShowPage(pageId){
   sidebar.hidden=true;
   $("nmreWorkspace").classList.remove("menu-open");
   toggle.setAttribute("aria-expanded","false");
-  if(activeButton)activeButton.focus({preventScroll:true});
+  toggle.focus({preventScroll:true});
   window.scrollTo({top:0,behavior:"smooth"});
 }
 $("nmreMenuToggle").addEventListener("click",()=>{
