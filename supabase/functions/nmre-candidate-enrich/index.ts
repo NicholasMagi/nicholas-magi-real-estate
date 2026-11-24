@@ -204,15 +204,25 @@ Deno.serve(async (req: Request) => {
     const offers = findValue(nodes, ["offers"]);
     const offerObj = Array.isArray(offers) ? (offers[0] || {}) as Record<string, unknown> : (offers && typeof offers === "object" ? offers as Record<string, unknown> : {});
     const floor = findValue(nodes, ["floorSize"]);
+    const listingNodes = nodes.filter((node) => {
+      const type = Array.isArray(node["@type"]) ? node["@type"].join(" ") : String(node["@type"] || "");
+      return /apartment|house|singlefamily|residence|product|realestate|accommodation/i.test(type);
+    });
+    const sourceNodes = listingNodes.length ? listingNodes : nodes;
+    const sourceAddress = findValue(sourceNodes, ["address"]);
+    const sourceAddressObj = sourceAddress && typeof sourceAddress === "object" ? sourceAddress as Record<string, unknown> : addressObj;
+    const sourceOffers = findValue(sourceNodes, ["offers"]);
+    const sourceOfferObj = Array.isArray(sourceOffers) ? (sourceOffers[0] || {}) as Record<string, unknown> : (sourceOffers && typeof sourceOffers === "object" ? sourceOffers as Record<string, unknown> : offerObj);
+    const sourceFloor = findValue(sourceNodes, ["floorSize"]) || floor;
     const suggestions = {
-      titolo: cleanText(findValue(nodes, ["name", "headline"]) || meta["og:title"] || meta["twitter:title"], 250),
-      comune: cleanText(addressObj.addressLocality || addressObj.addressRegion || meta["og:locality"], 120),
-      prezzo: numeric(findValue(nodes, ["price"]) || offerObj.price || meta["product:price:amount"]),
-      tipologia_immobile: normalizeType(findValue(nodes, ["@type"])) || cleanText(meta["og:type"], 80),
-      superficie_mq: numeric(floor),
-      locali: numeric(findValue(nodes, ["numberOfRooms", "numberOfRoomsTotal"])),
-      camere: numeric(findValue(nodes, ["numberOfBedrooms"])),
-      bagni: numeric(findValue(nodes, ["numberOfBathroomsTotal", "numberOfBathrooms"])),
+      titolo: cleanText(findValue(sourceNodes, ["name", "headline"]) || meta["og:title"] || meta["twitter:title"], 250),
+      comune: cleanText(sourceAddressObj.addressLocality || sourceAddressObj.addressRegion || meta["og:locality"], 120),
+      prezzo: numeric(findValue(sourceNodes, ["price"]) || sourceOfferObj.price || meta["product:price:amount"]),
+      tipologia_immobile: normalizeType(sourceNodes.map((node) => node["@type"])),
+      superficie_mq: numeric(sourceFloor),
+      locali: numeric(findValue(sourceNodes, ["numberOfRooms", "numberOfRoomsTotal"])),
+      camere: numeric(findValue(sourceNodes, ["numberOfBedrooms"])),
+      bagni: numeric(findValue(sourceNodes, ["numberOfBathroomsTotal", "numberOfBathrooms"])),
     };
     const hasSuggestions = Object.values(suggestions).some((value) => value !== null && value !== undefined && value !== "");
     return reply({
