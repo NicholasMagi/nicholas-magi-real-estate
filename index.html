@@ -355,6 +355,19 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .nmre-notification-option{display:flex;align-items:flex-start;gap:10px;padding:11px 2px;border-top:1px solid #edf0f4;margin:0;cursor:pointer}
 .nmre-notification-option input{width:18px;height:18px;flex:0 0 18px;margin:2px 0 0;accent-color:#101a2b}
 .nmre-notification-option span{display:grid;gap:3px}
+.nmre-notification-controls{display:grid;gap:10px;margin:12px 0 14px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fafbfc}
+.nmre-notification-master{display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer}
+.nmre-notification-master input,.nmre-quiet-hours-toggle input{width:18px;height:18px;flex:0 0 18px;margin:2px 0 0;accent-color:#101a2b}
+.nmre-notification-master span{display:grid;gap:3px}
+.nmre-notification-master strong{font-size:12px;color:var(--ink)}
+.nmre-notification-master small{font-size:11px;color:var(--muted);font-weight:400}
+.nmre-quiet-hours{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding-top:10px;border-top:1px solid var(--line)}
+.nmre-quiet-hours-toggle{grid-column:1/-1;display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer}
+.nmre-quiet-hours-toggle span{display:grid;gap:3px}
+.nmre-quiet-hours-toggle strong{font-size:12px;color:var(--ink)}
+.nmre-quiet-hours-toggle small{font-size:11px;color:var(--muted);font-weight:400}
+.nmre-quiet-hours-field label{margin:0 0 5px}
+.nmre-quiet-hours-field input{padding:9px}
 .nmre-notification-option strong{font-size:12px;color:var(--ink)}
 .nmre-notification-option small{font-size:11px;color:var(--muted);font-weight:400}
 .nmre-notification-history-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 8px}
@@ -434,6 +447,15 @@ button:disabled{opacity:.55;cursor:not-allowed}
   <div class="nmre-notification-actions"><button id="nmreEnablePush" class="gold" type="button">Attiva notifiche su questo iPhone</button><button id="nmreTestPush" class="secondary" type="button">Invia notifica di prova</button><button id="nmreDisablePush" class="secondary" type="button">Disattiva su questo dispositivo</button></div>
   <div id="nmrePushHelp" class="status">Per iPhone: apra NMRE in Safari, scelga Condividi → Aggiungi alla schermata Home, poi apra l’icona installata e attivi le notifiche.</div>
   <div class="nmre-notification-preferences"><h3>Quali notifiche desidera ricevere?</h3>
+    <div class="nmre-notification-controls">
+      <label class="nmre-notification-master"><input type="checkbox" id="nmreNotifyEnabled" checked><span><strong>Notifiche globalmente attive</strong><small>Disattivando questa opzione non verranno inviate notifiche push. Lo storico resterà disponibile nell’app.</small></span></label>
+      <div class="nmre-quiet-hours">
+        <label class="nmre-quiet-hours-toggle"><input type="checkbox" id="nmreQuietHoursEnabled"><span><strong>Attiva orario di silenzio</strong><small>Le notifiche push saranno sospese nella fascia scelta. Gli avvisi resteranno nel centro notifiche.</small></span></label>
+        <div class="nmre-quiet-hours-field"><label for="nmreQuietHoursStart">Dalle</label><input type="time" id="nmreQuietHoursStart" value="22:00"></div>
+        <div class="nmre-quiet-hours-field"><label for="nmreQuietHoursEnd">Alle</label><input type="time" id="nmreQuietHoursEnd" value="08:00"></div>
+      </div>
+      <p class="small">Fuso orario: Europe/Rome.</p>
+    </div>
     <label class="nmre-notification-option"><input type="checkbox" id="nmreNotifyNewOpportunities" checked><span><strong>Nuove opportunità</strong><small>Nuovi annunci candidati importati tramite Gmail</small></span></label>
     <label class="nmre-notification-option"><input type="checkbox" id="nmreNotifyVerifiedPrivate" checked><span><strong>Privati verificati</strong><small>Un venditore privato viene confermato e archiviato</small></span></label>
     <label class="nmre-notification-option"><input type="checkbox" id="nmreNotifyPriceDrops" checked><span><strong>Ribassi di prezzo</strong><small>Riduzioni di prezzo rilevate sugli annunci monitorati</small></span></label>
@@ -1079,18 +1101,43 @@ async function refreshNmrePushState(){
 }
 async function loadNotificationCenter(){
  if(!currentUser||!supabase)return;
- const {data:prefs,error:prefsError}=await supabase.from("nmre_notification_preferences").select("enabled,categories").eq("owner_id",currentUser.id).maybeSingle();
+ const {data:prefs,error:prefsError}=await supabase.from("nmre_notification_preferences").select("enabled,categories,quiet_hours_enabled,quiet_hours_start,quiet_hours_end").eq("owner_id",currentUser.id).maybeSingle();
  if(prefsError)msg("nmreNotificationPrefsMsg","Impossibile caricare le preferenze: "+prefsError.message,"error");
- nmreNotificationPrefs={enabled:prefs?.enabled!==false,categories:prefs?.categories||{}};
- Object.entries(NMRE_NOTIFICATION_CATEGORIES).forEach(([category,id])=>{const el=$(id);if(el)el.checked=nmreNotificationPrefs.enabled&&nmreNotificationPrefs.categories[category]!==false;});
+ nmreNotificationPrefs={enabled:prefs?.enabled!==false,categories:prefs?.categories||{},quietHoursEnabled:prefs?.quiet_hours_enabled===true,quietHoursStart:(prefs?.quiet_hours_start||"22:00").slice(0,5),quietHoursEnd:(prefs?.quiet_hours_end||"08:00").slice(0,5)};
+ $("nmreNotifyEnabled").checked=nmreNotificationPrefs.enabled;
+ $("nmreQuietHoursEnabled").checked=nmreNotificationPrefs.quietHoursEnabled;
+ $("nmreQuietHoursStart").value=nmreNotificationPrefs.quietHoursStart;
+ $("nmreQuietHoursEnd").value=nmreNotificationPrefs.quietHoursEnd;
+ Object.entries(NMRE_NOTIFICATION_CATEGORIES).forEach(([category,id])=>{const el=$(id);if(el)el.checked=nmreNotificationPrefs.categories[category]!==false;});
+ syncNmreNotificationControls();
  await refreshNmreNotifications();await refreshNmrePushState();
+}
+function syncNmreNotificationControls(){
+ const enabled=$("nmreNotifyEnabled").checked;
+ Object.values(NMRE_NOTIFICATION_CATEGORIES).forEach(id=>{const el=$(id);if(el)el.disabled=!enabled;});
+ $("nmreQuietHoursEnabled").disabled=!enabled;
+ $("nmreQuietHoursStart").disabled=!enabled||!$("nmreQuietHoursEnabled").checked;
+ $("nmreQuietHoursEnd").disabled=!enabled||!$("nmreQuietHoursEnabled").checked;
 }
 async function saveNmreNotificationPreferences(){
  if(!currentUser)return;
+ const enabled=$("nmreNotifyEnabled").checked;
+ const quietHoursEnabled=$("nmreQuietHoursEnabled").checked;
+ const quietHoursStart=$("nmreQuietHoursStart").value;
+ const quietHoursEnd=$("nmreQuietHoursEnd").value;
+ if(quietHoursEnabled&&(!quietHoursStart||!quietHoursEnd||quietHoursStart===quietHoursEnd)){
+  msg("nmreNotificationPrefsMsg","Indichi due orari diversi per la fascia di silenzio.","error");return;
+ }
  const categories={};Object.entries(NMRE_NOTIFICATION_CATEGORIES).forEach(([category,id])=>categories[category]=$(id).checked);
- const {error}=await supabase.from("nmre_notification_preferences").upsert({owner_id:currentUser.id,enabled:true,categories,updated_at:new Date().toISOString()},{onConflict:"owner_id"});
+ const {error}=await supabase.from("nmre_notification_preferences").upsert({
+  owner_id:currentUser.id,enabled,categories,quiet_hours_enabled:quietHoursEnabled,
+  quiet_hours_start:quietHoursEnabled?quietHoursStart:null,
+  quiet_hours_end:quietHoursEnabled?quietHoursEnd:null,updated_at:new Date().toISOString()
+ },{onConflict:"owner_id"});
  if(error){msg("nmreNotificationPrefsMsg","Salvataggio non riuscito: "+error.message,"error");return;}
- nmreNotificationPrefs={enabled:true,categories};msg("nmreNotificationPrefsMsg","Preferenze salvate. Le categorie disattivate non genereranno avvisi push.","success");
+ nmreNotificationPrefs={enabled,categories,quietHoursEnabled,quietHoursStart,quietHoursEnd};
+ syncNmreNotificationControls();
+ msg("nmreNotificationPrefsMsg","Preferenze salvate. Le categorie disattivate e gli orari di silenzio saranno rispettati dal server.","success");
 }
 async function refreshNmreNotifications(){
  const box=$("nmreNotificationList");if(!box||!currentUser)return;
@@ -4882,6 +4929,8 @@ async function exportXlsx(rows,columns,sheetName,fileName,messageId){
   msg(messageId,"Esportazione Excel completata.","success");
  }catch(error){msg(messageId,"Esportazione Excel non riuscita: "+(error.message||"errore libreria"),"error");}
 }
+$("nmreNotifyEnabled").addEventListener("change",syncNmreNotificationControls);
+$("nmreQuietHoursEnabled").addEventListener("change",syncNmreNotificationControls);
 $("exportXlsx").addEventListener("click",()=>exportXlsx(listingCache,[["Titolo","titolo"],["Comune","comune"],["Prezzo","prezzo"],["Contatto","contatto"],["Venditore","tipo_venditore"],["Fonte","portale"],["Link","url"],["Tipologia","tipologia_immobile"],["Superficie m²","superficie_mq"],["Locali","locali"],["Camere","camere"],["Bagni","bagni"],["Data notifica","data_pubblicazione"],["Inserito il","created_at"],["Stato contatto","stato_contatto"],["Note","note_personali"],["Prossimo contatto","prossimo_contatto_il"],["Ultimo contatto","ultimo_contatto_il"]],"Annunci","nicholas-magi-annunci-"+new Date().toISOString().slice(0,10)+".xlsx","listMsg"));
 $("exportCandidatesXlsx").addEventListener("click",()=>exportXlsx(candidateCache,[["Titolo / descrizione","titolo"],["Comune","comune"],["Prezzo richiesto","prezzo"],["Contatto","contatto"],["Venditore","tipo_venditore"],["Portale","portale"],["Link annuncio","url"],["Tipologia","tipologia_immobile"],["Superficie m²","superficie_mq"],["Locali","locali"],["Camere","camere"],["Bagni","bagni"],["Data notifica","data_pubblicazione"],["Stato","stato"],["Ricevuto il","created_at"]],"Annunci da valutare","nmre-annunci-da-valutare-"+new Date().toISOString().slice(0,10)+".xlsx","candidateMsg"));
 
