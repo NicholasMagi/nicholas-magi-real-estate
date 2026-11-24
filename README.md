@@ -16,6 +16,7 @@ Applicazione web per la raccolta, la verifica e la gestione di opportunità immo
 - Collegamento Gmail OAuth, con token conservati cifrati lato server.
 - Acquisizione automatica di notifiche immobiliari in background.
 - Monitoraggio delle sincronizzazioni Gmail: esito, durata, annunci letti, candidati inseriti, agenzie escluse, duplicati ed errori; vengono salvati soltanto contatori operativi, non il contenuto delle email.
+- Centro notifiche con storico in-app, preferenze globali e per categoria, notifiche push su dispositivi compatibili e fascia di silenzio configurabile in fuso orario Europe/Rome; gli avvisi restano nello storico anche quando le push sono sospese.
 - Coda di annunci privati riconosciuti e opportunità ambigue da approvare manualmente.
 - Doppio punteggio in coda: priorità di acquisizione (venditore, freschezza, territorio e contatto) separata dalla qualità/completezza dei dati; mostra anche il rapporto tra prezzo richiesto e m² quando calcolabile, senza presentarlo come stima di mercato.
 - Dashboard Lead Intelligence: mostra i quattro candidati con il punteggio operativo più alto, i fattori che lo compongono e l'accesso diretto alla scheda; il punteggio organizza il lavoro e non rappresenta una probabilità di acquisire l'incarico.
