@@ -252,6 +252,12 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .nmre-crm-stats strong{display:block;font-size:22px}.nmre-crm-stats span{font-size:12px;color:var(--muted)}
 .nmre-crm-pane h3{margin:8px 0 14px}
 .nmre-crm-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;background:#fafbfc;border:1px solid var(--line);border-radius:12px;padding:14px}
+.nmre-crm-create{margin:8px 0 14px;border:1px solid var(--line);border-radius:11px;background:#fafbfc;overflow:hidden}
+.nmre-crm-create>summary{cursor:pointer;list-style:none;padding:12px 14px;font-size:12px;font-weight:800;color:#725b36}
+.nmre-crm-create>summary::-webkit-details-marker{display:none}
+.nmre-crm-create>summary::after{content:"＋";float:right;color:var(--muted)}
+.nmre-crm-create[open]>summary::after{content:"−"}
+.nmre-crm-create[open]>.nmre-crm-form{margin:0;border:0;border-top:1px solid var(--line);border-radius:0}
 .nmre-crm-form label{display:block;font-size:12px;font-weight:700;color:var(--muted)}
 .nmre-crm-form input,.nmre-crm-form select,.nmre-crm-form textarea,.nmre-crm-toolbar input,.nmre-crm-toolbar select{display:block;width:100%;margin-top:5px;padding:10px;border:1px solid #d9dfe7;border-radius:8px;background:white;color:var(--ink);font:inherit;font-size:14px}
 .nmre-crm-form .wide{grid-column:1/-1}
@@ -528,7 +534,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
     <div><strong id="nmreCrmStatAgenda">0</strong><span>Attività programmate</span></div>
   </div>
   <section class="nmre-crm-pane" data-crm-pane="contatti">
-    <h3>Nuovo contatto</h3>
+    <details class="nmre-crm-create">
+      <summary>+ Nuovo contatto</summary>
     <form id="nmreCrmContactForm" class="nmre-crm-form">
       <label>Nome e cognome *<input id="nmreCrmContactName" required maxlength="180" placeholder="Nome Cognome"></label>
       <label>Tipologia<select id="nmreCrmContactType"><option value="proprietario">Proprietario</option><option value="acquirente">Acquirente</option><option value="venditore">Venditore</option><option value="locatore">Locatore</option><option value="conduttore">Conduttore</option><option value="investitore">Investitore</option><option value="professionista">Professionista</option><option value="altro">Altro</option></select></label>
@@ -539,11 +546,13 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <label class="wide">Note<textarea id="nmreCrmContactNotes" rows="2" maxlength="4000"></textarea></label>
       <div class="wide"><button class="gold" type="submit">Salva contatto</button><span id="nmreCrmContactMsg" class="status" aria-live="polite"></span></div>
     </form>
+    </details>
     <div class="nmre-crm-toolbar"><input id="nmreCrmContactSearch" type="search" placeholder="Cerca nome, telefono, email o comune"><select id="nmreCrmContactFilter"><option value="">Tutti i contatti</option><option value="proprietario">Proprietari</option><option value="acquirente">Acquirenti</option><option value="investitore">Investitori</option><option value="professionista">Professionisti</option></select></div>
     <div id="nmreCrmContactList" class="nmre-crm-list"></div>
   </section>
   <section class="nmre-crm-pane" data-crm-pane="immobili" hidden>
-    <h3>Nuovo immobile</h3>
+    <details class="nmre-crm-create">
+      <summary>+ Nuovo immobile</summary>
     <form id="nmreCrmPropertyForm" class="nmre-crm-form">
       <label class="wide">Titolo immobile *<input id="nmreCrmPropertyTitle" required maxlength="220" placeholder="Appartamento con terrazzo e garage"></label>
       <label>Comune *<input id="nmreCrmPropertyTown" required maxlength="100"></label>
@@ -558,11 +567,13 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <label class="wide">Note<textarea id="nmreCrmPropertyNotes" rows="2" maxlength="4000"></textarea></label>
       <div class="wide"><button class="gold" type="submit">Crea scheda immobile</button><span id="nmreCrmPropertyMsg" class="status" aria-live="polite"></span></div>
     </form>
+    </details>
     <div class="nmre-crm-toolbar"><input id="nmreCrmPropertySearch" type="search" placeholder="Cerca immobile o comune"><select id="nmreCrmPropertyFilter"><option value="">Tutte le fasi</option><option value="da_valutare">Da valutare</option><option value="acquisizione">In acquisizione</option><option value="incarico">Incarico acquisito</option><option value="in_vendita">In vendita</option><option value="proposta">Proposta ricevuta</option><option value="venduto">Venduto</option><option value="locato">Locato</option></select></div>
     <div id="nmreCrmPropertyList" class="nmre-crm-list"></div>
   </section>
   <section class="nmre-crm-pane" data-crm-pane="agenda" hidden>
-    <h3>Nuova attività</h3>
+    <details class="nmre-crm-create">
+      <summary>+ Nuova attività</summary>
     <form id="nmreCrmAgendaForm" class="nmre-crm-form">
       <label class="wide">Attività *<input id="nmreCrmAgendaTitle" required maxlength="180" placeholder="Telefonata con il proprietario"></label>
       <label>Tipo<select id="nmreCrmAgendaType"><option value="appuntamento">Appuntamento</option><option value="telefonata">Telefonata</option><option value="visita">Visita</option><option value="valutazione">Valutazione</option><option value="follow_up">Follow-up</option><option value="riunione">Riunione</option><option value="altro">Altro</option></select></label>
@@ -573,6 +584,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <label class="wide">Note<textarea id="nmreCrmAgendaNotes" rows="2" maxlength="4000"></textarea></label>
       <div class="wide"><button class="gold" type="submit">Aggiungi in agenda</button><span id="nmreCrmAgendaMsg" class="status" aria-live="polite"></span></div>
     </form>
+    </details>
     <div class="nmre-crm-toolbar"><select id="nmreCrmAgendaFilter"><option value="upcoming">Programmate</option><option value="">Tutte le attività</option><option value="completato">Completate</option><option value="annullato">Annullate</option></select></div>
     <div id="nmreCrmAgendaList" class="nmre-crm-list"></div>
   </section>
@@ -1112,6 +1124,7 @@ const URL_KEY = "nmre-supabase-url";
 const API_KEY = "nmre-supabase-publishable-key";
 let supabase = null;
 let currentUser = null;
+let appInitialViewSet = false;
 let candidateRefreshTimer = null;
 let listingCache = [];
 let candidateCache = [];
@@ -2134,6 +2147,7 @@ $("dashboard").querySelectorAll("[data-dashboard-action]").forEach(button=>{
     }else if(action==="contact"){
       dashboardScroll("nmreCrm");
       nmreCrmSetTab("contatti");
+      $("nmreCrmContactForm")?.closest(".nmre-crm-create")?.setAttribute("open","");
       $("nmreCrmContactName")?.focus({preventScroll:true});
     }else if(action==="lead"){
       dashboardScroll("candidateSection");
@@ -2141,6 +2155,7 @@ $("dashboard").querySelectorAll("[data-dashboard-action]").forEach(button=>{
     }else if(action==="agenda"){
       dashboardScroll("nmreCrm");
       nmreCrmSetTab("agenda");
+      $("nmreCrmAgendaForm")?.closest(".nmre-crm-create")?.setAttribute("open","");
       $("nmreCrmAgendaTitle")?.focus({preventScroll:true});
     }
   });
@@ -2899,6 +2914,10 @@ async function showApp(session){
   await loadNotificationCenter();
   registerNmreServiceWorker();
   checkInsightsApi();
+  if(!appInitialViewSet){
+    appInitialViewSet=true;
+    requestAnimationFrame(()=>dashboardScroll("dashboard"));
+  }
   if(!candidateRefreshTimer){
     candidateRefreshTimer=setInterval(()=>{
       if(currentUser && document.visibilityState==="visible"){
@@ -3378,6 +3397,7 @@ async function boot(){
         showApp(session).catch(e=>msg("listMsg",e.message,"error"));
       }else{
         currentUser=null;
+        appInitialViewSet=false;
         if(candidateRefreshTimer){clearInterval(candidateRefreshTimer);candidateRefreshTimer=null;}
         $("appArea").hidden=true;
         showAuth();
