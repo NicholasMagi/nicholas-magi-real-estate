@@ -28,7 +28,7 @@ jobs:
           deno-version: v2.x
 
       - name: Check Gmail Edge Function TypeScript
-        run: deno check supabase/functions/nmre-gmail-scheduled/index.ts supabase/functions/nmre-gmail-push/index.ts
+        run: deno check supabase/functions/nmre-gmail-scheduled/index.ts supabase/functions/nmre-gmail-push/index.ts supabase/functions/nmre-search-engine/index.ts
 
       - name: Test Gmail parser and incremental history adapter
         run: deno test supabase/functions/nmre-gmail-scheduled/parser_test.ts supabase/functions/nmre-gmail-scheduled/history_test.ts
