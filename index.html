@@ -268,15 +268,10 @@ button:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:650px){.nmre-crm-form{grid-template-columns:1fr}.nmre-crm-form .wide{grid-column:auto}.nmre-crm-stats{grid-template-columns:1fr 1fr 1fr}.nmre-crm-item{flex-direction:column}.nmre-crm-item-side{flex-direction:row;align-items:center;flex-wrap:wrap}.nmre-crm-stats span{font-size:10px}}
 
 
-/* NMRE collapsible page navigation */
-.nmre-menu-toolbar{display:flex;align-items:center;gap:12px;margin:16px 0 8px}
-.nmre-menu-toggle{display:inline-flex;align-items:center;gap:9px;background:var(--navy);color:#fff;padding:11px 16px;border:1px solid #263751;box-shadow:0 4px 12px rgba(16,26,43,.10)}
-.nmre-menu-toggle span{font-size:16px;line-height:1}
-.nmre-current-page{font-family:Georgia,serif;font-size:17px;color:var(--ink)}
-.nmre-workspace{display:grid;grid-template-columns:0 minmax(0,1fr);gap:0;align-items:start;margin-top:0}
-.nmre-workspace.menu-open{grid-template-columns:205px minmax(0,1fr);gap:18px}
+/* NMRE workspace navigation */
+.nmre-workspace{display:grid;grid-template-columns:205px minmax(0,1fr);gap:18px;align-items:start;margin-top:16px}
 .nmre-sidebar{position:sticky;top:14px;display:grid;gap:6px;padding:13px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 6px 20px rgba(16,26,43,.04)}
-.nmre-sidebar[hidden]{display:none!important}
+.nmre-sidebar-title{font-size:9px;font-weight:800;letter-spacing:1.7px;color:#a2824d;padding:4px 9px 8px}
 .nmre-nav-link{width:100%;text-align:left;background:transparent;color:#46536a;border:1px solid transparent;padding:10px 11px;border-radius:8px;font-size:12px;font-weight:700}
 .nmre-nav-link:hover{background:#f5f6f8}
 .nmre-nav-link.active{background:#101a2b;color:#fff;border-color:#101a2b}
@@ -284,8 +279,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .nmre-workspace-main{min-width:0}
 .nmre-workspace-main>.nmre-crm{margin-top:0}
 .nmre-workspace-main>[id]{scroll-margin-top:16px}
-@media(max-width:900px){.nmre-workspace.menu-open{grid-template-columns:1fr;gap:10px}.nmre-sidebar{position:relative;top:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:10px}.nmre-sidebar-title,.nmre-sidebar-note{display:none}.nmre-nav-link{width:100%;white-space:normal;text-align:left;padding:10px;font-size:11px}}
-@media(max-width:420px){.nmre-menu-toolbar{margin-top:10px}.nmre-current-page{font-size:15px}.nmre-sidebar{grid-template-columns:1fr 1fr}.nmre-nav-link{font-size:10px;padding:9px 7px}}
+@media(max-width:900px){.nmre-workspace{grid-template-columns:1fr}.nmre-sidebar{position:relative;top:auto;display:flex;gap:6px;overflow-x:auto;align-items:center;padding:9px}.nmre-sidebar-title,.nmre-sidebar-note{display:none}.nmre-nav-link{width:auto;white-space:nowrap;flex:0 0 auto;padding:9px 11px}}
+@media(max-width:560px){.nmre-workspace{gap:10px}.nmre-nav-link{font-size:11px;padding:8px 9px}}
 
 .seller-radar{margin:0 0 14px}
 .seller-radar-intro{font-size:11px;line-height:1.55;color:var(--muted);margin:-5px 0 13px}
@@ -461,23 +456,21 @@ button:disabled{opacity:.55;cursor:not-allowed}
 </div>
 </div>
 
-<div class="nmre-menu-toolbar"><button type="button" id="nmreMenuToggle" class="nmre-menu-toggle" aria-expanded="false" aria-controls="nmreSidebar"><span aria-hidden="true">☰</span> Menu</button><span id="nmreCurrentPage" class="nmre-current-page">Panoramica</span></div>
-<div class="nmre-workspace" id="nmreWorkspace">
-  <aside class="nmre-sidebar" id="nmreSidebar" aria-label="Navigazione gestionale" hidden>
+<div class="nmre-workspace">
+  <aside class="nmre-sidebar" aria-label="Navigazione gestionale">
     <div class="nmre-sidebar-title">MENU OPERATIVO</div>
     <button type="button" class="nmre-nav-link active" data-nmre-nav="dashboard">Panoramica</button>
-    <button type="button" class="nmre-nav-link" data-nmre-nav="candidateSection">Acquisizione · Opportunità</button>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="notificationsSection">Notifiche <span id="nmreUnreadBadge" class="nmre-unread-badge" hidden>0</span></button>
     <button type="button" class="nmre-nav-link" data-nmre-nav="nmreCrm">CRM · Contatti</button>
-    <button type="button" class="nmre-nav-link" data-nmre-nav="followupSection">Agenda e richiami</button>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="candidateSection">Acquisizione</button>
     <button type="button" class="nmre-nav-link" data-nmre-nav="archiveSection">Archivio immobili</button>
-    <button type="button" class="nmre-nav-link" data-nmre-nav="newListingSection">Registra immobile</button>
     <button type="button" class="nmre-nav-link" data-nmre-nav="marketAnalysisSection">Analisi mercato</button>
     <button type="button" class="nmre-nav-link" data-nmre-nav="automationSection">Gmail e API</button>
-    <button type="button" class="nmre-nav-link" data-nmre-nav="notificationsSection">Notifiche <span id="nmreUnreadBadge" class="nmre-unread-badge" hidden>0</span></button>
+    <button type="button" class="nmre-nav-link" data-nmre-nav="newListingSection">Registra immobile</button>
     <div class="nmre-sidebar-note">Nicholas Magi<br>Real Estate</div>
   </aside>
   <div class="nmre-workspace-main">
-<section class="panel dash-section-anchor" id="notificationsSection" data-nmre-page="notifications" hidden>
+<section class="panel dash-section-anchor" id="notificationsSection">
   <div class="topline"><div><div class="nmre-crm-kicker">CENTRO NOTIFICHE</div><h2>Avvisi e preferenze</h2><p class="hint">Scelga cosa ricevere. Le notifiche push possono arrivare anche quando NMRE è chiusa, dopo aver installato l’app sulla schermata Home e autorizzato gli avvisi.</p></div><span id="nmrePushState" class="pill">Push da configurare</span></div>
   <div class="nmre-notification-actions"><button id="nmreEnablePush" class="gold" type="button">Attiva notifiche su questo iPhone</button><button id="nmreTestPush" class="secondary" type="button">Invia notifica di prova</button><button id="nmreDisablePush" class="secondary" type="button">Disattiva su questo dispositivo</button></div>
   <div id="nmrePushHelp" class="status">Per iPhone: apra NMRE in Safari, scelga Condividi → Aggiungi alla schermata Home, poi apra l’icona installata e attivi le notifiche.</div>
@@ -504,7 +497,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   <div id="nmreNotificationList" class="nmre-notification-list"><p class="hint">Caricamento notifiche…</p></div>
 </section>
 
-<section class="panel nmre-crm" id="nmreCrm" data-nmre-page="crm" hidden>
+<section class="panel nmre-crm" id="nmreCrm">
   <div class="nmre-crm-head">
     <div><div class="nmre-crm-kicker">GESTIONALE</div><h2>CRM · Relazioni e portafoglio</h2><p class="hint">Contatti, immobili gestiti e attività in un unico spazio operativo.</p></div>
     <button class="secondary" id="nmreCrmRefresh" type="button">Aggiorna CRM</button>
@@ -571,7 +564,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   <div id="nmreCrmError" class="status" aria-live="polite"></div>
 </section>
 
-<section id="dashboard" class="dashboard" data-nmre-page="dashboard" aria-label="Dashboard operativa">
+<section id="dashboard" class="dashboard" aria-label="Dashboard operativa">
   <div class="dash-hero">
     <div>
       <div class="dash-kicker">Nicholas Magi Real Estate · Centro operativo</div>
@@ -807,7 +800,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   </div>
 </section>
 
-<section id="marketAnalysisSection" class="panel dash-section-anchor" data-nmre-page="market">
+<section id="marketAnalysisSection" class="panel dash-section-anchor">
   <div class="topline">
     <div><h2>Analisi di mercato · OMI e compravenduti</h2><div class="small">Dati ufficiali, fonti tracciate e confronti prudenziali</div></div>
     <div class="actions"><button class="secondary" id="refreshMarketData" type="button">Aggiorna archivio</button></div>
@@ -910,7 +903,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   </div>
 </section>
 
-<section id="automationSection" class="panel dash-section-anchor" data-nmre-page="automation" hidden>
+<section id="automationSection" class="panel dash-section-anchor">
 <h2>Acquisizione automatica degli annunci</h2>
 <p class="hint">
 La casella Gmail viene elaborata dal server in background. Qui non vengono mostrate le email: vede soltanto i dati estratti dagli annunci immobiliari, senza mittente, oggetto o testo dei messaggi.
@@ -941,7 +934,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div id="gmailMsg" class="status">Gmail lavora in background. Gli annunci ambigui richiedono la Sua approvazione.</div>
 </section>
 
-<section class="panel" data-nmre-page="automation" hidden>
+<section class="panel">
 <div class="topline"><h2>Collegamenti API dei portali</h2><span class="pill">Fonti ufficiali</span></div>
 <p class="hint">Oltre agli avvisi Gmail, NMRE può interrogare le API dei portali che rilasciano accessi professionali. Le credenziali restano sul server Supabase e non vengono salvate nel browser.</p>
 <div class="topline">
@@ -962,7 +955,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div id="portalApiMsg" class="status"></div>
 </section>
 
-<section id="candidateSection" class="panel dash-section-anchor" data-nmre-page="acquisition" hidden>
+<section id="candidateSection" class="panel dash-section-anchor">
 <div class="topline"><h2>Annunci privati e opportunità da valutare</h2><div class="actions"><button class="secondary" id="exportCandidatesCsv">Candidati CSV</button><button class="secondary" id="exportCandidatesXlsx">Candidati Excel</button><button class="secondary" id="refreshCandidates">Aggiorna</button></div></div>
 <p class="hint">Titolo, comune, prezzo, tipologia, superficie, locali e link vengono estratti quando presenti. I privati riconosciuti con prova affidabile e dati essenziali completi passano automaticamente nell’archivio; gli annunci incompleti o ambigui restano qui per la verifica.</p>
 <details class="crm" id="sellerRegistryDetails">
@@ -1010,7 +1003,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div class="stat"><strong id="verifyCount">0</strong><span>Da verificare</span></div>
 </div>
 
-<section id="newListingSection" class="panel dash-section-anchor" data-nmre-page="newListing" hidden>
+<section id="newListingSection" class="panel dash-section-anchor">
 <h2>Registra un nuovo immobile</h2>
 <form id="listingForm">
 <label>Titolo / descrizione</label>
@@ -1046,13 +1039,13 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 </form>
 </section>
 
-<section id="followupSection" class="panel dash-section-anchor" data-nmre-page="agenda" hidden>
+<section id="followupSection" class="panel dash-section-anchor">
 <h2>Agenda richiami</h2>
 <p class="hint">Proprietari da ricontattare: scadenze passate, oggi e nei prossimi sette giorni.</p>
 <div id="followupList"><p class="hint">Caricamento agenda...</p></div>
 </section>
 
-<section id="archiveSection" class="panel dash-section-anchor" data-nmre-page="archive" hidden>
+<section id="archiveSection" class="panel dash-section-anchor">
 <div class="topline"><h2>Archivio annunci</h2><div class="actions"><button class="secondary" id="exportCsv">Esporta CSV</button><button class="secondary" id="exportXlsx">Esporta Excel</button><button class="secondary" id="refresh">Aggiorna</button></div></div>
 <div class="search-filter-panel">
   <div class="search-filter-head"><div class="search-filter-title">Ricerca archivio · Filtri commerciali e immobiliari</div><span class="small">Combinabili tra loro</span></div>
@@ -1389,10 +1382,7 @@ async function removeSellerRegistryEntry(id){
 
 function dashboardScroll(id){
   const target=$(id);
-  if(!target)return;
-  const page=target.closest("[data-nmre-page]");
-  if(page&&page.hidden)nmreShowPage(page.dataset.nmrePage);
-  target.scrollIntoView({behavior:"smooth",block:"start"});
+  if(target)target.scrollIntoView({behavior:"smooth",block:"start"});
 }
 
 function openDashboardCandidate(id){
@@ -5110,35 +5100,13 @@ function exportCandidatesCsv(){
   msg("candidateMsg","Esportazione candidati completata.","success");
 }
 
-function nmreShowPage(pageId){
-  const pages=[...document.querySelectorAll("[data-nmre-page]")];
-  const selected=pages.find(page=>page.id===pageId || page.dataset.nmrePage===pageId);
-  if(!selected)return;
-  const pageKey=selected.dataset.nmrePage;
-  pages.forEach(page=>{page.hidden=page.dataset.nmrePage!==pageKey;});
-  document.querySelectorAll("[data-nmre-nav]").forEach(item=>{
-    const target=document.getElementById(item.dataset.nmreNav);
-    item.classList.toggle("active",!!target&&target.dataset.nmrePage===pageKey);
-  });
-  const activeButton=document.querySelector('[data-nmre-nav="'+CSS.escape(pageKey==='newListing'?'newListingSection':pageKey==='acquisition'?'candidateSection':pageKey==='agenda'?'followupSection':pageKey==='archive'?'archiveSection':pageKey==='market'?'marketAnalysisSection':pageKey==='automation'?'automationSection':pageKey==='notifications'?'notificationsSection':pageKey==='crm'?'nmreCrm':'dashboard')+'"]');
-  const labels={dashboard:"Panoramica",acquisition:"Acquisizione · Opportunità",crm:"CRM · Contatti",agenda:"Agenda e richiami",archive:"Archivio immobili",newListing:"Registra immobile",market:"Analisi mercato",automation:"Gmail e API",notifications:"Notifiche"};
-  $("nmreCurrentPage").textContent=labels[pageKey]||"Gestionale";
-  const sidebar=$("nmreSidebar"),toggle=$("nmreMenuToggle");
-  sidebar.hidden=true;
-  $("nmreWorkspace").classList.remove("menu-open");
-  toggle.setAttribute("aria-expanded","false");
-  toggle.focus({preventScroll:true});
-  window.scrollTo({top:0,behavior:"smooth"});
-}
-$("nmreMenuToggle").addEventListener("click",()=>{
-  const sidebar=$("nmreSidebar"),workspace=$("nmreWorkspace"),toggle=$("nmreMenuToggle");
-  const opening=sidebar.hidden;
-  sidebar.hidden=!opening;
-  workspace.classList.toggle("menu-open",opening);
-  toggle.setAttribute("aria-expanded",String(opening));
-});
 document.querySelectorAll("[data-nmre-nav]").forEach(button=>{
-  button.addEventListener("click",()=>nmreShowPage(button.dataset.nmreNav));
+  button.addEventListener("click",()=>{
+    const target=document.getElementById(button.dataset.nmreNav);
+    if(!target)return;
+    document.querySelectorAll("[data-nmre-nav]").forEach(item=>item.classList.toggle("active",item===button));
+    target.scrollIntoView({behavior:"smooth",block:"start"});
+  });
 });
 $("exportCandidatesCsv").addEventListener("click",exportCandidatesCsv);
 $("nmreSaveNotificationPrefs").addEventListener("click",saveNmreNotificationPreferences);
