@@ -49,6 +49,15 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .gmail-email{padding:12px 0;border-top:1px solid var(--line);font-size:13px;line-height:1.5;overflow-wrap:anywhere}
 .gmail-email b{display:block;margin-bottom:5px}
 .gmail-email .gmail-meta{color:var(--muted);font-size:12px}.crm{margin-top:12px;padding:12px;background:#f8f9fb;border:1px solid var(--line);border-radius:10px}.crm summary{cursor:pointer;font-weight:bold;font-size:13px}.crm textarea{width:100%;min-height:68px;border:1px solid #d9dfe8;border-radius:9px;padding:10px;font:inherit;font-size:13px;resize:vertical}.crm-entry{padding:8px 0;border-top:1px solid var(--line);font-size:12px}.crm-entry strong{display:block}.crm-history{margin-top:10px}.due{color:#a15c00;font-weight:bold}
+.seller-qualification-review{margin:12px 0;padding:13px;background:#f7f8fa;border:1px solid var(--line);border-radius:10px}
+.seller-review-top{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13px}
+.seller-review-top span,.seller-review-meta,.seller-review-gaps,.seller-review-disclaimer{font-size:11px;color:var(--muted)}
+.seller-review-meter{height:7px;background:#e6eaf0;border-radius:20px;overflow:hidden;margin:9px 0}
+.seller-review-meter span{display:block;height:100%;background:var(--gold);border-radius:20px}
+.seller-review-meta{line-height:1.5}
+.seller-review-next{display:grid;gap:4px;margin-top:10px;font-size:12px;line-height:1.45}
+.seller-review-gaps{margin-top:8px;line-height:1.5}
+.seller-review-disclaimer{margin-top:8px;font-size:10px;line-height:1.4}
 .seller-timeline-summary{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 12px}
 .seller-timeline-summary span{padding:5px 8px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--muted);font-size:10px;font-weight:700}
 .seller-timeline{position:relative;display:grid;gap:0;padding-left:4px}
@@ -1655,6 +1664,47 @@ function sellerQualification(item){
  if(String(item.vendita_motivazione||"").trim())add(5,"Motivazione vendita conosciuta");
  if(item.tipo_venditore==="Privato")add(10,"Privato verificato");
  return {score:Math.min(65,score),signals,qualified:!!(item.altre_agenzie&&item.altre_agenzie!=="da_verificare"&&item.tempistiche_vendita&&item.prezzo_trattabile!=="da_verificare")};
+}
+
+function renderSellerQualificationReview(details,item){
+ const box=details.querySelector("[data-seller-qualification-review]");
+ if(!box)return;
+ const value=field=>details.querySelector('[data-crm-field="'+field+'"]')?.value||"";
+ const current={...item,
+  vendita_motivazione:value("vendita_motivazione"),
+  tempistiche_vendita:value("tempistiche_vendita"),
+  altre_agenzie:value("altre_agenzie"),
+  prezzo_trattabile:value("prezzo_trattabile"),
+  prossimo_contatto_il:value("prossimo_contatto_il")
+ };
+ const gaps=[];
+ if(!String(item.contatto||"").trim())gaps.push("recapito diretto");
+ if(!current.vendita_motivazione)gaps.push("motivo della vendita");
+ if(!current.tempistiche_vendita)gaps.push("tempistiche");
+ if(!current.altre_agenzie||current.altre_agenzie==="da_verificare")gaps.push("situazione con altre agenzie");
+ if(!current.prezzo_trattabile||current.prezzo_trattabile==="da_verificare")gaps.push("margine sul prezzo");
+ if(!current.prossimo_contatto_il)gaps.push("data del prossimo contatto");
+ const q=sellerQualification(current);
+ const completed=6-gaps.length;
+ let status="In approfondimento",next="Approfondire la motivazione e i tempi reali della vendita.";
+ if(current.altre_agenzie==="esclusiva"){
+  status="Esclusiva attiva";next="Verificare con correttezza la situazione contrattuale e la relativa scadenza, senza sollecitare incarichi concorrenti.";
+ }else if(gaps.length){
+  status="Da qualificare";next="Raccogliere le informazioni mancanti durante il prossimo contatto: "+gaps.slice(0,3).join(", ")+".";
+ }else if(q.score>=35){
+  status="Priorità alta";next="Proporre un appuntamento per analisi dell'immobile e valutazione, verificando l'interesse del proprietario.";
+ }else if(q.score<20){
+  status="Da coltivare";next="Mantenere il rapporto e concordare un aggiornamento in linea con i tempi dichiarati.";
+ }else{
+  next="Chiarire aspettative sul prezzo e risultati ottenuti prima di proporre il prossimo incontro.";
+ }
+ const price=Number(item.prezzo)>0?formatCurrency(Number(item.prezzo)):"Non disponibile";
+ box.innerHTML='<div class="seller-review-top"><strong>Stato: '+safe(status)+'</strong><span>'+completed+'/6 informazioni complete</span></div>'+
+  '<div class="seller-review-meter"><span style="width:'+Math.round(completed/6*100)+'%"></span></div>'+
+  '<div class="seller-review-meta">Punteggio commerciale indicativo: <b>'+q.score+'/65</b> · Prezzo richiesto nell’annuncio: <b>'+safe(price)+'</b></div>'+
+  '<div class="seller-review-next"><b>Prossima azione consigliata</b><span>'+safe(next)+'</span></div>'+
+  (gaps.length?'<div class="seller-review-gaps">Da completare: '+safe(gaps.join(" · "))+'</div>':'<div class="seller-review-gaps">Qualificazione completa. Verifichi che le informazioni siano state confermate dal proprietario.</div>')+
+  '<div class="seller-review-disclaimer">Indicatore di supporto operativo, non probabilità di acquisizione né valutazione automatica del proprietario.</div>';
 }
 function renderOwnerQualificationRadar(all){
  const box=$("ownerQualificationList");if(!box)return;
@@ -4468,6 +4518,7 @@ function renderListings(){
       +'<label>Tempistiche desiderate</label><select data-crm-field="tempistiche_vendita"><option value="">Da chiarire</option><option value="entro_30_giorni" '+(item.tempistiche_vendita==="entro_30_giorni"?"selected":"")+'>Entro 30 giorni</option><option value="1_3_mesi" '+(item.tempistiche_vendita==="1_3_mesi"?"selected":"")+'>1–3 mesi</option><option value="3_6_mesi" '+(item.tempistiche_vendita==="3_6_mesi"?"selected":"")+'>3–6 mesi</option><option value="oltre_6_mesi" '+(item.tempistiche_vendita==="oltre_6_mesi"?"selected":"")+'>Oltre 6 mesi</option><option value="senza_fretta" '+(item.tempistiche_vendita==="senza_fretta"?"selected":"")+'>Senza fretta</option></select>'
       +'<label>Rapporto con altre agenzie</label><select data-crm-field="altre_agenzie"><option value="da_verificare" '+((item.altre_agenzie||"da_verificare")==="da_verificare"?"selected":"")+'>Da verificare</option><option value="nessuna" '+(item.altre_agenzie==="nessuna"?"selected":"")+'>Nessuna altra agenzia</option><option value="non_esclusiva" '+(item.altre_agenzie==="non_esclusiva"?"selected":"")+'>Altre agenzie senza esclusiva</option><option value="esclusiva" '+(item.altre_agenzie==="esclusiva"?"selected":"")+'>Esclusiva attiva con altra agenzia</option><option value="in_trattativa" '+(item.altre_agenzie==="in_trattativa"?"selected":"")+'>In trattativa / situazione da chiarire</option></select>'
       +'<label>Disponibilità a valutare una revisione del prezzo</label><select data-crm-field="prezzo_trattabile"><option value="da_verificare" '+((item.prezzo_trattabile||"da_verificare")==="da_verificare"?"selected":"")+'>Da verificare</option><option value="si" '+(item.prezzo_trattabile==="si"?"selected":"")+'>Sì</option><option value="parzialmente" '+(item.prezzo_trattabile==="parzialmente"?"selected":"")+'>In parte</option><option value="no" '+(item.prezzo_trattabile==="no"?"selected":"")+'>No</option></select>'
+      +'<div class="seller-qualification-review" data-seller-qualification-review aria-live="polite"></div>'
       +'<div class="actions"><button class="gold" data-save-crm>Salva scheda</button></div>'
       +'<hr><b>Registra una nuova interazione</b>'
       +'<div class="row"><div><label>Tipo</label><select data-new-type><option value="telefonata">Telefonata</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="appuntamento">Appuntamento</option><option value="nota">Nota</option><option value="altro">Altro</option></select></div><div><label>Esito sintetico</label><input data-new-outcome maxlength="180" placeholder="Es. Richiede informazioni, richiamare..."></div></div>'
@@ -4485,6 +4536,8 @@ function renderListings(){
     details.querySelector('[data-crm-field="stato_contatto"]').value=item?.stato_contatto||"da_contattare";
     details.querySelector('[data-crm-field="prossimo_contatto_il"]').value=item?.prossimo_contatto_il||"";
     details.addEventListener("toggle",()=>{if(details.open&&!details.dataset.loaded){details.dataset.loaded="1";loadInteractions(id,details);}});
+    renderSellerQualificationReview(details,item);
+    details.querySelectorAll('[data-crm-field="vendita_motivazione"],[data-crm-field="tempistiche_vendita"],[data-crm-field="altre_agenzie"],[data-crm-field="prezzo_trattabile"],[data-crm-field="prossimo_contatto_il"]').forEach(field=>field.addEventListener("change",()=>renderSellerQualificationReview(details,item)));
     details.querySelector("[data-save-crm]").addEventListener("click",()=>saveCrm(id,details));
     details.querySelector("[data-add-interaction]").addEventListener("click",()=>addInteraction(id,details));
   });
