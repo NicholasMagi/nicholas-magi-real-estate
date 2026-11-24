@@ -99,6 +99,17 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .dash-hero .secondary{background:#ffffff18;color:#fff;border:1px solid #ffffff2b}
 .dash-hero .gold{background:var(--gold);color:#182235}
 .dash-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.dash-quick-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:-2px 0 14px}
+.dash-quick-action{display:flex;align-items:center;justify-content:flex-start;gap:10px;min-height:58px;padding:11px 13px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);text-align:left;transition:border-color .15s,transform .15s,box-shadow .15s}
+.dash-quick-action:hover{border-color:#c9a96e;box-shadow:0 5px 16px rgba(16,26,43,.07);transform:translateY(-1px)}
+.dash-quick-action-icon{display:grid;place-items:center;width:34px;height:34px;flex:0 0 34px;border-radius:10px;background:#f3f0e9;color:#8d6c39;font-size:17px}
+.dash-quick-action-copy{display:grid;gap:3px;min-width:0}
+.dash-quick-action-copy strong{font-size:12px;line-height:1.2}
+.dash-quick-action-copy span{font-size:10px;color:var(--muted);font-weight:400;line-height:1.3}
+.dash-quick-action:focus-visible{outline:3px solid #c9a96e;outline-offset:2px}
+@media(max-width:650px){.dash-quick-actions{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.dash-quick-action{min-height:54px;padding:9px}.dash-quick-action-copy span{font-size:9px}}
+@media(max-width:380px){.dash-quick-action-icon{width:30px;height:30px;flex-basis:30px}.dash-quick-action-copy strong{font-size:11px}}
+
 .dash-metric{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 17px;min-width:0;position:relative;overflow:hidden}
 .dash-metric:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--gold)}
 .dash-metric-label{font-size:11px;letter-spacing:.4px;color:var(--muted);font-weight:700;text-transform:uppercase}
@@ -490,6 +501,25 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div class="dash-metric-note">Incarichi registrati nel CRM</div>
     </article>
   </div>
+
+  <nav class="dash-quick-actions" aria-label="Azioni rapide dashboard">
+    <button class="dash-quick-action" type="button" data-dashboard-action="calls">
+      <span class="dash-quick-action-icon" aria-hidden="true">☎</span>
+      <span class="dash-quick-action-copy"><strong>Avvia chiamate</strong><span>Richiami e nuovi proprietari</span></span>
+    </button>
+    <button class="dash-quick-action" type="button" data-dashboard-action="contact">
+      <span class="dash-quick-action-icon" aria-hidden="true">＋</span>
+      <span class="dash-quick-action-copy"><strong>Nuovo contatto</strong><span>Registra una relazione nel CRM</span></span>
+    </button>
+    <button class="dash-quick-action" type="button" data-dashboard-action="lead">
+      <span class="dash-quick-action-icon" aria-hidden="true">⌕</span>
+      <span class="dash-quick-action-copy"><strong>Nuova opportunità</strong><span>Vai agli annunci da verificare</span></span>
+    </button>
+    <button class="dash-quick-action" type="button" data-dashboard-action="agenda">
+      <span class="dash-quick-action-icon" aria-hidden="true">▦</span>
+      <span class="dash-quick-action-copy"><strong>Apri agenda</strong><span>Appuntamenti e attività</span></span>
+    </button>
+  </nav>
 
   <section class="dash-card call-center" id="callCenter" aria-label="Centro operativo telefonate">
     <div class="dash-card-head">
@@ -1824,6 +1854,26 @@ $("refreshGmailSyncStatus").addEventListener("click",async()=>{
   finally{button.disabled=false;button.textContent="Aggiorna stato";}
 });
 $("dashboardNewListing").addEventListener("click",()=>dashboardScroll("newListingSection"));
+$("dashboard").querySelectorAll("[data-dashboard-action]").forEach(button=>{
+  button.addEventListener("click",()=>{
+    const action=button.dataset.dashboardAction;
+    if(action==="calls"){
+      dashboardScroll("callCenter");
+      $("callQueueFilter")?.focus({preventScroll:true});
+    }else if(action==="contact"){
+      dashboardScroll("nmreCrm");
+      nmreCrmSetTab("contatti");
+      $("nmreCrmContactName")?.focus({preventScroll:true});
+    }else if(action==="lead"){
+      dashboardScroll("candidateSection");
+      $("candidateSearch")?.focus({preventScroll:true});
+    }else if(action==="agenda"){
+      dashboardScroll("nmreCrm");
+      nmreCrmSetTab("agenda");
+      $("nmreCrmAgendaTitle")?.focus({preventScroll:true});
+    }
+  });
+});
 $("dashboardMarketAnalysis").addEventListener("click",()=>dashboardScroll("marketAnalysisSection"));
 $("callQueueFilter").addEventListener("change",renderCallCenter);
 $("callCenterOpenArchive").addEventListener("click",()=>dashboardScroll("archiveSection"));
