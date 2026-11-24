@@ -3762,12 +3762,15 @@ function candidateQuality(item,candidates,archive,now=new Date()){
   const hasNotificationDate=Number.isFinite(notificationTimestamp);
   const notificationDays=hasNotificationDate?Math.max(0,Math.floor((now.getTime()-notificationTimestamp)/86400000)):null;
   const missing=[];
+  const recommendedMissing=[];
   if(!String(item.comune||"").trim())missing.push("comune");
   if(!(Number(item.prezzo)>0))missing.push("prezzo");
   if(!String(item.tipologia_immobile||"").trim())missing.push("tipologia");
   if(!(Number(item.superficie_mq)>0))missing.push("superficie");
   if(!(Number(item.locali)>0))missing.push("locali");
-  if(!String(item.contatto||"").trim())missing.push("contatto");
+  // I portali spesso non includono il recapito diretto nelle email:
+  // resta un dato consigliato da verificare sull'annuncio, non un requisito di completezza.
+  if(!String(item.contatto||"").trim())recommendedMissing.push("recapito diretto da verificare sul portale");
   if(!hasNotificationDate)missing.push("data notifica email");
   const duplicate=findCandidateDuplicate(item,candidates,archive);
 
@@ -3795,6 +3798,7 @@ function candidateQuality(item,candidates,archive,now=new Date()){
     notificationDays,
     oldNotification:hasNotificationDate&&notificationDays>30,
     missing,
+    recommendedMissing,
     incomplete:missing.length>0,
     duplicate,
     qualityScore,
@@ -3929,12 +3933,13 @@ function renderCandidates(){
       ?(quality.notificationDays===0?"Email ricevuta oggi":"Email ricevuta "+quality.notificationDays+" giorni fa")
       :"Data di ricezione dell'email non disponibile";
     const linkText=quality.specificLink?"Link specifico individuato":(quality.hasValidUrl?"Collegamento generico o non riconosciuto":"Nessun collegamento disponibile");
-    const missingText=quality.missing.length?"Dati mancanti: "+quality.missing.join(", "):"Dati essenziali presenti";
+    const missingText=quality.missing.length?"Dati essenziali mancanti: "+quality.missing.join(", "):"Dati essenziali presenti";
+    const recommendedText=quality.recommendedMissing.length?"Da verificare sull'annuncio: "+quality.recommendedMissing.join(", "):"Recapito diretto disponibile";
     const duplicateText=quality.duplicate
       ?"Possibile duplicato nell'"+(quality.duplicate.scope==="archivio"?"archivio":"elenco opportunità")+": "+(quality.duplicate.item.titolo||"annuncio simile")+" ("+quality.duplicate.reason+")"
       :"Nessun duplicato evidente individuato";
     const tone=quality.duplicate||!quality.specificLink||quality.oldNotification?"warning":quality.incomplete||!quality.hasNotificationDate?"review":"ok";
-    const qualityHtml='<div class="candidate-quality candidate-quality-'+tone+'"><strong>Controllo qualità:</strong> '+safe(linkText)+' · '+safe(ageText)+' · '+safe(missingText)+'<br>'+safe(duplicateText)+'</div>';
+    const qualityHtml='<div class="candidate-quality candidate-quality-'+tone+'"><strong>Controllo qualità:</strong> '+safe(linkText)+' · '+safe(ageText)+' · '+safe(missingText)+'<br>'+safe(recommendedText)+'<br>'+safe(duplicateText)+'</div>';
     const history=Array.isArray(c.notification_history)?c.notification_history:[];
     const latestPriceDrop=history.find(entry=>
       Number(entry.price_drop_percent)>0 &&
