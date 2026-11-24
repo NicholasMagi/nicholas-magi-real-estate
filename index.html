@@ -487,7 +487,46 @@ button:disabled{opacity:.55;cursor:not-allowed}
   .nmre-menu-items button{min-height:52px}
 }
 
+
+/* Mappa immobili */
+.nmre-map-controls{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
+.nmre-map-filter{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:30px;padding:7px 11px;background:#fff;font-size:12px;font-weight:650}
+.nmre-map-filter input{width:15px;height:15px;margin:0}
+.nmre-map-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.nmre-map-dot-mandate{background:#b18a50}.nmre-map-dot-sold{background:#32866c}.nmre-map-dot-archive{background:#758197}
+.nmre-map-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:10px 0 14px}
+.nmre-map-summary>div{background:#f7f8fa;border:1px solid #e8ebf0;border-radius:11px;padding:11px}
+.nmre-map-summary strong{display:block;font-size:22px;line-height:1.2;color:var(--ink);font-variant-numeric:tabular-nums}
+.nmre-map-summary span{display:block;margin-top:4px;font-size:11px;color:var(--muted)}
+.nmre-property-map{height:580px;min-height:360px;width:100%;border:1px solid #dce2e9;border-radius:14px;z-index:1;background:#edf1f4}
+.nmre-map-attribution-note{font-size:10px;color:var(--muted);margin:6px 2px}
+.nmre-map-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 5px}
+.nmre-map-actions .status{margin:0;flex:1 1 250px}
+.nmre-map-privacy{margin:7px 0 18px;line-height:1.5}
+.nmre-map-list-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.nmre-map-list-head h3{margin:0 0 8px}
+.nmre-map-items{display:grid;gap:9px}
+.nmre-map-item{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,360px);gap:12px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.nmre-map-item h4{margin:0 0 4px;font-size:14px}
+.nmre-map-item p{margin:3px 0;font-size:12px;color:var(--muted)}
+.nmre-map-item-side{display:grid;gap:6px}
+.nmre-map-address-edit{display:flex;gap:6px}
+.nmre-map-address-edit input{min-width:0;flex:1}
+.nmre-map-address-edit button{white-space:nowrap}
+.nmre-map-tag{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:750;padding:4px 8px;border-radius:30px;background:#f0f2f5;color:#44536a}
+.nmre-map-popup{min-width:180px;line-height:1.45}
+.nmre-map-popup strong{display:block;margin-bottom:4px}
+.nmre-map-popup small{color:#667085}
+.nmre-map-popup a{display:inline-block;margin-top:6px}
+@media(max-width:620px){
+ .nmre-map-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .nmre-property-map{height:66vh;min-height:380px}
+ .nmre-map-item{grid-template-columns:1fr}
+ .nmre-map-address-edit{flex-wrap:wrap}
+ .nmre-map-address-edit button{flex:1}
+}
 </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 </head>
 <body>
 <header><div class="wrap">
@@ -568,6 +607,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div class="nmre-menu-items">
         <button type="button" data-nmre-nav="nmreCrm" data-nmre-crm-tab="immobili" data-nmre-label="Immobili e incarichi"><span class="nmre-menu-item-icon">⌂</span><span><strong>Immobili e incarichi</strong><small>Portafoglio gestito</small></span></button>
         <button type="button" data-nmre-nav="newListingSection" data-nmre-label="Registra immobile"><span class="nmre-menu-item-icon">＋</span><span><strong>Registra immobile</strong><small>Inserimento manuale nel CRM</small></span></button>
+        <button type="button" data-nmre-nav="propertyMapSection" data-nmre-label="Mappa immobili"><span class="nmre-menu-item-icon">⌖</span><span><strong>Mappa immobili</strong><small>Incarichi, venduti e archivio</small></span></button>
       </div>
     </div>
     <div class="nmre-menu-group">
@@ -695,6 +735,33 @@ button:disabled{opacity:.55;cursor:not-allowed}
     <div id="nmreCrmAgendaList" class="nmre-crm-list"></div>
   </section>
   <div id="nmreCrmError" class="status" aria-live="polite"></div>
+</section>
+
+<section id="propertyMapSection" class="panel dash-section-anchor" hidden>
+  <div class="topline">
+    <div><div class="nmre-crm-kicker">PORTAFOGLIO IMMOBILIARE</div><h2>Mappa immobili</h2><p class="hint">Una vista geografica degli immobili in incarico, venduti e presenti nell'archivio. Se un annuncio è collegato a una scheda CRM, viene mostrato una sola volta con lo stato del CRM.</p></div>
+    <div class="actions"><button class="secondary" id="nmreMapRefresh" type="button">Aggiorna mappa</button></div>
+  </div>
+  <div class="nmre-map-controls">
+    <label class="nmre-map-filter"><input id="nmreMapShowMandates" type="checkbox" checked><span class="nmre-map-dot nmre-map-dot-mandate"></span> Incarichi e immobili in vendita</label>
+    <label class="nmre-map-filter"><input id="nmreMapShowSold" type="checkbox" checked><span class="nmre-map-dot nmre-map-dot-sold"></span> Venduti</label>
+    <label class="nmre-map-filter"><input id="nmreMapShowArchive" type="checkbox" checked><span class="nmre-map-dot nmre-map-dot-archive"></span> Archivio</label>
+  </div>
+  <div class="nmre-map-summary" id="nmreMapSummary">
+    <div><strong id="nmreMapMandateCount">0</strong><span>Incarichi</span></div>
+    <div><strong id="nmreMapSoldCount">0</strong><span>Venduti</span></div>
+    <div><strong id="nmreMapArchiveCount">0</strong><span>In archivio</span></div>
+    <div><strong id="nmreMapMissingCount">0</strong><span>Da posizionare</span></div>
+  </div>
+  <div id="nmrePropertyMap" class="nmre-property-map" role="application" aria-label="Mappa interattiva degli immobili"></div>
+  <div class="nmre-map-attribution-note">Cartografia © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>.</div>
+  <div class="nmre-map-actions">
+    <button class="gold" id="nmreMapLocateMissing" type="button">Individua posizioni mancanti</button>
+    <span id="nmreMapStatus" class="status" aria-live="polite">Caricamento immobili...</span>
+  </div>
+  <p class="small nmre-map-privacy">Per trovare le coordinate, NMRE può inviare a OpenStreetMap l'indirizzo o il solo comune dell'immobile. La ricerca parte soltanto quando preme il pulsante; il risultato viene salvato nel gestionale e non viene richiesto di nuovo a ogni apertura. Gli immobili senza indirizzo preciso saranno indicati come posizione approssimativa del comune.</p>
+  <div class="nmre-map-list-head"><h3>Immobili sulla mappa</h3><span class="small">Può correggere l'indirizzo prima di individuare la posizione.</span></div>
+  <div id="nmreMapItems" class="nmre-map-items"><div class="nmre-crm-empty">Caricamento immobili...</div></div>
 </section>
 
 <section id="dashboard" class="dashboard" aria-label="Dashboard operativa">
@@ -1173,6 +1240,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div><label>Comune</label><input id="municipality" required maxlength="100" placeholder="Es. Osimo"></div>
 <div><label>Prezzo richiesto (€)</label><input id="price" type="number" min="0" step="1" placeholder="180000"></div>
 </div>
+<div><label>Indirizzo (facoltativo, per la mappa)</label><input id="listingAddress" maxlength="220" placeholder="Via, numero civico"></div>
 <div class="row">
 <div><label>Contatto</label><input id="contact" maxlength="180" placeholder="Telefono o email"></div>
 <div><label>Tipologia venditore</label>
@@ -1613,7 +1681,7 @@ const NMRE_VIEW_LABELS={
   dashboard:"Panoramica",automationSection:"Fonti e automazioni",
   candidateSection:"Nuove opportunità",archiveSection:"Archivio annunci",
   callCenter:"Centro telefonate",nmreCrm:"CRM",followupSection:"Richiami programmati",
-  newListingSection:"Registra immobile",marketAnalysisSection:"Analisi di mercato",
+  newListingSection:"Registra immobile",propertyMapSection:"Mappa immobili",marketAnalysisSection:"Analisi di mercato",
   salesPerformancePanel:"Performance commerciale",settingsSection:"Impostazioni"
 };
 let nmreCurrentViewId="dashboard";
@@ -1629,7 +1697,7 @@ function nmreToggleMenu(){
   toggle.setAttribute("aria-expanded",String(!panel.hidden));
 }
 function nmreShowView(viewId,options={}){
-  const allowed=["dashboard","nmreCrm","settingsSection","marketAnalysisSection","automationSection","candidateSection","newListingSection","followupSection","archiveSection"];
+  const allowed=["dashboard","nmreCrm","settingsSection","marketAnalysisSection","automationSection","candidateSection","newListingSection","followupSection","archiveSection","propertyMapSection"];
   if(!allowed.includes(viewId))return false;
   allowed.forEach(id=>{const section=$(id);if(section)section.hidden=id!==viewId;});
   if(viewId==="nmreCrm")nmreCrmSetTab(options.crmTab||"contatti");
@@ -1643,6 +1711,7 @@ function nmreShowView(viewId,options={}){
     if(selected)button.setAttribute("aria-current","page");else button.removeAttribute("aria-current");
   });
   nmreCloseMenu();
+  if(viewId==="propertyMapSection")requestAnimationFrame(()=>nmreRenderPropertyMap());
   if(options.scroll!==false)requestAnimationFrame(()=>{
     if(options.scrollTarget)options.scrollTarget.scrollIntoView({behavior:"smooth",block:"start"});
     else $("appArea")?.scrollIntoView({behavior:"smooth",block:"start"});
@@ -1661,6 +1730,7 @@ function nmreNavigateToTarget(targetId,crmTab=null,label=null){
   else if(target.closest("#newListingSection"))viewId="newListingSection";
   else if(target.closest("#followupSection"))viewId="followupSection";
   else if(target.closest("#archiveSection"))viewId="archiveSection";
+  else if(target.closest("#propertyMapSection"))viewId="propertyMapSection";
   if(viewId==="nmreCrm"&&!crmTab)crmTab="contatti";
   const isRoot=targetId===viewId;
   const crmLabels={contatti:"Proprietari e contatti",immobili:"Immobili e incarichi",agenda:"Agenda appuntamenti"};
@@ -3574,6 +3644,197 @@ async function nmreCrmSaveContactInteraction(event,form){
  form.reset();
  await nmreCrmLoadContactHistory(contactId);
 }
+
+let nmreLeafletPromise=null,nmreMapInstance=null,nmreMapLayer=null,nmreLastGeocodeAt=0;
+function nmreEnsureLeaflet(){
+ if(window.L)return Promise.resolve(window.L);
+ if(nmreLeafletPromise)return nmreLeafletPromise;
+ nmreLeafletPromise=new Promise((resolve,reject)=>{
+  const script=document.createElement("script");
+  script.src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+  script.async=true;
+  script.onload=()=>window.L?resolve(window.L):reject(new Error("Leaflet non disponibile."));
+  script.onerror=()=>{nmreLeafletPromise=null;reject(new Error("Impossibile caricare la libreria della mappa."));};
+  document.head.appendChild(script);
+ });
+ return nmreLeafletPromise;
+}
+function nmreMapCategory(status){
+ if(status==="venduto")return "venduto";
+ if(status==="archiviato")return "archivio";
+ if(["incarico","in_vendita","proposta"].includes(status))return "incarico";
+ return null;
+}
+function nmreCollectMapEntries(){
+ const crm=(nmreCrmProperties||[]).map(row=>{
+  const category=nmreMapCategory(row.status);
+  if(!category)return null;
+  return {
+   id:String(row.id),source:"crm",category,title:row.title||"Immobile senza titolo",
+   municipality:row.municipality||"",address:row.address||"",status:row.status,
+   latitude:row.latitude===null||row.latitude===undefined?null:Number(row.latitude),
+   longitude:row.longitude===null||row.longitude===undefined?null:Number(row.longitude),
+   precision:row.location_precision||null,created_at:row.created_at||null,url:null,
+   property_type:row.property_type||""
+  };
+ }).filter(Boolean);
+ const linked=new Set((nmreCrmProperties||[]).map(row=>String(row.source_listing_id||"")).filter(Boolean));
+ const archive=(listingCache||[]).filter(row=>!linked.has(String(row.id))).map(row=>{
+  const category=row.stato_contatto==="incarico_acquisito"?"incarico":"archivio";
+  return {
+   id:String(row.id),source:"archive",category,title:row.titolo||"Annuncio in archivio",
+   municipality:row.comune||"",address:row.indirizzo||"",status:row.stato_contatto||"archivio",
+   latitude:row.latitude===null||row.latitude===undefined?null:Number(row.latitude),
+   longitude:row.longitude===null||row.longitude===undefined?null:Number(row.longitude),
+   precision:row.location_precision||null,created_at:row.created_at||null,url:row.url||null,
+   property_type:row.tipologia_immobile||""
+  };
+ });
+ return [...crm,...archive];
+}
+function nmreMapCategoryLabel(category){
+ return category==="incarico"?"Incarico / in vendita":category==="venduto"?"Venduto":"Archivio";
+}
+function nmreMapCategoryColor(category){
+ return category==="incarico"?"#b18a50":category==="venduto"?"#32866c":"#758197";
+}
+function nmreMapFiltersAllow(category){
+ if(category==="incarico")return $("nmreMapShowMandates").checked;
+ if(category==="venduto")return $("nmreMapShowSold").checked;
+ return $("nmreMapShowArchive").checked;
+}
+function nmreRenderMapList(items){
+ const box=$("nmreMapItems");
+ if(!items.length){box.innerHTML='<div class="nmre-crm-empty">Non ci sono ancora immobili da visualizzare. Registri un immobile nel CRM oppure inserisca un annuncio nell’archivio.</div>';return;}
+ box.innerHTML=items.map(item=>{
+  const precision=item.precision==="civico"?"Civico":item.precision==="via"?"Via":item.precision==="comune"?"Comune · approssimativo":"Posizione da individuare";
+  const currentAddress=item.address||"";
+  return '<article class="nmre-map-item" data-map-item="'+safe(item.id)+'" data-map-source="'+safe(item.source)+'">'+
+   '<div><h4>'+safe(item.title)+'</h4><p>'+safe([item.municipality,item.property_type].filter(Boolean).join(" · ")||"Località da completare")+'</p>'+
+   '<span class="nmre-map-tag"><span class="nmre-map-dot" style="background:'+nmreMapCategoryColor(item.category)+'"></span>'+safe(nmreMapCategoryLabel(item.category))+'</span> '+
+   '<span class="small">'+safe(precision)+'</span></div>'+
+   '<div class="nmre-map-item-side"><div class="nmre-map-address-edit"><input type="text" maxlength="220" data-map-address-input value="'+safe(currentAddress)+'" placeholder="Indirizzo e numero civico (facoltativo)"><button class="secondary" type="button" data-map-save-address>Salva e posiziona</button></div>'+
+   '<p>'+(item.latitude!==null&&item.longitude!==null?"Coordinate salvate":"Nessuna coordinata salvata")+'</p></div></article>';
+ }).join("");
+ box.querySelectorAll("[data-map-save-address]").forEach(button=>button.addEventListener("click",async()=>{
+  const card=button.closest("[data-map-item]");
+  const source=card.dataset.mapSource,id=card.dataset.mapItem;
+  const address=card.querySelector("[data-map-address-input]").value.trim();
+  const item=nmreCollectMapEntries().find(row=>row.id===id&&row.source===source);
+  if(!item)return;
+  button.disabled=true;
+  try{
+   const table=source==="crm"?"nmre_properties":"annunci";
+   const column=source==="crm"?"address":"indirizzo";
+   const {error}=await supabase.from(table).update({
+    [column]:address||null,latitude:null,longitude:null,location_precision:null,location_updated_at:null
+   }).eq("id",id).eq("owner_id",currentUser.id);
+   if(error)throw error;
+   item.address=address;item.latitude=null;item.longitude=null;item.precision=null;
+   const collection=source==="crm"?nmreCrmProperties:listingCache;
+   const row=collection.find(entry=>String(entry.id)===id);
+   if(row){row[column]=address||null;row.latitude=null;row.longitude=null;row.location_precision=null;row.location_updated_at=null;}
+   await nmreGeocodeMapEntry(item,button);
+  }catch(error){
+   $("nmreMapStatus").textContent="Salvataggio indirizzo non riuscito: "+(error.message||"errore");
+  }finally{button.disabled=false;}
+ }));
+}
+async function nmreGeocodeMapEntry(item,button=null){
+ const status=$("nmreMapStatus");
+ const query=[item.address,item.municipality,"Italia"].filter(Boolean).join(", ");
+ if(!query){status.textContent="Completi almeno il comune prima di individuare la posizione.";return false;}
+ const elapsed=Date.now()-nmreLastGeocodeAt;
+ if(elapsed<1100)await new Promise(resolve=>setTimeout(resolve,1100-elapsed));
+ status.textContent="Ricerca della posizione: "+item.title+"…";
+ const params=new URLSearchParams({format:"jsonv2",limit:"1",countrycodes:"it",q:query});
+ let results;
+ nmreLastGeocodeAt=Date.now();
+ try{
+  const response=await fetch("https://nominatim.openstreetmap.org/search?"+params.toString(),{
+   method:"GET",headers:{Accept:"application/json"},credentials:"omit",
+   referrerPolicy:"strict-origin-when-cross-origin",cache:"no-store"
+  });
+  if(!response.ok)throw new Error("Servizio cartografico non disponibile ("+response.status+").");
+  results=await response.json();
+ }catch(error){status.textContent=error.message||"Ricerca posizione non riuscita.";return false;}
+ if(!Array.isArray(results)||!results.length){status.textContent="Nessuna posizione trovata per "+item.title+". Provi a indicare via e numero civico.";return false;}
+ const result=results[0],lat=Number(result.lat),lon=Number(result.lon);
+ if(!Number.isFinite(lat)||!Number.isFinite(lon)){status.textContent="Il servizio non ha restituito coordinate valide.";return false;}
+ const resultAddress=result.address||{};
+ const precision=item.address?(resultAddress.house_number?"civico":resultAddress.road?"via":"comune"):"comune";
+ const table=item.source==="crm"?"nmre_properties":"annunci";
+ const {error}=await supabase.from(table).update({
+  latitude:lat,longitude:lon,location_precision:precision,location_updated_at:new Date().toISOString()
+ }).eq("id",item.id).eq("owner_id",currentUser.id);
+ if(error){status.textContent="Coordinate trovate ma non salvate: "+error.message;return false;}
+ const collection=item.source==="crm"?nmreCrmProperties:listingCache;
+ const row=collection.find(entry=>String(entry.id)===item.id);
+ if(row){row.latitude=lat;row.longitude=lon;row.location_precision=precision;row.location_updated_at=new Date().toISOString();}
+ item.latitude=lat;item.longitude=lon;item.precision=precision;
+ status.textContent="Posizione salvata per "+item.title+(precision==="comune"?" · indicazione approssimativa del comune.":".");
+ nmreRenderPropertyMap();
+ return true;
+}
+async function nmreGeocodeMissingMapEntries(){
+ const button=$("nmreMapLocateMissing");
+ const items=nmreCollectMapEntries().filter(item=>!Number.isFinite(item.latitude)||!Number.isFinite(item.longitude));
+ if(!items.length){$("nmreMapStatus").textContent="Tutti gli immobili hanno già una posizione salvata.";return;}
+ if(!confirm("Individuare la posizione di "+items.length+" immobili? Per ogni immobile senza indirizzo verrà usato il solo comune, quindi il punto sarà approssimativo."))return;
+ button.disabled=true;
+ let found=0,failed=0;
+ try{
+  for(let index=0;index<items.length;index++){
+   $("nmreMapStatus").textContent="Posizionamento "+(index+1)+" di "+items.length+": "+items[index].title;
+   const ok=await nmreGeocodeMapEntry(items[index]);
+   if(ok)found++;else failed++;
+  }
+  $("nmreMapStatus").textContent="Operazione conclusa: "+found+" posizioni salvate"+(failed?" · "+failed+" da completare manualmente.":".");
+ }finally{button.disabled=false;nmreRenderPropertyMap();}
+}
+async function nmreRenderPropertyMap(){
+ const container=$("nmrePropertyMap");
+ if(!container||$("propertyMapSection").hidden)return;
+ const items=nmreCollectMapEntries();
+ const filtered=items.filter(item=>nmreMapFiltersAllow(item.category));
+ $("nmreMapMandateCount").textContent=String(items.filter(item=>item.category==="incarico").length);
+ $("nmreMapSoldCount").textContent=String(items.filter(item=>item.category==="venduto").length);
+ $("nmreMapArchiveCount").textContent=String(items.filter(item=>item.category==="archivio").length);
+ $("nmreMapMissingCount").textContent=String(items.filter(item=>!Number.isFinite(item.latitude)||!Number.isFinite(item.longitude)).length);
+ nmreRenderMapList(filtered);
+ try{
+  const L=await nmreEnsureLeaflet();
+  if(!nmreMapInstance){
+   nmreMapInstance=L.map(container,{scrollWheelZoom:true}).setView([43.54,13.50],9);
+   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{
+    maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>'
+   }).addTo(nmreMapInstance);
+   nmreMapLayer=L.layerGroup().addTo(nmreMapInstance);
+  }
+  nmreMapLayer.clearLayers();
+  const located=filtered.filter(item=>Number.isFinite(item.latitude)&&Number.isFinite(item.longitude));
+  const bounds=[];
+  located.forEach(item=>{
+   const color=nmreMapCategoryColor(item.category);
+   const marker=L.circleMarker([item.latitude,item.longitude],{
+    radius:9,color:color,fillColor:color,fillOpacity:.92,weight:2
+   }).addTo(nmreMapLayer);
+   const address=item.address?item.address+" · "+item.municipality:item.municipality;
+   const precision=item.precision==="comune"?"Posizione approssimativa · comune":item.precision==="via"?"Posizione sulla via":item.precision==="civico"?"Posizione al civico":"Posizione salvata";
+   const link=item.url&&validUrl(item.url)?'<a href="'+safe(validUrl(item.url))+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>':"";
+   marker.bindPopup('<div class="nmre-map-popup"><strong>'+safe(item.title)+'</strong><span>'+safe(address||"Località non indicata")+'</span><br><small>'+safe(nmreMapCategoryLabel(item.category))+' · '+safe(precision)+'</small>'+link+'</div>');
+   bounds.push([item.latitude,item.longitude]);
+  });
+  if(bounds.length>1)nmreMapInstance.fitBounds(L.latLngBounds(bounds).pad(.15),{maxZoom:15});
+  else if(bounds.length===1)nmreMapInstance.setView(bounds[0],located[0].precision==="comune"?11:15);
+  else if(!nmreMapInstance._nmreInitialViewSet){nmreMapInstance.setView([43.54,13.50],9);nmreMapInstance._nmreInitialViewSet=true;}
+  requestAnimationFrame(()=>nmreMapInstance&&nmreMapInstance.invalidateSize());
+  if(!items.length)$("nmreMapStatus").textContent="La mappa è pronta. Gli immobili appariranno qui quando saranno registrati nel CRM o nell'archivio.";
+  else if(!located.length)$("nmreMapStatus").textContent="Le schede sono presenti ma non hanno ancora coordinate. Usi «Individua posizioni mancanti» per posizionarle.";
+  else $("nmreMapStatus").textContent=located.length+" immobili posizionati su "+items.length+" · i punti del solo comune sono approssimativi.";
+ }catch(error){$("nmreMapStatus").textContent=error.message||"Impossibile caricare la mappa.";}
+}
+
 function nmreCrmRenderProperties(){
  const q=$("nmreCrmPropertySearch").value.toLocaleLowerCase("it"),f=$("nmreCrmPropertyFilter").value;
  const rows=nmreCrmProperties.filter(x=>(!f||x.status===f)&&(!q||[x.title,x.municipality,x.address,x.property_type].some(v=>String(v||"").toLocaleLowerCase("it").includes(q))));
@@ -3589,6 +3850,13 @@ $("nmreCrmContactForm").addEventListener("submit",async e=>{e.preventDefault();c
 $("nmreCrmPropertyForm").addEventListener("submit",async e=>{e.preventDefault();const v=id=>$(id).value.trim();const {error}=await supabase.from("nmre_properties").insert({owner_id:currentUser.id,title:v("nmreCrmPropertyTitle"),municipality:v("nmreCrmPropertyTown"),address:v("nmreCrmPropertyAddress")||null,contact_id:v("nmreCrmPropertyContact")||null,source_listing_id:v("nmreCrmPropertySource")||null,property_type:v("nmreCrmPropertyType")||null,status:v("nmreCrmPropertyStatus"),asking_price:v("nmreCrmPropertyPrice")?Number(v("nmreCrmPropertyPrice")):null,surface_sqm:v("nmreCrmPropertySurface")?Number(v("nmreCrmPropertySurface")):null,rooms:v("nmreCrmPropertyRooms")?Number(v("nmreCrmPropertyRooms")):null,notes:v("nmreCrmPropertyNotes")||null});if(error){$("nmreCrmPropertyMsg").textContent=error.message;return;}e.target.reset();$("nmreCrmPropertyMsg").textContent="Scheda immobile creata.";await loadCrmWorkspace();});
 $("nmreCrmAgendaForm").addEventListener("submit",async e=>{e.preventDefault();const v=id=>$(id).value.trim(),contact=v("nmreCrmAgendaContact"),property=v("nmreCrmAgendaProperty");if(!contact&&!property){$("nmreCrmAgendaMsg").textContent="Colleghi l'attività ad almeno un contatto o immobile.";return;}const start=new Date(v("nmreCrmAgendaStart"));if(Number.isNaN(start.getTime())){$("nmreCrmAgendaMsg").textContent="Data e ora non valide.";return;}const {error}=await supabase.from("nmre_appointments").insert({owner_id:currentUser.id,title:v("nmreCrmAgendaTitle"),appointment_type:v("nmreCrmAgendaType"),starts_at:start.toISOString(),contact_id:contact||null,property_id:property||null,location:v("nmreCrmAgendaLocation")||null,notes:v("nmreCrmAgendaNotes")||null});if(error){$("nmreCrmAgendaMsg").textContent=error.message;return;}e.target.reset();$("nmreCrmAgendaMsg").textContent="Attività aggiunta in agenda.";await loadCrmWorkspace();});
 document.querySelectorAll("[data-crm-tab]").forEach(b=>b.addEventListener("click",()=>nmreCrmSetTab(b.dataset.crmTab)));
+$("nmreMapRefresh").addEventListener("click",async()=>{
+  const button=$("nmreMapRefresh");button.disabled=true;
+  try{await loadListings();await loadCrmWorkspace();await nmreRenderPropertyMap();}
+  finally{button.disabled=false;}
+});
+$("nmreMapLocateMissing").addEventListener("click",nmreGeocodeMissingMapEntries);
+["nmreMapShowMandates","nmreMapShowSold","nmreMapShowArchive"].forEach(id=>$(id).addEventListener("change",nmreRenderPropertyMap));
 $("nmreCrmRefresh").addEventListener("click",loadCrmWorkspace);
 $("nmreCrmContactSearch").addEventListener("input",nmreCrmRenderContacts);$("nmreCrmContactFilter").addEventListener("change",nmreCrmRenderContacts);
 $("nmreCrmPropertySearch").addEventListener("input",nmreCrmRenderProperties);$("nmreCrmPropertyFilter").addEventListener("change",nmreCrmRenderProperties);
@@ -4935,6 +5203,7 @@ $("listingForm").addEventListener("submit",async event=>{
   const record={
     titolo:$("title").value.trim(),
     comune:$("municipality").value.trim(),
+    indirizzo:$("listingAddress").value.trim()||null,
     prezzo:price===""?null:Number(price),
     contatto:$("contact").value.trim()||null,
     tipo_venditore:$("sellerType").value,
