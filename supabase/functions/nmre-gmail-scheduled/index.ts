@@ -669,7 +669,8 @@ export default {
       let inserted = 0;
       let updated = 0;
       let notificationEventsLinked = 0;
-      let autoArchived = 0;
+      // Colonna mantenuta per compatibilità con lo storico del monitor: da questa versione vale sempre zero.
+      const autoArchived = 0;
       let possibleDuplicateCount = 0;
       for (const row of rows) {
         const { data: currentCandidate, error: currentError } = await ctx.supabaseAdmin
@@ -961,13 +962,6 @@ export default {
         if (notificationError) throw new Error("Salvataggio dello storico notifiche non riuscito");
         notificationEventsLinked++;
 
-        // Archivia solo i privati con prova esplicita ad alta affidabilita o verifica manuale gia salvata.
-        if (row.tipo_venditore === "Privato") {
-          const { data: archiveResult, error: archiveError } = await ctx.supabaseAdmin
-            .rpc("nmre_auto_archive_private_candidate", { p_candidate_id: candidateId });
-          if (archiveError) throw new Error("Archiviazione automatica del privato non riuscita");
-          if (archiveResult?.archived === true) autoArchived++;
-        }
       }
 
       await saveSyncCursor(ctx.supabaseAdmin, nextHistoryId);

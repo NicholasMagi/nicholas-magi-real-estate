@@ -39,3 +39,11 @@ Send a new test email to the connected Gmail mailbox. Check the Supabase Edge Fu
 - Ogni email resta registrata in annunci_candidati_notifiche con il suo link e prezzo; quando due schede pending vengono unite, lo storico email viene ricollegato alla scheda canonica senza cancellare la scheda storica.
 - Non si usano mittente, email o recapiti del venditore come identità dell'immobile. Comuni diversi e civici discordanti non vengono associati automaticamente.
 - Prima del deploy è obbligatorio applicare la migration additiva che introduce i tre campi possible_duplicate_*; schema e funzione non vengono distribuiti in produzione in questa fase.
+
+
+## Archivio su scelta esplicita (sorgente in revisione, non distribuita)
+- Il worker Gmail non chiama più nmre_auto_archive_private_candidate: il riconoscimento automatico del venditore privato non trasferisce annunci nell'archivio.
+- auto_archived_count resta nella tabella di monitoraggio per compatibilità storica, ma da questa versione è sempre 0.
+- La classificazione manuale del venditore nella PWA salva soltanto la verifica e lascia l'opportunità nella coda. Il comando esplicito Inserisci nell'archivio continua a usare nmre_confirm_annuncio_candidato.
+- Anche la app mobile archivia esclusivamente dopo la pressione esplicita di Archivia in archivio. Scarta non crea record nella tabella annunci.
+- Nessuna riga già presente nell'archivio viene rimossa o modificata da questa modifica.

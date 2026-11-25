@@ -937,7 +937,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
     <div class="gmail-sync-stat"><strong id="gmailSyncRead">—</strong><span>Email esaminate</span></div>
     <div class="gmail-sync-stat"><strong id="gmailSyncProperty">—</strong><span>Notifiche immobiliari</span></div>
     <div class="gmail-sync-stat"><strong id="gmailSyncInserted">—</strong><span>Nuovi candidati</span></div>
-    <div class="gmail-sync-stat"><strong id="gmailSyncAutoArchived">—</strong><span>Privati archiviati</span></div>
+    <div class="gmail-sync-stat"><strong id="gmailSyncAutoArchived">—</strong><span>Archiviazioni automatiche</span></div>
     <div class="gmail-sync-stat"><strong id="gmailSyncReview">—</strong><span>Da verificare</span></div>
     <div class="gmail-sync-stat"><strong id="gmailSyncAgencies">—</strong><span>Agenzie escluse</span></div>
     <div class="gmail-sync-stat"><strong id="gmailSyncDuplicates">—</strong><span>Già presenti / duplicati</span></div>
@@ -1382,7 +1382,7 @@ async function loadGmailSyncStatus(){
   let activity="";
   if(success&&Number(latest.read_count||0)===0)activity="Nessun nuovo messaggio Gmail da elaborare in questo controllo.";
   else if(success&&Number(latest.property_notifications_count||0)===0)activity="Messaggi controllati, ma nessuna nuova notifica immobiliare riconosciuta.";
-  else if(success)activity=Number(latest.auto_archived_count||0)+" privati archiviati automaticamente; "+Number(latest.needs_user_review_count||0)+" annunci da verificare." ;
+  else if(success)activity=Number(latest.auto_archived_count||0)+" archiviazioni automatiche; tutti gli annunci restano nelle Opportunità finché non sceglie Lei di inserirli nell’Archivio. "+Number(latest.needs_user_review_count||0)+" annunci da verificare." ;
   details.textContent="Modalità: "+mode+" · Durata: "+duration+" · Ultime 24 ore: "+successes+" esecuzioni riuscite e "+failures+" errori. "+activity
     +(stale?" Controllo oltre 20 minuti fa: verifichi il job pianificato.":"")
     +(!success?" Dettaglio: "+(latest.error_message||"Errore non specificato"):"");
@@ -4837,7 +4837,7 @@ async function saveCandidateSeller(id,button){
   await loadSellerRegistry();
   msg("candidateMsg",isAgency
     ?"Annuncio classificato come agenzia e rimosso dalle opportunità da acquisire. "+(registryRows.length?"La sua identità è stata memorizzata.":"")
-    :"Verifica del venditore salvata. "+(registryRows.length
+    :"Verifica del venditore salvata. L'annuncio resta nelle Opportunità: viene inserito nell'Archivio soltanto quando sceglie esplicitamente \"Inserisci nell'archivio\". "+(registryRows.length
       ?"NMRE potrà riconoscere nuove notifiche che riportano gli stessi identificativi."
       :"Per insegnare a NMRE a riconoscere questo venditore in futuro, inserisca anche nome, telefono o email verificati."),
     "success");

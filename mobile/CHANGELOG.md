@@ -1,3 +1,10 @@
+## 2026-11-25 — Archivio solo su scelta esplicita
+- Rimossa dal worker Gmail l'archiviazione automatica dei candidati riconosciuti come privati.
+- La classificazione automatica o manuale del venditore non trasferisce più l'immobile nell'archivio; resta un'opportunità fino al comando esplicito dell'utente.
+- Mantenuto auto_archived_count solo per compatibilità con il monitor storico, sempre a zero per le nuove sincronizzazioni.
+- La PWA chiarisce che il salvataggio della verifica non archivia e che il trasferimento richiede Inserisci nell'archivio.
+- La funzione SQL nmre_auto_archive_private_candidate resta nel database ma non è più chiamata dal worker; la sua disabilitazione a livello di permessi è un passaggio di hardening separato da pianificare dopo il deploy della nuova funzione.
+
 ## 2026-11-25 — M4.3 azioni sulle opportunità
 - Aggiunte le azioni Archivia e Scarta nella scheda espansa delle opportunità ancora da verificare e non collegate all'archivio.
 - Archivia usa la funzione PostgreSQL già esistente nmre_confirm_annuncio_candidato, con controllo auth.uid() e proprietà del candidato; crea la scheda in annunci, conserva collegamento source_candidate_id, provenienza e dati estratti, e aggiorna il candidato nella stessa transazione.
