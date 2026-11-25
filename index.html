@@ -4736,10 +4736,10 @@ function renderCandidates(){
     const isPrivate=c.tipo_venditore==="Privato";
     const notificationDate=quality.hasNotificationDate
       ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data email non indicata";
-    const url=validUrl(c.url);
-    const linkHtml=quality.specificLink
+    const url=validUrl(c.url||c.url_originale);
+    const linkHtml=url
       ?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
-      :'<span class="candidate-link-warning">Link diretto non verificato: apertura sospesa</span>';
+      :'<span class="candidate-link-warning">Link annuncio non disponibile</span>';
     const ageText=quality.hasNotificationDate
       ?(quality.notificationDays===0?"Email ricevuta oggi":"Email ricevuta "+quality.notificationDays+" giorni fa")
       :"Data di ricezione dell'email non disponibile";
@@ -5581,10 +5581,10 @@ function renderListings(){
   }
 
   $("listingList").innerHTML=filtered.map(item=>{
-    const url=validUrl(item.url);
-    const linkHtml=isSpecificCandidateUrl(item.url)
+    const url=validUrl(item.url||item.url_originale);
+    const linkHtml=url
       ? '<a href="' + safe(url) + '" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
-      : (url?'<span class="candidate-link-warning">Link diretto non verificato: apertura sospesa</span>':'');
+      : '<span class="candidate-link-warning">Link annuncio non disponibile</span>';
     const detailText=[item.tipologia_immobile,item.superficie_mq?item.superficie_mq+" m²":null,item.locali?item.locali+" locali":null,item.camere?item.camere+" camere":null,item.bagni?item.bagni+" bagni":null].filter(Boolean).join(" · ")||"Dettagli dimensionali non disponibili";
     return '<article class="listing"><div>'
       +'<h3>'+safe(item.titolo)+'</h3>'
