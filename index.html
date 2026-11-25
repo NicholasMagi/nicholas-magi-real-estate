@@ -1332,6 +1332,10 @@ let supabase = null;
 let currentUser = null;
 let appInitialViewSet = false;
 let candidateRefreshTimer = null;
+let authStateSubscription = null;
+let appBootUserId = null;
+let appBootPromise = null;
+let appBootGeneration = 0;
 let listingCache = [];
 let candidateCache = [];
 let sellerRegistryCache = [];
@@ -2472,7 +2476,14 @@ function connect(url,key){
   if(!/^https:\/\/[a-zA-Z0-9.-]+\.supabase\.co\/?$/.test(url)||!key.startsWith("sb_publishable_")){
     throw new Error("Controlli il Project URL e la Publishable Key di Supabase.");
   }
-  supabase=createClient(url.replace(/\/$/,""),key);
+  supabase=createClient(url.replace(/\/$/,""),key,{
+    auth:{
+      persistSession:true,
+      autoRefreshToken:true,
+      detectSessionInUrl:true,
+      storage:window.localStorage
+    }
+  });
 }
 
 const DEFAULT_SUPABASE_URL = "https://hhircfmrtkgaybrougku.supabase.co";
@@ -4013,6 +4024,32 @@ $("nmreAiForm").addEventListener("submit",event=>{event.preventDefault();const t
 $("nmreAiInput").addEventListener("keydown",event=>{if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();$("nmreAiForm").requestSubmit();}});
 document.querySelectorAll("[data-ai-prompt]").forEach(button=>button.addEventListener("click",()=>nmreAiSend(button.dataset.aiPrompt)));
 
+function clearAuthenticatedAppState(){
+  appBootGeneration++;
+  currentUser=null;
+  appBootUserId=null;
+  appBootPromise=null;
+  appInitialViewSet=false;
+  if(candidateRefreshTimer){clearInterval(candidateRefreshTimer);candidateRefreshTimer=null;}
+  $("appArea").hidden=true;
+}
+
+function startAuthenticatedApp(session){
+  const userId=session?.user?.id;
+  if(!userId)return Promise.resolve();
+  if(appBootUserId===userId&&appBootPromise)return appBootPromise;
+
+  const generation=++appBootGeneration;
+  appBootUserId=userId;
+  appBootPromise=showApp(session).catch(error=>{
+    if(generation!==appBootGeneration)return;
+    clearAuthenticatedAppState();
+    showAuth();
+    msg("authMsg","Sessione riconosciuta, ma il caricamento di NMRE non è riuscito: "+(error?.message||"errore imprevisto"),"error");
+  });
+  return appBootPromise;
+}
+
 async function boot(){
   loadConfig();
   const url=localStorage.getItem(URL_KEY);
@@ -4025,23 +4062,29 @@ async function boot(){
 
   try{
     connect(url,key);
-    const {data,error}=await supabase.auth.getSession();
-    if(error)throw error;
 
-    if(data.session)await showApp(data.session);
-    else showAuth();
+    if(authStateSubscription){
+      authStateSubscription.unsubscribe();
+      authStateSubscription=null;
+    }
 
-    supabase.auth.onAuthStateChange((_event,session)=>{
+    const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
+      // Non eseguire richieste Supabase direttamente dentro il callback Auth:
+      // la schermata viene avviata nella microtask successiva.
       if(session){
-        showApp(session).catch(e=>msg("listMsg",e.message,"error"));
-      }else{
-        currentUser=null;
-        appInitialViewSet=false;
-        if(candidateRefreshTimer){clearInterval(candidateRefreshTimer);candidateRefreshTimer=null;}
-        $("appArea").hidden=true;
+        queueMicrotask(()=>startAuthenticatedApp(session));
+      }else if(event==="INITIAL_SESSION"||event==="SIGNED_OUT"){
+        clearAuthenticatedAppState();
         showAuth();
       }
     });
+    authStateSubscription=subscription;
+
+    const {data,error}=await supabase.auth.getSession();
+    if(error)throw error;
+
+    if(data.session)await startAuthenticatedApp(data.session);
+    else showAuth();
   }catch(e){
     showSetup();
     msg("setupMsg",e.message,"error");
