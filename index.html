@@ -588,7 +588,6 @@ button:disabled{opacity:.55;cursor:not-allowed}
     <div class="nmre-menu-group">
       <div class="nmre-menu-group-title">01 · RICERCA OPPORTUNITÀ</div>
       <div class="nmre-menu-items">
-        <button type="button" data-nmre-nav="automationSection" data-nmre-label="Fonti e automazioni"><span class="nmre-menu-item-icon">↻</span><span><strong>Fonti e automazioni</strong><small>Gmail e collegamenti</small></span></button>
         <button type="button" data-nmre-nav="candidateSection" data-nmre-label="Nuove opportunità"><span class="nmre-menu-item-icon">⌕</span><span><strong>Nuove opportunità</strong><small>Annunci da verificare</small></span></button>
         <button type="button" data-nmre-nav="archiveSection" data-nmre-label="Archivio annunci"><span class="nmre-menu-item-icon">▤</span><span><strong>Archivio annunci</strong><small>Annunci già acquisiti nel gestionale</small></span></button>
       </div>
@@ -631,6 +630,10 @@ button:disabled{opacity:.55;cursor:not-allowed}
     <h2>Impostazioni</h2>
     <p class="hint">Gestisca da qui gli avvisi di NMRE, le preferenze operative e il collegamento sicuro al Suo account.</p>
   </div>
+  <section class="panel nmre-settings-account">
+    <div class="nmre-settings-card-head"><div><h2>Fonti e acquisizione automatica</h2><p class="hint">Gestione del collegamento Gmail, monitor della sincronizzazione e integrazioni dei portali immobiliari.</p></div><span class="nmre-settings-symbol" aria-hidden="true">↻</span></div>
+    <div class="nmre-settings-account-actions"><button class="secondary" type="button" data-nmre-nav="automationSection" data-nmre-label="Fonti e acquisizione automatica">Apri fonti e acquisizione automatica</button></div>
+  </section>
   <section class="panel nmre-settings-account">
     <div class="nmre-settings-card-head"><div><h2>Account e collegamento</h2><p class="hint">Account attualmente utilizzato: <strong id="nmreSettingsEmail"></strong></p></div><span class="nmre-settings-symbol" aria-hidden="true">♙</span></div>
     <div class="nmre-settings-account-actions"><button class="secondary" id="editConfig" type="button">Modifica collegamento a Supabase</button></div>
