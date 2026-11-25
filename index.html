@@ -3403,7 +3403,7 @@ function novaReplyOpportunities(message,town,privateOnly=false){
   const ranked=novaRankCandidates(town,privateOnly);
   if(!ranked.length){
     if(privateOnly){
-      const unverified=(Array.isArray(candidateCache)?candidateCache:[]).filter(item=>item.tipo_venditore==="Da verificare").length;
+      const unverified=(Array.isArray(candidateCache)?candidateCache:[]).filter(item=>item.tipo_venditore==="Da verificare"&&(!town||normalizedMatchText(item.comune)===normalizedMatchText(town))).length;
       return "Non risultano privati già riconosciuti"+(town?" a "+town:"")+" nella coda attuale."
         +(unverified?" Sono presenti "+unverified+" venditori ancora da verificare, che non considero privati finché la classificazione non viene confermata.":"");
     }
