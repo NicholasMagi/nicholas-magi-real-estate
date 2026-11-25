@@ -1174,7 +1174,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
     <div class="search-filter-field"><label for="candidateTypeFilter">Tipologia</label><select id="candidateTypeFilter"><option value="">Tutte le tipologie</option></select></div>
     <div class="search-filter-field"><label for="candidatePortalFilter">Portale</label><select id="candidatePortalFilter"><option value="">Tutti i portali</option></select></div>
     <div class="search-filter-field"><label for="candidateSellerFilter">Venditore</label><select id="candidateSellerFilter"><option value="">Tutti</option><option value="Privato">Privato riconosciuto</option><option value="Da verificare">Da verificare</option></select></div>
-    <div class="search-filter-field"><label for="candidateQualityFilter">Controllo qualità</label><select id="candidateQualityFilter"><option value="">Tutti gli annunci</option><option value="duplicates">Possibili duplicati</option><option value="priceDrop">Ribassi di prezzo documentati</option><option value="link">Link da verificare</option><option value="stale">Email ricevuta oltre 30 giorni fa</option><option value="incomplete">Dati incompleti</option><option value="recovery">Da recuperare (dati immobile o link)</option></select></div>
+    <div class="search-filter-field"><label for="candidateQualityFilter">Controllo qualità</label><select id="candidateQualityFilter"><option value="">Tutti gli annunci</option><option value="duplicates">Possibili duplicati</option><option value="priceDrop">Ribassi di prezzo documentati</option><option value="link">Link da verificare</option><option value="stale">Email ricevuta oltre 30 giorni fa</option><option value="incomplete">Dati incompleti</option></select></div>
     <div class="search-filter-field"><label for="candidatePriceMin">Prezzo minimo (€)</label><input id="candidatePriceMin" type="number" min="0" step="1000" placeholder="Nessun minimo"></div>
     <div class="search-filter-field"><label for="candidatePriceMax">Prezzo massimo (€)</label><input id="candidatePriceMax" type="number" min="0" step="1000" placeholder="Nessun massimo"></div>
     <div class="search-filter-field"><label for="candidateSurfaceMin">Superficie minima (m²)</label><input id="candidateSurfaceMin" type="number" min="0" step="5" placeholder="Qualsiasi"></div>
@@ -1184,17 +1184,6 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
   </div>
   <div class="search-filter-actions"><span id="candidateFilterCount" class="search-filter-count">Caricamento risultati…</span><button class="secondary" id="candidateResetFilters" type="button">Azzera filtri</button></div>
 </div>
-<section class="candidate-recovery-panel" aria-labelledby="candidateRecoveryTitle">
-  <div class="candidate-recovery-head">
-    <div><h3 id="candidateRecoveryTitle">Coda intelligente · Recupero dati</h3><p>Mostra prima gli annunci con informazioni dell'immobile da recuperare o con un link specifico da verificare. Telefono ed email del proprietario restano facoltativi e non bloccano la scheda.</p></div>
-    <button class="secondary" id="candidateRecoveryShowAll" type="button">Apri tutta la coda</button>
-  </div>
-  <div class="candidate-recovery-metrics">
-    <div class="candidate-recovery-metric"><strong id="candidateRecoveryDataCount">—</strong><span>Schede con dati immobile mancanti</span></div>
-    <div class="candidate-recovery-metric"><strong id="candidateRecoveryLinkCount">—</strong><span>Link da verificare</span></div>
-    <div class="candidate-recovery-metric"><strong id="candidateRecoveryContactCount">—</strong><span>Recapiti diretti facoltativi</span></div>
-  </div>
-  <div id="candidateRecoveryList" class="candidate-recovery-list" aria-live="polite"><p class="hint">La coda si aggiornerà con le opportunità caricate.</p></div>
 </section>
 <p class="candidate-priority-legend">Due indicatori separati: la priorità di acquisizione ordina il lavoro in base a venditore riconosciuto, freschezza, territorio, contatto e dati essenziali; la qualità dei dati misura la completezza della scheda. Il prezzo al m² è solo il rapporto tra richiesta e superficie: non è una valutazione di mercato e non dimostra da solo la convenienza dell'immobile.</p><p id="candidatePrioritySummary" class="candidate-priority-summary"></p><div id="candidateList"><p class="hint">Nessun candidato caricato.</p></div>
 <div id="candidateMsg" class="status"></div>
@@ -4424,45 +4413,6 @@ function renderSourceDetails(item){
   return '<details class="candidate-quality candidate-source-details"><summary>Dettagli estratti automaticamente · '+rows.length+' campi · '+safe(source.provider||"Fonte registrata")+'</summary>'+rowsHtml+excerpt+'</details>';
 }
 
-function candidateRecoveryGaps(item,quality){
-  const gaps=[];
-  if(!String(item.comune||"").trim())gaps.push("comune");
-  if(!(Number(item.prezzo)>0))gaps.push("prezzo");
-  if(!String(item.tipologia_immobile||"").trim())gaps.push("tipologia");
-  if(!(Number(item.superficie_mq)>0))gaps.push("superficie");
-  if(!(Number(item.locali)>0))gaps.push("locali");
-  if(!quality.specificLink)gaps.push("link specifico all'annuncio");
-  return gaps;
-}
-
-function renderCandidateRecoveryQueue(data,qualityById){
-  const list=$("candidateRecoveryList");
-  if(!list)return;
-  const rows=(data||[]).map(item=>{
-    const quality=qualityById.get(String(item.id));
-    const gaps=candidateRecoveryGaps(item,quality);
-    return {item,quality,gaps,priority:candidatePriority(item)};
-  });
-  const dataGaps=rows.filter(row=>row.gaps.some(gap=>gap!=="link specifico all'annuncio")).length;
-  const linkGaps=rows.filter(row=>row.gaps.includes("link specifico all'annuncio")).length;
-  const contactGaps=rows.filter(row=>!String(row.item.contatto||"").trim()).length;
-  $("candidateRecoveryDataCount").textContent=String(dataGaps);
-  $("candidateRecoveryLinkCount").textContent=String(linkGaps);
-  $("candidateRecoveryContactCount").textContent=String(contactGaps);
-  const queue=rows.filter(row=>row.gaps.length)
-    .sort((a,b)=>b.priority.score-a.priority.score||a.gaps.length-b.gaps.length
-      ||new Date(b.item.created_at||0)-new Date(a.item.created_at||0));
-  if(!queue.length){
-    list.innerHTML='<p class="hint">Nessuna lacuna essenziale rilevata. Può concentrarsi sulla verifica del venditore e sul contatto.</p>';
-    return;
-  }
-  list.innerHTML=queue.slice(0,5).map(({item,gaps,priority})=>{
-    const details=[item.comune,item.prezzo>0?formatCurrency(item.prezzo):null,item.tipologia_immobile,item.superficie_mq>0?item.superficie_mq+" m²":null].filter(Boolean).join(" · ");
-    return '<article class="candidate-recovery-item"><div class="candidate-recovery-item-main"><strong>'+safe(item.titolo||"Annuncio immobiliare")+'</strong><span>'+safe(details||"Dettagli immobile ancora da verificare")+'</span><small>Da recuperare: '+safe(gaps.join(", "))+'</small></div><span class="candidate-recovery-score">'+priority.score+'/100</span><button class="secondary" type="button" data-recovery-open="'+safe(item.id)+'">Apri scheda</button></article>';
-  }).join("");
-  list.querySelectorAll("[data-recovery-open]").forEach(button=>button.addEventListener("click",()=>openDashboardCandidate(button.dataset.recoveryOpen)));
-}
-
 function candidateSourceTheme(portal){
   const value=String(portal||"").toLocaleLowerCase("it");
   if(value.includes("idealista"))return "idealista";
@@ -4483,7 +4433,6 @@ function renderCandidates(){
   const seller=$("candidateSellerFilter").value;
   const qualityFilter=$("candidateQualityFilter").value;
   const qualityById=new Map(data.map(item=>[String(item.id),candidateQuality(item,data,listingCache)]));
-  renderCandidateRecoveryQueue(data,qualityById);
   const qualityMatches=(quality,item)=>{
     if(!qualityFilter)return true;
     if(qualityFilter==="duplicates")return !!quality.duplicate;
@@ -4492,7 +4441,6 @@ function renderCandidates(){
     if(qualityFilter==="link")return !quality.specificLink;
     if(qualityFilter==="stale")return quality.oldNotification;
     if(qualityFilter==="incomplete")return quality.incomplete||!quality.hasNotificationDate;
-    if(qualityFilter==="recovery")return candidateRecoveryGaps(item,quality).length>0;
     return true;
   };
   const visible=data.filter(item=>{
@@ -5710,11 +5658,6 @@ candidateSelectFilters.forEach(id=>$(id).addEventListener("change",renderCandida
 $("candidateResetFilters").addEventListener("click",()=>{
   [...candidateTextFilters,...candidateSelectFilters].forEach(id=>$(id).value="");
   renderCandidates();
-});
-$("candidateRecoveryShowAll").addEventListener("click",()=>{
-  $("candidateQualityFilter").value="recovery";
-  renderCandidates();
-  dashboardScroll("candidateList");
 });
 $("refreshCandidates").addEventListener("click",loadCandidates);
 
