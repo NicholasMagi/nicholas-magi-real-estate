@@ -217,6 +217,7 @@ Deno.serve(async (req: Request) => {
     const suggestions = {
       titolo: cleanText(findValue(sourceNodes, ["name", "headline"]) || meta["og:title"] || meta["twitter:title"], 250),
       comune: cleanText(sourceAddressObj.addressLocality || sourceAddressObj.addressRegion || meta["og:locality"], 120),
+      indirizzo: cleanText(sourceAddressObj.streetAddress || (typeof sourceAddress === "string" ? sourceAddress : null) || meta["og:street-address"], 180),
       prezzo: numeric(findValue(sourceNodes, ["price"]) || sourceOfferObj.price || meta["product:price:amount"]),
       tipologia_immobile: normalizeType(sourceNodes.map((node) => node["@type"])),
       superficie_mq: numeric(sourceFloor),

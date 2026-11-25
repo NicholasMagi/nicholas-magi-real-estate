@@ -29,3 +29,13 @@ Send a new test email to the connected Gmail mailbox. Check the Supabase Edge Fu
 - Gmail message contents are not included in Pub/Sub. The callback only uses the notification as a trigger; the existing Gmail API history cursor remains the source of truth.
 - A database lease lock prevents the one-minute fallback and push-triggered sync from processing the mailbox concurrently.
 - The existing incremental history sync, seller classification, manual overrides, candidate deduplication and archival rules remain in place.
+
+
+## Deduplicazione cross-portale (sorgente in revisione, non distribuita)
+- La chiave Gmail impedisce il reimport della stessa email; la chiave URL riconosce la stessa scheda anche con parametri di tracciamento diversi.
+- In aggiunta, il worker confronta le nuove notifiche con i candidati dello stesso account e dello stesso comune, usando tipologia, indirizzo/civico, superficie, locali, camere, bagni, prezzo e somiglianza del titolo.
+- L'unione automatica richiede un indirizzo/civico coerente e caratteristiche compatibili, oppure una combinazione molto forte di tipologia, metratura, prezzo e altri attributi indipendenti.
+- Le corrispondenze non sufficienti restano candidate distinte e vengono marcate con riferimento, confidenza e motivazione per una revisione successiva.
+- Ogni email resta registrata in annunci_candidati_notifiche con il suo link e prezzo; quando due schede pending vengono unite, lo storico email viene ricollegato alla scheda canonica senza cancellare la scheda storica.
+- Non si usano mittente, email o recapiti del venditore come identità dell'immobile. Comuni diversi e civici discordanti non vengono associati automaticamente.
+- Prima del deploy è obbligatorio applicare la migration additiva che introduce i tre campi possible_duplicate_*; schema e funzione non vengono distribuiti in produzione in questa fase.

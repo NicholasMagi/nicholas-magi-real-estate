@@ -1,7 +1,7 @@
 import {
   municipality,price,listingPrice,listingUrl,propertyEmail,listingTitle,propertyType,
   surface,rooms,bedrooms,bathrooms,resolveListingUrl,sellerClassificationDetails,canonicalListingKey,
-  priceReduction,extractAdditionalPropertyDetails
+  priceReduction,extractAdditionalPropertyDetails,compareListingIdentity
 } from "./_shared/parser.ts";
 import { collectHistoryMessageIds } from "./_shared/history.ts";
 import { withSupabase } from "npm:@supabase/server@^1";
@@ -644,19 +644,37 @@ export default {
           source_email_id: String(email.id),
           dedup_key: "gmail:" + String(email.id),
           listing_key: canonicalListingKey(url),
+          possible_duplicate_of: null,
+          possible_duplicate_confidence: null,
+          possible_duplicate_reason: null,
           deduplication_version: 1,
           stato: "da_verificare"
         };
       }));
 
+      const townsForIdentity = [...new Set(rows.map((row: any) => String(row.comune || "").trim()).filter(Boolean))];
+      let identityCandidates: any[] = [];
+      if (townsForIdentity.length) {
+        const { data: identityRows, error: identityError } = await ctx.supabaseAdmin
+          .from("annunci_candidati")
+          .select("id,stato,annuncio_id,seller_manual_override,listing_key,possible_duplicate_of,titolo,comune,prezzo,tipologia_immobile,superficie_mq,locali,camere,bagni,dati_estratti,url,url_originale")
+          .eq("owner_id", owner)
+          .in("comune", townsForIdentity)
+          .order("updated_at", { ascending: false })
+          .limit(2000);
+        if (identityError) throw new Error("Lettura dei candidati per deduplicazione cross-portale non riuscita");
+        identityCandidates = (identityRows || []) as any[];
+      }
+
       let inserted = 0;
       let updated = 0;
       let notificationEventsLinked = 0;
       let autoArchived = 0;
+      let possibleDuplicateCount = 0;
       for (const row of rows) {
         const { data: currentCandidate, error: currentError } = await ctx.supabaseAdmin
           .from("annunci_candidati")
-          .select("id,seller_manual_override,stato,listing_key")
+          .select("id,seller_manual_override,stato,listing_key,possible_duplicate_of,annuncio_id,titolo,comune,prezzo,portale,url,url_originale,data_pubblicazione,tipologia_immobile,superficie_mq,locali,camere,bagni,dati_estratti")
           .eq("owner_id", owner)
           .eq("dedup_key", row.dedup_key)
           .maybeSingle();
@@ -666,7 +684,7 @@ export default {
         if (row.listing_key) {
           const { data, error } = await ctx.supabaseAdmin
             .from("annunci_candidati")
-            .select("id,seller_manual_override,stato,listing_key")
+            .select("id,seller_manual_override,stato,listing_key,possible_duplicate_of,annuncio_id,titolo,comune,prezzo,portale,url,url_originale,data_pubblicazione,tipologia_immobile,superficie_mq,locali,camere,bagni,dati_estratti")
             .eq("owner_id", owner)
             .eq("listing_key", row.listing_key)
             .maybeSingle();
@@ -674,7 +692,35 @@ export default {
           canonicalCandidate = data;
         }
 
-        const existingCandidate = canonicalCandidate || currentCandidate;
+        let crossPortalCandidate: any = null;
+        let possibleDuplicate: any = null;
+        let possibleDuplicateMatch: any = null;
+        let possibleDuplicateReason: string | null = null;
+        if (!canonicalCandidate && currentCandidate?.seller_manual_override !== true) {
+          const comparisons = identityCandidates
+            .filter(candidate => String(candidate.id) !== String(currentCandidate?.id || "") && !candidate.possible_duplicate_of)
+            .map(candidate => ({ candidate, match: compareListingIdentity(row, candidate) }))
+            .filter(item => item.match.kind !== "none")
+            .sort((left, right) => right.match.confidence - left.match.confidence);
+          const strongMatches = comparisons.filter(item =>
+            item.match.kind === "strong" && item.candidate.stato !== "scartato"
+          );
+          const best = strongMatches[0];
+          const runnerUp = strongMatches[1];
+          if (best && (!runnerUp || best.match.confidence - runnerUp.match.confidence >= 8)) {
+            crossPortalCandidate = best.candidate;
+          } else if (comparisons.length) {
+            possibleDuplicate = comparisons[0].candidate;
+            possibleDuplicateMatch = comparisons[0].match;
+            const tied = comparisons.length > 1 &&
+              comparisons[0].match.confidence - comparisons[1].match.confidence < 8;
+            possibleDuplicateReason = tied
+              ? "Più annunci esistenti hanno caratteristiche simili; confronto manuale necessario."
+              : comparisons[0].match.reason;
+          }
+        }
+
+        const existingCandidate = canonicalCandidate || crossPortalCandidate || currentCandidate;
         let candidateId: string | null = null;
 
         if (existingCandidate) {
@@ -687,23 +733,29 @@ export default {
           // I record già scartati o già trasferiti nell'archivio non vengono
           // riaperti. La notifica viene comunque conservata nello storico.
           if (existingCandidate.stato === "da_verificare") {
+            const keepExisting = (incoming: unknown, previous: unknown) =>
+              incoming === null || incoming === undefined || incoming === "" ? previous : incoming;
+            const incomingTitle = String(row.titolo || "").trim();
+            const previousTitle = String(existingCandidate.titolo || "").trim();
             Object.assign(candidateUpdate, {
-              titolo: row.titolo,
-              comune: row.comune,
-              prezzo: row.prezzo,
+              titolo: !incomingTitle || incomingTitle.toLocaleLowerCase("it-IT") === "annuncio immobiliare"
+                ? (previousTitle || row.titolo)
+                : row.titolo,
+              comune: keepExisting(row.comune, existingCandidate.comune),
+              prezzo: keepExisting(row.prezzo, existingCandidate.prezzo),
               notification_sender: row.notification_sender,
               email_subject: row.email_subject,
-              portale: row.portale,
-              url: row.url,
-              url_originale: row.url_originale,
-              data_pubblicazione: row.data_pubblicazione,
-              tipologia_immobile: row.tipologia_immobile,
-              superficie_mq: row.superficie_mq,
-              locali: row.locali,
-              camere: row.camere,
-              bagni: row.bagni,
+              portale: row.portale || existingCandidate.portale,
+              url: row.url || existingCandidate.url,
+              url_originale: existingCandidate.url_originale || row.url_originale || row.url,
+              data_pubblicazione: row.data_pubblicazione || existingCandidate.data_pubblicazione,
+              tipologia_immobile: keepExisting(row.tipologia_immobile, existingCandidate.tipologia_immobile),
+              superficie_mq: keepExisting(row.superficie_mq, existingCandidate.superficie_mq),
+              locali: keepExisting(row.locali, existingCandidate.locali),
+              camere: keepExisting(row.camere, existingCandidate.camere),
+              bagni: keepExisting(row.bagni, existingCandidate.bagni),
               dati_fonte: row.dati_fonte,
-              dati_estratti: row.dati_estratti,
+              dati_estratti: row.dati_estratti || existingCandidate.dati_estratti,
               data_extraction_version: row.data_extraction_version
             });
             if (existingCandidate.seller_manual_override !== true) {
@@ -718,6 +770,20 @@ export default {
 
           if (row.listing_key && !existingCandidate.listing_key) {
             candidateUpdate.listing_key = row.listing_key;
+          }
+          if (crossPortalCandidate) {
+            Object.assign(candidateUpdate, {
+              possible_duplicate_of: null,
+              possible_duplicate_confidence: null,
+              possible_duplicate_reason: null
+            });
+          } else if (possibleDuplicate) {
+            Object.assign(candidateUpdate, {
+              possible_duplicate_of: possibleDuplicate.id,
+              possible_duplicate_confidence: possibleDuplicateMatch.confidence,
+              possible_duplicate_reason: possibleDuplicateReason
+            });
+            possibleDuplicateCount++;
           }
 
           const { data: updatedRows, error: updateError } = await ctx.supabaseAdmin
@@ -745,8 +811,36 @@ export default {
             updated += updatedRows?.length || 0;
           }
 
-          // La riga email legacy resta intatta, ma non viene rielaborata ad ogni cron.
-          if (currentCandidate && String(currentCandidate.id) !== candidateId) {
+          if (
+            currentCandidate &&
+            String(currentCandidate.id) !== candidateId &&
+            currentCandidate.stato === "da_verificare" &&
+            currentCandidate.seller_manual_override !== true &&
+            (canonicalCandidate || crossPortalCandidate)
+          ) {
+            const { error: moveHistoryError } = await ctx.supabaseAdmin
+              .from("annunci_candidati_notifiche")
+              .update({ candidate_id: candidateId })
+              .eq("owner_id", owner)
+              .eq("candidate_id", currentCandidate.id);
+            if (moveHistoryError) throw new Error("Consolidamento dello storico notifiche duplicato non riuscito");
+
+            const { error: markError } = await ctx.supabaseAdmin
+              .from("annunci_candidati")
+              .update({
+                stato: "scartato",
+                possible_duplicate_of: candidateId,
+                possible_duplicate_confidence: 100,
+                possible_duplicate_reason: "Email storica associata alla scheda canonica dello stesso immobile.",
+                deduplication_version: 1,
+                updated_at: new Date().toISOString()
+              })
+              .eq("owner_id", owner)
+              .eq("id", currentCandidate.id)
+              .eq("stato", "da_verificare")
+              .is("annuncio_id", null);
+            if (markError) throw new Error("Consolidamento della scheda duplicata non riuscito");
+          } else if (currentCandidate && String(currentCandidate.id) !== candidateId) {
             const { error: markError } = await ctx.supabaseAdmin
               .from("annunci_candidati")
               .update({ deduplication_version: 1 })
@@ -754,10 +848,20 @@ export default {
               .eq("id", currentCandidate.id);
             if (markError) throw new Error("Aggiornamento dello stato di deduplicazione non riuscito");
           }
+
+          const poolIndex = identityCandidates.findIndex(item => String(item.id) === candidateId);
+          if (poolIndex >= 0) Object.assign(identityCandidates[poolIndex], candidateUpdate);
+          else identityCandidates.push({ ...existingCandidate, ...candidateUpdate, id: candidateId });
         } else {
           // explicit_price_reduction is an internal parsing value, not a database column.
           // Keep it on row for price-history processing, but omit it from the candidate INSERT.
           const { explicit_price_reduction: _explicitPriceReduction, ...candidateInsert } = row;
+          if (possibleDuplicate) {
+            candidateInsert.possible_duplicate_of = possibleDuplicate.id;
+            candidateInsert.possible_duplicate_confidence = possibleDuplicateMatch.confidence;
+            candidateInsert.possible_duplicate_reason = possibleDuplicateReason;
+            possibleDuplicateCount++;
+          }
           const { data: saved, error: insertError } = await ctx.supabaseAdmin
             .from("annunci_candidati")
             .insert(candidateInsert)
@@ -795,6 +899,7 @@ export default {
             if (!saved?.id) throw new Error("Il database non ha restituito l'identificativo del candidato salvato");
             candidateId = String(saved.id);
             inserted++;
+            identityCandidates.push({ ...candidateInsert, id: candidateId });
           }
         }
 
@@ -914,6 +1019,7 @@ export default {
         notificationEventsLinked,
         reprocessedExistingListingLinks: repairIds.length,
         duplicatesOrExisting: Math.max(0, rows.length - inserted - updated),
+        possibleDuplicates: possibleDuplicateCount,
         missingMessages: emails.filter(email => !email).length
       });
     } catch (error) {
