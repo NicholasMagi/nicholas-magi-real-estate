@@ -3512,7 +3512,7 @@ function novaRespond(message){
   else if(query.includes("opportunit")||query.includes("candidat")||query.includes("lead")||query.includes("miglior")||query.includes("punteggio")||query.includes("da verificare"))intent="opportunities";
   else if(query.includes("archiv")||query.includes("riepilog")||query.includes("quanti immobili")||query.includes("annunci in totale"))intent="archive";
   else if(query.includes("aiuto")||query.includes("aiutami")||query.includes("comandi")||query.includes("cosa sai fare")||query.includes("come funziona"))intent="help";
-  else if(query.includes("costo")||query.includes("costi")||query.includes("openai")||query.includes("api"))return "NOVA non invia messaggi a OpenAI e non genera costi API AI per questa conversazione. Analizza nel browser i dati che NMRE ha già caricato. Restano separati gli eventuali consumi ordinari del gestionale e di Supabase.";
+  else if(query.includes("cost")||query.includes("gratis")||query.includes("gratuit")||query.includes("openai")||query.includes("api"))return "NOVA non invia messaggi a OpenAI e non genera costi API AI per questa conversazione. Analizza nel browser i dati che NMRE ha già caricato. Restano separati gli eventuali consumi ordinari del gestionale e di Supabase.";
   else if(query.includes("ciao")||query.includes("salve")||query.includes("buongiorno")||query.includes("buonasera"))return "Buongiorno. Sono pronta ad aiutarLa con le priorità, le opportunità e i richiami presenti in NMRE.";
 
   if(!intent&&town&&novaLastIntent)intent=novaLastIntent;
