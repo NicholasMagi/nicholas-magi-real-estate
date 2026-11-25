@@ -94,7 +94,7 @@ Still required after local dependency installation:
 
 
 ## 11. M4.2 candidate queue tests
-- Run npm run test:candidates and npm test. Candidate unit tests cover private-confirmation rules, agency/unverified labels, explicit candidate-state labels, HTTPS URL validation and euro formatting.
+- Run npm run test:candidates and npm test. Candidate unit tests cover the exact manual private-verification evidence contract, separation of workflow status from seller identity, agency/unverified labels, HTTPS URL validation and euro formatting.
 - Run npm run typecheck and npm run lint.
 - On the signed-in iPhone, verify the default unverified queue, pull-to-refresh, municipality filtering, confirmed/discarded filters, load-more behavior and source-link handoff.
 - Confirm a query error shows an error state rather than a zero count; confirm the seller-type badge never labels Da verificare as a confirmed private seller.

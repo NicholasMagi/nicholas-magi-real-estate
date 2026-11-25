@@ -59,7 +59,13 @@ export function CandidatesScreen() {
   }
 
   function renderCandidate({ item }: { item: CandidateSummary }) {
-    const seller = candidateSellerPresentation(item.sellerType, item.status);
+    const seller = candidateSellerPresentation({
+      sellerType: item.sellerType,
+      status: item.status,
+      manualOverride: item.sellerManualOverride,
+      confidence: item.sellerConfidence,
+      evidence: item.sellerEvidence
+    });
     const published = formatCandidateDate(item.publishedAt);
     const created = formatCandidateDate(item.createdAt);
     const expanded = expandedId === item.id;
@@ -100,7 +106,7 @@ export function CandidatesScreen() {
             <Text style={styles.detailHeading}>QUALIFICAZIONE VENDITORE</Text>
             <Text style={styles.detailValue}>{seller.label}</Text>
             {item.sellerConfidence !== null ? (
-              <Text style={styles.detailMeta}>Confidenza registrata: {item.sellerConfidence}</Text>
+              <Text style={styles.detailMeta}>Confidenza registrata: {item.sellerConfidence}%</Text>
             ) : (
               <Text style={styles.detailMeta}>Nessun livello di confidenza registrato</Text>
             )}

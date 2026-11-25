@@ -101,7 +101,7 @@ No production migration without explicit approval and rollback. No merge to main
 - Initial filter is unverified, unlinked candidates; additional state filters show confirmed, discarded and all candidates.
 - Municipality search, stable order by creation descending then id ascending; page size 25.
 - Details show listing facts and seller evidence needed for review; projection excludes direct contact, email metadata and raw source/extraction JSON.
-- "Privato confermato" appears only when seller type is Privato and candidate state is confermato.
+- "Privato confermato" appears only when seller type is Privato, seller_manual_override is true, seller_confidence is at least 100 and seller_evidence begins with the exact manual-private verification phrase. Candidate workflow status does not certify identity.
 - Source links open only on explicit tap and must be valid HTTPS URLs.
 - No candidate is confirmed, promoted or discarded by this screen; no database writes.
 - Remaining: local typecheck/lint/tests, Expo exports and iPhone checks for filters, search and pagination.

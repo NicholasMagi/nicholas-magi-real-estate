@@ -1,11 +1,11 @@
+# NMRE Mobile — Changelog
+
 ## 2026-11-25 — M4.2 coda opportunità read-only
 - Collegata la schermata Opportunità alla tabella esistente annunci_candidati con RLS e filtro aggiuntivo sull'utente autenticato.
 - Aggiunti filtri per stato, ricerca per comune, paginazione di 25 righe, aggiornamento manuale e apertura esplicita del link HTTPS originale.
-- Stato candidato e classificazione venditore sono mostrati separatamente; "Privato confermato" compare solo quando il tipo venditore è Privato e lo stato è confermato.
+- Stato candidato e classificazione venditore sono mostrati separatamente; "Privato confermato" richiede la verifica manuale già registrata dal gestionale (override, confidenza 100 ed evidenza testuale specifica).
 - La query usa una lista ristretta di campi e non legge recapiti, metadati email o JSON grezzi della fonte/estrazione.
 - Nessuna modifica automatica della classificazione, promozione in archivio o altra scrittura su Supabase.
-
-# NMRE Mobile — Changelog
 
 ## 2026-11-25 — M3 authentication foundation (in progress)
 - Added Supabase JS v2 client configuration using only the project URL and public publishable key.

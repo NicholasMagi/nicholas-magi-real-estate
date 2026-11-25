@@ -7,22 +7,72 @@ import {
   safeHttpsUrl
 } from "../src/features/candidates/candidatePresentation.ts";
 
-test("a private seller is confirmed only when the candidate is confirmed", () => {
-  assert.equal(candidateSellerPresentation("Privato", "confermato").label, "Privato confermato");
-  assert.equal(candidateSellerPresentation("Privato", "da_verificare").label, "Privato da verificare");
+const seller = (overrides = {}) => ({
+  sellerType: "Privato",
+  status: "da_verificare",
+  manualOverride: false,
+  confidence: 0,
+  evidence: null,
+  ...overrides
 });
 
-test("agency classification is not presented as a private seller", () => {
-  assert.equal(candidateSellerPresentation("Agenzia", "da_verificare").label, "Agenzia");
-  assert.notEqual(candidateSellerPresentation("Agenzia", "confermato").label, "Privato confermato");
+test("a private seller remains unverified when the candidate workflow status is confirmed", () => {
+  const result = candidateSellerPresentation(seller({ status: "confermato" }));
+  assert.equal(result.label, "Privato da verificare");
+  assert.equal(result.tone, "warning");
+});
+
+test("explicit manual private verification is the only path to confirmed private", () => {
+  const result = candidateSellerPresentation(seller({
+    manualOverride: true,
+    confidence: 100,
+    evidence: "Verificato manualmente: venditore privato · 2 identificativi memorizzati"
+  }));
+  assert.equal(result.label, "Privato confermato");
+  assert.equal(result.tone, "success");
+});
+
+test("confidence and evidence without the manual override do not confirm a private seller", () => {
+  const result = candidateSellerPresentation(seller({
+    manualOverride: false,
+    confidence: 100,
+    evidence: "Verificato manualmente: venditore privato"
+  }));
+  assert.equal(result.label, "Privato da verificare");
+});
+
+test("manual override with another or missing evidence does not confirm a private seller", () => {
+  const wrongEvidence = candidateSellerPresentation(seller({
+    manualOverride: true,
+    confidence: 100,
+    evidence: "Verificato manualmente: identità del venditore non determinata"
+  }));
+  const missingEvidence = candidateSellerPresentation(seller({
+    manualOverride: true,
+    confidence: 100,
+    evidence: null
+  }));
+  assert.equal(wrongEvidence.label, "Privato da verificare");
+  assert.equal(missingEvidence.label, "Privato da verificare");
+});
+
+test("agency classification is never presented as a private seller", () => {
+  const result = candidateSellerPresentation(seller({
+    sellerType: "Agenzia",
+    manualOverride: true,
+    confidence: 100,
+    evidence: "Verificato manualmente: agente o agenzia"
+  }));
+  assert.equal(result.label, "Agenzia");
+  assert.equal(result.tone, "neutral");
 });
 
 test("empty or unknown seller classification remains unverified", () => {
-  assert.equal(candidateSellerPresentation("Da verificare", "da_verificare").label, "Venditore da verificare");
-  assert.equal(candidateSellerPresentation(null, "da_verificare").tone, "warning");
+  assert.equal(candidateSellerPresentation(seller({ sellerType: "Da verificare" })).label, "Venditore da verificare");
+  assert.equal(candidateSellerPresentation(seller({ sellerType: null })).tone, "warning");
 });
 
-test("candidate states are mapped explicitly", () => {
+test("candidate workflow states are displayed independently from seller identity", () => {
   assert.equal(candidateStatusLabel("da_verificare"), "Da verificare");
   assert.equal(candidateStatusLabel("confermato"), "Confermato");
   assert.equal(candidateStatusLabel("scartato"), "Scartato");

@@ -7,6 +7,14 @@ export interface CandidateSellerPresentation {
   tone: CandidateBadgeTone;
 }
 
+export interface CandidateSellerEvidence {
+  sellerType: string | null;
+  status: CandidateRecordStatus;
+  manualOverride: boolean;
+  confidence: number | null;
+  evidence: string | null;
+}
+
 export function candidateStatusLabel(status: CandidateRecordStatus): string {
   switch (status) {
     case "da_verificare": return "Da verificare";
@@ -16,19 +24,24 @@ export function candidateStatusLabel(status: CandidateRecordStatus): string {
   }
 }
 
-export function candidateSellerPresentation(
-  sellerType: string | null,
-  status: CandidateRecordStatus
-): CandidateSellerPresentation {
-  const normalized = sellerType?.trim().toLocaleLowerCase("it-IT") ?? "";
+/**
+ * A private seller is confirmed only by the explicit manual-verification
+ * evidence written by the existing NMRE workflow. Candidate workflow status
+ * alone does not certify seller identity.
+ */
+export function candidateSellerPresentation(input: CandidateSellerEvidence): CandidateSellerPresentation {
+  const sellerType = input.sellerType?.trim().toLocaleLowerCase("it-IT") ?? "";
+  const evidence = input.evidence?.trim().toLocaleLowerCase("it-IT") ?? "";
+  const manuallyVerifiedPrivate =
+    sellerType === "privato" &&
+    input.manualOverride &&
+    input.confidence !== null &&
+    input.confidence >= 100 &&
+    evidence.startsWith("verificato manualmente: venditore privato");
 
-  if (normalized === "privato") {
-    if (status === "confermato") return { label: "Privato confermato", tone: "success" };
-    if (status === "scartato") return { label: "Privato · scartato", tone: "neutral" };
-    return { label: "Privato da verificare", tone: "warning" };
-  }
-
-  if (normalized === "agenzia") return { label: "Agenzia", tone: "neutral" };
+  if (manuallyVerifiedPrivate) return { label: "Privato confermato", tone: "success" };
+  if (sellerType === "privato") return { label: "Privato da verificare", tone: "warning" };
+  if (sellerType === "agenzia") return { label: "Agenzia", tone: "neutral" };
   return { label: "Venditore da verificare", tone: "warning" };
 }
 
