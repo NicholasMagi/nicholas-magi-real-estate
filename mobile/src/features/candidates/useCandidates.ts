@@ -70,7 +70,7 @@ export function useCandidates(ownerId: string, statusFilter: CandidateStatusFilt
     };
   }, [refresh]);
 
-  const loadMore = useCallback(async () => {
+  async function loadMore() {
     if (
       !ownerId ||
       state.status !== "ready" ||
@@ -100,7 +100,7 @@ export function useCandidates(ownerId: string, statusFilter: CandidateStatusFilt
         error: "Non è stato possibile caricare le altre opportunità. Riprovi."
       }));
     }
-  }, [ownerId, statusFilter, municipality, state.status, state.loadingMore, state.items.length, state.total]);
+  }
 
   return {
     ...state,
