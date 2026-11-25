@@ -29,19 +29,6 @@
 --  * conserva lo stato di abilitazione del trigger (attivo/disattivo/replica).
 -- =====================================================================
 
-create table if not exists private.nmre_trigger_definition_backups (
-  id bigint generated always as identity primary key,
-  migration text not null,
-  table_name text not null,
-  trigger_name text not null,
-  original_definition text not null,
-  original_enabled "char" not null,
-  saved_at timestamptz not null default now(),
-  unique (migration, table_name, trigger_name)
-);
-alter table private.nmre_trigger_definition_backups enable row level security;
-revoke all on table private.nmre_trigger_definition_backups from public, anon, authenticated;
-
 do $migration$
 declare
   v_migration constant text := '20261125200000_guard_agency_candidate_notifications';
@@ -87,6 +74,23 @@ begin
      or v_trigger.tgnargs <> 0 or v_trigger.tgqual is not null then
     raise exception 'Forma del trigger inattesa (atteso AFTER INSERT FOR EACH ROW senza WHEN né argomenti): %. Nessuna modifica eseguita', v_definition;
   end if;
+
+  -- Oggetti di supporto creati solo dopo i controlli, nello stesso blocco
+  -- atomico: se un controllo fallisce non resta nulla.
+  execute $ddl$
+    create table if not exists private.nmre_trigger_definition_backups (
+      id bigint generated always as identity primary key,
+      migration text not null,
+      table_name text not null,
+      trigger_name text not null,
+      original_definition text not null,
+      original_enabled "char" not null,
+      saved_at timestamptz not null default now(),
+      unique (migration, table_name, trigger_name)
+    )
+  $ddl$;
+  execute 'alter table private.nmre_trigger_definition_backups enable row level security';
+  execute 'revoke all on table private.nmre_trigger_definition_backups from public, anon, authenticated';
 
   insert into private.nmre_trigger_definition_backups
     (migration, table_name, trigger_name, original_definition, original_enabled)

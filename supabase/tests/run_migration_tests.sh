@@ -18,6 +18,8 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 GUARD="$ROOT/supabase/migrations/20261125200000_guard_agency_candidate_notifications.sql"
 GUARD_RB="$ROOT/supabase/rollback/20261125200000_guard_agency_candidate_notifications.rollback.sql"
 DUBIOUS="$ROOT/supabase/migrations/20261125201000_gmail_dubious_alerts.sql"
+PRICE="$ROOT/supabase/migrations/20261125202000_guard_agency_price_drop_notifications.sql"
+PRICE_RB="$ROOT/supabase/rollback/20261125202000_guard_agency_price_drop_notifications.rollback.sql"
 DUBIOUS_RB="$ROOT/supabase/rollback/20261125201000_gmail_dubious_alerts.rollback.sql"
 DB="nmre_migration_test_$$"
 
@@ -65,6 +67,61 @@ begin
 end $f$;
 create trigger nmre_notify_candidate_insert after insert on public.annunci_candidati
   for each row execute function private.nmre_notify_candidate_insert();
+
+-- Storico notifiche e stub del secondo percorso push osservato in produzione:
+-- una notifica price_drop per ogni riga dello storico che riporta un ribasso.
+create table public.annunci_candidati_notifiche (
+  id bigint generated always as identity primary key,
+  owner_id uuid not null,
+  candidate_id uuid not null,
+  source_email_id text not null,
+  listing_price numeric,
+  previous_price numeric,
+  price_drop_percent numeric,
+  unique (owner_id, source_email_id)
+);
+create function private.nmre_notify_price_drop() returns trigger language plpgsql as $f$
+begin
+  if coalesce(new.price_drop_percent, 0) > 0 then
+    insert into public.nmre_notifications (owner_id, category, candidate_id)
+    values (new.owner_id, 'price_drop', new.candidate_id);
+  end if;
+  return new;
+end $f$;
+SQL
+  if [[ "${PRICE_TRIGGER_VARIANT:-with_when}" == "with_when" ]]; then
+    psql_db -c "create trigger nmre_notify_price_drop after insert or update on public.annunci_candidati_notifiche for each row when (new.price_drop_percent is not null) execute function private.nmre_notify_price_drop();"
+  else
+    psql_db -c "create trigger nmre_notify_price_drop after insert on public.annunci_candidati_notifiche for each row execute function private.nmre_notify_price_drop();"
+  fi
+}
+
+# Simula l'ordine della sincronizzazione: prima il candidato, poi la riga dello
+# storico con ribasso. Restituisce "nuove_opportunita price_drop righe_storico ribasso_salvato".
+sync_with_price_drop() { # tipo_venditore email_id
+  psql_db -At <<SQL
+insert into public.annunci_candidati (owner_id, stato, tipo_venditore)
+values ('00000000-0000-0000-0000-00000000000a', 'da_verificare', $1) returning id \gset
+insert into public.annunci_candidati_notifiche (owner_id, candidate_id, source_email_id, listing_price, previous_price, price_drop_percent)
+values ('00000000-0000-0000-0000-00000000000a', :'id', '$2', 95000, 100000, 5);
+select (select count(*) from public.nmre_notifications where candidate_id = :'id' and category = 'new_opportunities')
+  || ' ' || (select count(*) from public.nmre_notifications where candidate_id = :'id' and category = 'price_drop')
+  || ' ' || (select count(*) from public.annunci_candidati_notifiche where candidate_id = :'id')
+  || ' ' || (select coalesce(max(price_drop_percent)::text, 'null') from public.annunci_candidati_notifiche where candidate_id = :'id');
+SQL
+}
+# Upsert su una riga esistente (percorso UPDATE): restituisce il numero di push price_drop del candidato.
+update_existing_drop() { # tipo_venditore email_id
+  psql_db -At <<SQL
+insert into public.annunci_candidati (owner_id, stato, tipo_venditore)
+values ('00000000-0000-0000-0000-00000000000a', 'scartato', $1) returning id \gset
+insert into public.annunci_candidati_notifiche (owner_id, candidate_id, source_email_id, listing_price)
+values ('00000000-0000-0000-0000-00000000000a', :'id', '$2', 100000);
+insert into public.annunci_candidati_notifiche (owner_id, candidate_id, source_email_id, listing_price, previous_price, price_drop_percent)
+values ('00000000-0000-0000-0000-00000000000a', :'id', '$2', 90000, 100000, 10)
+on conflict (owner_id, source_email_id) do update set listing_price = excluded.listing_price,
+  previous_price = excluded.previous_price, price_drop_percent = excluded.price_drop_percent;
+select count(*) from public.nmre_notifications where candidate_id = :'id' and category = 'price_drop';
 SQL
 }
 
@@ -124,6 +181,54 @@ BEFORE_DEF="$(psql_db -At -c "select pg_get_triggerdef(oid) from pg_trigger wher
 if psql_db -f "$GUARD" >/dev/null 2>&1; then echo "FAIL la migrazione doveva fermarsi" >&2; exit 1; fi
 expect "trigger BEFORE lasciato intatto" "$BEFORE_DEF" "$(psql_db -At -c "select pg_get_triggerdef(oid) from pg_trigger where tgname='nmre_notify_candidate_insert'")"
 expect "nessun backup scritto" 0 "$(psql_db -At -c "select count(*) from private.nmre_trigger_definition_backups" 2>/dev/null || echo 0)"
+psql -X -q -d postgres -c "drop database $DB" >/dev/null
+
+for variant in with_when without_when; do
+  export PRICE_TRIGGER_VARIANT=$variant
+  echo "== Push di ribasso (trigger $variant): situazione attuale"
+  base_schema
+  expect "[$variant] prima: un'agenzia genera new_opportunities e price_drop; storico salvato" "1 1 1 5" "$(sync_with_price_drop "'Agenzia'" e0 | tail -1)"
+  PRICE_ORIGINAL_DEF="$(psql_db -At -c "select pg_get_triggerdef(oid) from pg_trigger where tgname='nmre_notify_price_drop'")"
+
+  echo "== Push di ribasso (trigger $variant): entrambe le migrazioni applicate"
+  psql_db -f "$GUARD" >/dev/null 2>&1
+  psql_db -f "$PRICE" >/dev/null 2>&1
+  expect "[$variant] agenzia: nessuna new_opportunities, nessuna price_drop, storico e ribasso conservati" "0 0 1 5" "$(sync_with_price_drop "'Agenzia'" e1 | tail -1)"
+  expect "[$variant] privato: new_opportunities e price_drop invariate" "1 1 1 5" "$(sync_with_price_drop "'Privato'" e2 | tail -1)"
+  expect "[$variant] da verificare: new_opportunities e price_drop invariate" "1 1 1 5" "$(sync_with_price_drop "'Da verificare'" e3 | tail -1)"
+  expect "[$variant] tipo assente (NULL): notifiche invariate" "1 1 1 5" "$(sync_with_price_drop "null" e4 | tail -1)"
+  if [[ "$variant" == "with_when" ]]; then
+    expect "[$variant] percorso UPDATE (upsert): agenzia senza price_drop" 0 "$(update_existing_drop "'Agenzia'" e5 | tail -1)"
+    expect "[$variant] percorso UPDATE (upsert): privato con price_drop" 1 "$(update_existing_drop "'Privato'" e6 | tail -1)"
+    expect "[$variant] condizione originale conservata nella nuova definizione" 1 "$(psql_db -At -c "select count(*) from pg_trigger where tgname='nmre_notify_price_drop' and pg_get_triggerdef(oid) like '%price_drop_percent IS NOT NULL%' and pg_get_triggerdef(oid) like '%nmre_candidate_is_agency%'")"
+  fi
+  expect "[$variant] backup identico alla definizione originale" "$PRICE_ORIGINAL_DEF" "$(psql_db -At -c "select original_definition from private.nmre_trigger_definition_backups where table_name='public.annunci_candidati_notifiche'")"
+
+  echo "== Push di ribasso (trigger $variant): idempotenza e rollback"
+  psql_db -f "$PRICE" >/dev/null 2>&1
+  expect "[$variant] seconda esecuzione: backup non duplicato" 1 "$(psql_db -At -c "select count(*) from private.nmre_trigger_definition_backups where table_name='public.annunci_candidati_notifiche'")"
+  expect "[$variant] seconda esecuzione: agenzia ancora senza price_drop" "0 0 1 5" "$(sync_with_price_drop "'Agenzia'" e7 | tail -1)"
+  psql_db -f "$PRICE_RB" >/dev/null 2>&1
+  expect "[$variant] rollback: definizione identica all'originale" "$PRICE_ORIGINAL_DEF" "$(psql_db -At -c "select pg_get_triggerdef(oid) from pg_trigger where tgname='nmre_notify_price_drop'")"
+  expect "[$variant] rollback: funzione di supporto rimossa" 0 "$(psql_db -At -c "select count(*) from pg_proc where proname='nmre_candidate_is_agency'")"
+  expect "[$variant] rollback: l'agenzia genera di nuovo price_drop (new_opportunities resta protetta)" "0 1 1 5" "$(sync_with_price_drop "'Agenzia'" e8 | tail -1)"
+  psql_db -f "$PRICE" >/dev/null 2>&1
+  expect "[$variant] riapplicazione dopo il rollback" "0 0 1 5" "$(sync_with_price_drop "'Agenzia'" e9 | tail -1)"
+  # Una riga per ogni email usata: e0–e9, esclusi e5/e6 nella variante senza percorso UPDATE.
+  expected_rows=$([[ "$variant" == "with_when" ]] && echo 10 || echo 8)
+  expect "[$variant] nessuna riga dello storico persa" "$expected_rows" "$(psql_db -At -c "select count(*) from public.annunci_candidati_notifiche")"
+  psql -X -q -d postgres -c "drop database $DB" >/dev/null
+done
+unset PRICE_TRIGGER_VARIANT
+
+echo "== Push di ribasso: forme inattese, la migrazione si interrompe senza modifiche"
+base_schema
+psql_db -c "drop trigger nmre_notify_price_drop on public.annunci_candidati_notifiche; create trigger nmre_notify_price_drop after insert on public.annunci_candidati_notifiche for each statement execute function private.nmre_notify_price_drop();"
+if psql_db -f "$PRICE" >/dev/null 2>&1; then echo "FAIL la migrazione doveva fermarsi (trigger per istruzione)" >&2; exit 1; fi
+expect "trigger per istruzione lasciato intatto, nessuna funzione di supporto" 0 "$(psql_db -At -c "select count(*) from pg_proc where proname='nmre_candidate_is_agency'")"
+psql_db -c "drop trigger nmre_notify_price_drop on public.annunci_candidati_notifiche"
+if psql_db -f "$PRICE" >/dev/null 2>&1; then echo "FAIL la migrazione doveva fermarsi (nessun trigger)" >&2; exit 1; fi
+pass "nessun trigger di notifica: migrazione interrotta"
 psql -X -q -d postgres -c "drop database $DB" >/dev/null
 
 echo "== Avvisi dubbi: RLS e permessi"

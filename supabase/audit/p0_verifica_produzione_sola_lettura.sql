@@ -648,3 +648,37 @@ select count(*) filter (where (dati_estratti->'notifiche_dopo_scarto'->>'da_rive
        coalesce(sum((dati_estratti->'notifiche_dopo_scarto'->>'conteggio')::int), 0) as notifiche_totali
   from public.annunci_candidati
  where stato = 'scartato';
+
+
+-- AQ17 · Trigger di notifica push: verifica PRIMA delle migrazioni ------
+-- 20261125200000 (new_opportunities) e 20261125202000 (price_drop).
+-- La definizione del trigger è schema, non dati. Della funzione si
+-- restituiscono solo indicatori: il codice resta in produzione.
+-- Atteso: un solo trigger di notifica per ciascuna tabella, AFTER, FOR EACH
+-- ROW; su annunci_candidati_notifiche eventi INSERT e/o UPDATE.
+select c.relname as tabella,
+       t.tgname as trigger,
+       pg_get_triggerdef(t.oid) as definizione_trigger,
+       pn.nspname || '.' || p.proname as funzione,
+       t.tgenabled as abilitazione,
+       (t.tgtype & 1) <> 0  as per_riga,
+       (t.tgtype & 2) <> 0  as before,
+       (t.tgtype & 4) <> 0  as su_insert,
+       (t.tgtype & 16) <> 0 as su_update,
+       t.tgqual is not null as ha_condizione_when,
+       p.prosrc ~* 'nmre_notifications'           as crea_notifiche,
+       p.prosrc ~* 'new_opportunities'            as categoria_new_opportunities,
+       p.prosrc ~* 'price_drop'                   as riguarda_price_drop,
+       p.prosrc ~* 'tipo_venditore'               as considera_tipo_venditore,
+       p.prosecdef                                as security_definer,
+       pg_get_triggerdef(t.oid) like '%nmre_candidate_is_agency%'
+         or pg_get_triggerdef(t.oid) ilike '%tipo_venditore%IS DISTINCT FROM%Agenzia%' as gia_protetto
+  from pg_trigger t
+  join pg_class c on c.oid = t.tgrelid
+  join pg_proc p on p.oid = t.tgfoid
+  join pg_namespace pn on pn.oid = p.pronamespace
+ where not t.tgisinternal
+   and c.relname in ('annunci_candidati', 'annunci_candidati_notifiche')
+ order by 1, 2;
+-- Per leggere il codice della funzione (solo il titolare, senza condividerlo):
+--   select pg_get_functiondef('<schema>.<funzione>'::regproc);
