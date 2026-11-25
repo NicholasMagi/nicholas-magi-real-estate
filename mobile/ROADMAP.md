@@ -31,6 +31,15 @@ Acceptance:
 - No production data writes.
 Rollback: revert mobile scaffold commit; no backend rollback.
 
+## M2.5 — NOVA native assistant shell (implemented; data connection pending)
+- Added the NOVA tab and native text chat UI.
+- Added a pure TypeScript rules engine ported from the PWA decision logic: candidate priority, data completeness/duplicate checks, municipality filters, action-plan ranking, due/overdue follow-ups, private-seller counts, incomplete qualification and documented price reductions.
+- Added a typed context boundary. Without connected operational repositories, NOVA clearly reports that data are unavailable rather than presenting fake counts; generic help and call-script prompts still work.
+- No OpenAI/API, new Supabase table, Edge Function, migration, production write or secret was introduced.
+- Added `npm run test:nova` based on Node's built-in test runner. Run it locally and record exact output before considering the milestone verified.
+- Remaining: M3 Auth/SecureStore; M4 owner-scoped read-only repositories and mapping; detail navigation; install dependencies and run full mobile quality gates.
+- Rollback: revert only the NOVA mobile feature files and tab entry; no backend rollback.
+
 ## M3 — Authentication and session
 Deliverables: existing email/password Supabase Auth, SecureStore storage adapter, protected routes, session refresh/expiry UX and generated schema types from a verified live snapshot.
 Acceptance: valid sign-in/out; invalid credentials, expired session, refresh failure and network outage tested; staging proves User A cannot access User B records; no secret in bundle/logs and no PII disk cache.
