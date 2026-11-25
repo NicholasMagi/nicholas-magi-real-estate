@@ -11,8 +11,7 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "it.nicholasmagi.nmremobile",
-      "edgeToEdgeEnabled": true
+      "package": "it.nicholasmagi.nmremobile"
     },
     "plugins": [
       "expo-router",
