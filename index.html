@@ -3540,7 +3540,7 @@ function nmreMatchContactForListing(item){
  const identity=[item?.contatto,item?.seller_identity].map(nmreIdentityKey).filter(Boolean);
  const listingTown=nmreIdentityKey(item?.comune);
  const listingText=nmreIdentityKey([item?.indirizzo,item?.titolo].filter(Boolean).join(" "));
- const listingPhones=String([item?.contatto,item?.seller_identity,item?.titolo].filter(Boolean).join(" ")).match(/\\+?\\d[\\d .()\\/-]{6,}\\d/g)||[];
+ const listingPhones=String([item?.contatto,item?.seller_identity].filter(Boolean).join(" ")).match(/\+?\d[\d .()\/-]{6,}\d/g)||[];
  const matches=contacts.filter(contact=>{
   const name=nmreIdentityKey(contact.full_name);
   const email=String(contact.email||"").trim().toLowerCase();
