@@ -104,7 +104,7 @@ Only one Supabase project was verified. Create staging before any write-capable 
 Decision:
 - The existing responsive PWA assistant is named **NOVA** and, in phase 1, uses deterministic command handlers in the browser rather than an external generative-AI API.
 - It reuses already-loaded `candidateCache` and `listingCache`, the existing `candidatePriority()` commercial work-order score and the saved follow-up dates. It does not introduce a parallel data model.
-- Supported tasks: acquisition priorities, top opportunities (including known municipality filters), due/overdue follow-ups, current seller-classification counts, archive summary and a templated owner-call script.
+- Supported tasks: acquisition priorities, top opportunities (including known municipality filters), a separate list of confirmed private sellers, due/overdue follow-ups, seller-classification counts, archive summary and a templated owner-call script. Opportunity results also show the existing data-completeness score, missing fields and possible duplicates.
 - The conversation text is handled in the browser. The assistant does not invoke `nmre-ai-assistant`, OpenAI, or another AI endpoint. No new database table, Edge Function, secret or paid service is required for this phase.
 - The score is a workflow ordering signal only; it is not an estimate of mandate probability and does not certify seller identity. Missing data remains missing.
 - No voice, generative free-form dialogue, or persistent cross-device conversation memory is included in this phase.
