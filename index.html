@@ -3489,21 +3489,21 @@ function novaRespond(message){
   if(town)novaLastTown=town;
 
   let intent=null;
-  if(/\b(telefonat|telefon|chiamat|chiam|copion|script|contattare un proprietario|prepara)\b/.test(query))intent="call";
-  else if(/\b(richiam|richiamo|richiami|scadenz|appuntament|agenda)\b/.test(query))intent="followups";
-  else if(/\b(priorit|oggi|cosa devo fare|cosa dovrei fare|da dove comincio)\b/.test(query))intent="priorities";
-  else if(/\b(privat|venditor)\b/.test(query))intent="private";
-  else if(/\b(opportunit|candidat|lead|miglior|punteggio|da verificare)\b/.test(query))intent="opportunities";
-  else if(/\b(archiv|riepilog|quanti immobili|annunci in totale)\b/.test(query))intent="archive";
-  else if(/\b(aiuto|aiutami|comandi|cosa sai fare|come funziona)\b/.test(query))intent="help";
-  else if(/\b(costo|costi|openai|api)\b/.test(query))return "NOVA non invia messaggi a OpenAI e non genera costi API AI per questa conversazione. Analizza nel browser i dati che NMRE ha già caricato. Restano separati gli eventuali consumi ordinari del gestionale e di Supabase.";
-  else if(/\b(ciao|salve|buongiorno|buonasera)\b/.test(query))return "Buongiorno. Sono pronta ad aiutarLa con le priorità, le opportunità e i richiami presenti in NMRE.";
+  if(query.includes("telefon")||query.includes("chiam")||query.includes("copion")||query.includes("script")||query.includes("prepara"))intent="call";
+  else if(query.includes("richiam")||query.includes("scadenz")||query.includes("appuntament")||query.includes("agenda"))intent="followups";
+  else if(query.includes("priorit")||query.includes("oggi")||query.includes("cosa devo fare")||query.includes("cosa dovrei fare")||query.includes("da dove comincio"))intent="priorities";
+  else if(query.includes("privat")||query.includes("venditor"))intent="private";
+  else if(query.includes("opportunit")||query.includes("candidat")||query.includes("lead")||query.includes("miglior")||query.includes("punteggio")||query.includes("da verificare"))intent="opportunities";
+  else if(query.includes("archiv")||query.includes("riepilog")||query.includes("quanti immobili")||query.includes("annunci in totale"))intent="archive";
+  else if(query.includes("aiuto")||query.includes("aiutami")||query.includes("comandi")||query.includes("cosa sai fare")||query.includes("come funziona"))intent="help";
+  else if(query.includes("costo")||query.includes("costi")||query.includes("openai")||query.includes("api"))return "NOVA non invia messaggi a OpenAI e non genera costi API AI per questa conversazione. Analizza nel browser i dati che NMRE ha già caricato. Restano separati gli eventuali consumi ordinari del gestionale e di Supabase.";
+  else if(query.includes("ciao")||query.includes("salve")||query.includes("buongiorno")||query.includes("buonasera"))return "Buongiorno. Sono pronta ad aiutarLa con le priorità, le opportunità e i richiami presenti in NMRE.";
 
   if(!intent&&town&&novaLastIntent)intent=novaLastIntent;
   if(!intent)return novaHelp();
   if(intent!=="help")novaLastIntent=intent;
 
-  const scope=town||novaLastTown;
+  const scope=town||(query.length<=35?novaLastTown:null);
   if(intent==="call")return novaReplyCall(scope);
   if(intent==="followups")return novaReplyFollowups(scope);
   if(intent==="priorities")return novaReplyPriorities(scope);
