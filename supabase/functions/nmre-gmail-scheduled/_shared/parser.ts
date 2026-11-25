@@ -249,20 +249,34 @@ export async function resolveListingUrl(s:string):Promise<string|null> {
   }
   return null;
 }
-export function propertyEmail(e:any):boolean {
+// Regole del filtro avvisi, con il nome usato nella diagnostica. Il comportamento
+// è identico a quello storico di propertyEmail(): la funzione restituisce in più
+// quale regola ha escluso l'email, per misurare le esclusioni senza salvare testi.
+export type PropertyEmailRule =
+  | "accettata"
+  | "esclusione_nell_oggetto"
+  | "esclusione_nel_testo"
+  | "nessun_segnale_di_avviso"
+  | "nessun_link_annuncio"
+  | "link_principale_generico";
+export function propertyEmailDecision(e:any):{accepted:boolean;rule:PropertyEmailRule} {
   const subject=String(e.subject||"").toLocaleLowerCase("it");
   const text=[e.subject,e.snippet,e.bodyText].filter(Boolean).join(" ").toLocaleLowerCase("it");
-  const excluded=/(verifica il tuo indirizzo|verifica la tua email|hai condiviso alcuni dati|account google|benvenuto|ben arrivato|richiesta di contatto di recupero|ricerca (?:è stata )?salvata|password|reimposta|newsletter|promozion[ei]|subitopiù|attiva il tuo account|conferma il tuo indirizzo|asta giudiziaria|annuncio all['’]asta|\ball['’]asta\b|\baste immobiliari\b|\btribunale\b|\bvendi\s+all['’]asta\b|\bpiena proprietà\s+all['’]asta\b)/i;
-  if(excluded.test(subject)||excluded.test(text))return false;
-  const alertPattern=/(?:\b\d+\s+)?nuov[oi]\s+(?:annunci[oi]?|immobili|case|appartamenti|ville|proprietà)\b|annunci?\s+(?:appena )?pubblicat[oi]|nuov[oi]\s+immobil[ei]|nuov[ae]\s+proprietà|annuncio.{0,100}(?:tua ricerca|vendita|immobiliare)/i;
-  if(!alertPattern.test(subject)&&!alertPattern.test(text.slice(0,5000)))return false;
+  if(PROPERTY_EMAIL_EXCLUDED.test(subject))return {accepted:false,rule:"esclusione_nell_oggetto"};
+  if(PROPERTY_EMAIL_EXCLUDED.test(text))return {accepted:false,rule:"esclusione_nel_testo"};
+  if(!PROPERTY_EMAIL_ALERT.test(subject)&&!PROPERTY_EMAIL_ALERT.test(text.slice(0,5000)))return {accepted:false,rule:"nessun_segnale_di_avviso"};
   const url=listingUrl(text);
-  if(!url)return false;
+  if(!url)return {accepted:false,rule:"nessun_link_annuncio"};
   try{
     const parsed=new URL(url);
-    if(parsed.pathname==="/"||/\/(?:vendere|verify-email|login|register|account|search|ricerca|subitopiu)(?:\/|$)/i.test(parsed.pathname))return false;
-  }catch{return false;}
-  return true;
+    if(parsed.pathname==="/"||/\/(?:vendere|verify-email|login|register|account|search|ricerca|subitopiu)(?:\/|$)/i.test(parsed.pathname))return {accepted:false,rule:"link_principale_generico"};
+  }catch{return {accepted:false,rule:"link_principale_generico"};}
+  return {accepted:true,rule:"accettata"};
+}
+const PROPERTY_EMAIL_EXCLUDED=/(verifica il tuo indirizzo|verifica la tua email|hai condiviso alcuni dati|account google|benvenuto|ben arrivato|richiesta di contatto di recupero|ricerca (?:è stata )?salvata|password|reimposta|newsletter|promozion[ei]|subitopiù|attiva il tuo account|conferma il tuo indirizzo|asta giudiziaria|annuncio all['’]asta|\ball['’]asta\b|\baste immobiliari\b|\btribunale\b|\bvendi\s+all['’]asta\b|\bpiena proprietà\s+all['’]asta\b)/i;
+const PROPERTY_EMAIL_ALERT=/(?:\b\d+\s+)?nuov[oi]\s+(?:annunci[oi]?|immobili|case|appartamenti|ville|proprietà)\b|annunci?\s+(?:appena )?pubblicat[oi]|nuov[oi]\s+immobil[ei]|nuov[ae]\s+proprietà|annuncio.{0,100}(?:tua ricerca|vendita|immobiliare)/i;
+export function propertyEmail(e:any):boolean {
+  return propertyEmailDecision(e).accepted;
 }
 export function listingTitle(e:any):string {
   const body=normalizePropertyText(String(e.bodyText||"").replace(/https?:\/\/\S+/g," "));

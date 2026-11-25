@@ -31,7 +31,10 @@ jobs:
         run: deno check supabase/functions/nmre-gmail-scheduled/index.ts supabase/functions/nmre-gmail-push/index.ts supabase/functions/nmre-search-engine/index.ts
 
       - name: Test Gmail parser and incremental history adapter
-        run: deno test supabase/functions/nmre-gmail-scheduled/parser_test.ts supabase/functions/nmre-gmail-scheduled/history_test.ts
+        run: deno test supabase/functions/nmre-gmail-scheduled/parser_test.ts supabase/functions/nmre-gmail-scheduled/history_test.ts supabase/functions/nmre-gmail-scheduled/_shared/parser.test.ts
+
+      - name: Test opportunity retention rules and property filter diagnostics
+        run: deno test supabase/functions/nmre-gmail-scheduled/retention_test.ts supabase/functions/nmre-gmail-scheduled/property_filter_test.ts
 
       - name: Test Immobiliare Insights API adapter
         run: deno test supabase/functions/nmre-insights-sync/provider_test.ts

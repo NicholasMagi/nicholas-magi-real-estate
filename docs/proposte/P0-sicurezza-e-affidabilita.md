@@ -36,6 +36,7 @@ Legenda delle fonti:
 | V13 | Il 25/11 le versioni 65, 66 e 67 di `nmre-gmail-scheduled` presentano solo risposte 200 e 202 nei log analizzati | 🟢 |
 | V14 | Nello stesso intervallo compaiono due errori PostgreSQL SQLSTATE 42703 (colonna inesistente); la corrispondenza con i 15 eventi **non è dimostrata** | 🟢 |
 | V15 | Motore di acquisizione, 48 ore: 671 annunci rilevati, 508 da verificare (59 inseriti + 449 aggiornati), **0 privati riconosciuti automaticamente, 0 archiviazioni automatiche** | 🟢 · analisi nel piano di sviluppo, modulo A.0-bis |
+| V16 | AQ9 (26/11): 508 notifiche immobiliari, tutte "Da verificare"; **0 escluse come agenzia** (la stima di circa 163 non è confermata); 0 scarti automatici della sincronizzazione; AQ2: 104 scartati (63 manuali o storici, 14 stesso URL, 11 sincronizzazione probabile, 16 agenzia manuale) | 🟢 · analisi in `docs/proposte/A1-nessuna-opportunita-persa.md` |
 
 ---
 

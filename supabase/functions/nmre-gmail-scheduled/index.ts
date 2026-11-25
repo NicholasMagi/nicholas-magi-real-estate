@@ -1,9 +1,14 @@
 import {
-  municipality,price,listingPrice,listingUrl,propertyEmail,listingTitle,propertyType,
+  municipality,price,listingPrice,listingUrl,propertyEmailDecision,listingTitle,propertyType,
   surface,rooms,bedrooms,bathrooms,resolveListingUrl,sellerClassificationDetails,canonicalListingKey,
   priceReduction,extractAdditionalPropertyDetails
 } from "./_shared/parser.ts";
+import type { PropertyEmailRule } from "./_shared/parser.ts";
 import { collectHistoryMessageIds } from "./_shared/history.ts";
+import {
+  appendStatusHistory, isRepairEligible, keepAgencyCandidates, preserveStatusHistory,
+  processedVersionMark, sellerFieldsForExisting, shouldReopenDiscarded
+} from "./_shared/retention.ts";
 import { withSupabase } from "npm:@supabase/server@^1";
 
 const ACCOUNT = "nicholasmagirealestate@gmail.com";
@@ -489,21 +494,18 @@ export default {
         .eq("owner_id", owner)
         .eq("stato", "da_verificare")
         .not("source_email_id", "is", null)
+        // I più vecchi per primi: se gli idonei superano il limite, nessuno resta
+        // escluso a tempo indeterminato.
+        .order("updated_at", { ascending: true })
         .limit(200);
 
       if (repairQueryError) throw new Error("Lettura dei link da correggere non riuscita");
+      // Ogni email legacy viene rielaborata una sola volta: dopo la lettura il
+      // candidato viene marcato con le versioni attuali (anche quando è una copia
+      // storica o non è più riconosciuto come avviso), così non torna a ogni ciclo.
+      // Le classificazioni manuali non vengono rielaborate.
       const repairIds = (candidatesToRepair || [])
-        .filter((candidate: any) => {
-          if (typeof candidate.source_email_id !== "string") return false;
-          // Non rielaborare classificazioni impostate manualmente dall'utente.
-          if (candidate.seller_manual_override === true) return false;
-          // Ogni email legacy viene rielaborata una sola volta per assegnare
-          // un'identità stabile alla scheda, anche se non contiene un link diretto.
-          if (Number(candidate.deduplication_version || 0) < 1) return true;
-          if (Number(candidate.seller_classification_version || 0) < 3) return true;
-          if (Number(candidate.data_extraction_version || 0) < 6) return true;
-          return false;
-        })
+        .filter((candidate: any) => isRepairEligible(candidate))
         .map((candidate: any) => candidate.source_email_id as string);
 
       messageIds = [...new Set([...messageIds, ...repairIds])];
@@ -521,7 +523,15 @@ export default {
         (email): email is any =>
           !!email && !email.labels.includes("SPAM") && !email.labels.includes("TRASH")
       );
-      const propertyEmails = mailboxEmails.filter(email => propertyEmail(email));
+      // Diagnostica del filtro avvisi: solo conteggi per nome di regola, nessun testo.
+      const filterRuleById = new Map<string, PropertyEmailRule>();
+      const propertyFilterRules: Record<string, number> = {};
+      for (const email of mailboxEmails) {
+        const decision = propertyEmailDecision(email);
+        filterRuleById.set(String(email.id), decision.rule);
+        propertyFilterRules[decision.rule] = (propertyFilterRules[decision.rule] || 0) + 1;
+      }
+      const propertyEmails = mailboxEmails.filter(email => filterRuleById.get(String(email.id)) === "accettata");
 
       const { data: sellerRegistryRows, error: sellerRegistryError } = await ctx.supabaseAdmin
         .from("seller_identity_registry")
@@ -535,44 +545,54 @@ export default {
         const value = [email.subject, email.snippet, email.bodyText].filter(Boolean).join(" ");
         return { email, text: value, seller: classifySellerWithRegistry(value, sellerRegistry) };
       });
-      const classified = classifiedAll.filter(item => item.seller.classification !== "Agenzia");
+      // Le email classificate come agenzia vengono conservate come candidati
+      // "Agenzia" (fuori dalla coda principale ma recuperabili dall'interfaccia).
+      // NMRE_KEEP_AGENCY_CANDIDATES=false ripristina il comportamento precedente.
+      const keepAgency = keepAgencyCandidates(Deno.env.get("NMRE_KEEP_AGENCY_CANDIDATES"));
+      const classified = keepAgency
+        ? classifiedAll
+        : classifiedAll.filter(item => item.seller.classification !== "Agenzia");
       const retainedIds = new Set(classified.map(item => String(item.email.id)));
-      const discardedKeys = mailboxEmails
-        .filter(email => !retainedIds.has(String(email.id)))
-        .map(email => "gmail:" + String(email.id));
+      const notRetainedEmails = mailboxEmails.filter(email => !retainedIds.has(String(email.id)));
+      const notRetainedKeys = notRetainedEmails.map(email => "gmail:" + String(email.id));
 
-      let discardedExisting = 0;
-      if (discardedKeys.length) {
-        const { data: discarded, error: discardError } = await ctx.supabaseAdmin
+      // Nessuno scarto automatico: un candidato già salvato la cui email non viene
+      // più riconosciuta come avviso resta nel suo stato. Si registra soltanto la
+      // regola che lo ha escluso e lo si marca come elaborato, per non rileggerlo
+      // a ogni sincronizzazione.
+      const discardedExisting = 0;
+      let keptForReview = 0;
+      for (let index = 0; index < notRetainedKeys.length; index += 200) {
+        const { data: notRetainedRows, error: notRetainedError } = await ctx.supabaseAdmin
           .from("annunci_candidati")
-          .update({
-            stato: "scartato",
-            notification_sender: null,
-            email_subject: null,
-            deduplication_version: 1,
-            updated_at: new Date().toISOString()
-          })
+          .select("id,dedup_key,source_email_id,dati_estratti,deduplication_version,data_extraction_version,seller_classification_version")
           .eq("owner_id", owner)
-          .in("stato", ["da_verificare","scartato"])
-          .eq("seller_manual_override", false)
-          .in("dedup_key", discardedKeys)
-          .select("id");
+          .in("dedup_key", notRetainedKeys.slice(index, index + 200));
+        if (notRetainedError) throw new Error("Lettura delle notifiche non riconosciute non riuscita");
 
-        if (discardError) throw new Error("Pulizia delle notifiche non pertinenti non riuscita");
-        discardedExisting = discarded?.length || 0;
-
-        // Una verifica manuale prevale anche se, con la nuova classificazione,
-        // l'email originale non è più considerata un avviso immobiliare.
-        const { error: manualRepairError } = await ctx.supabaseAdmin
-          .from("annunci_candidati")
-          .update({
-            deduplication_version: 1,
-            updated_at: new Date().toISOString()
-          })
-          .eq("owner_id", owner)
-          .eq("seller_manual_override", true)
-          .in("dedup_key", discardedKeys);
-        if (manualRepairError) throw new Error("Aggiornamento dello stato di deduplicazione manuale non riuscito");
+        for (const candidate of notRetainedRows || []) {
+          const filterRule = filterRuleById.get(String(candidate.source_email_id || ""));
+          // Un'email che ha superato il filtro ma non è stata trattenuta è stata
+          // classificata come agenzia con NMRE_KEEP_AGENCY_CANDIDATES=false.
+          const rule = !filterRule || filterRule === "accettata" ? "classificata_agenzia" : filterRule;
+          const { error: keepError } = await ctx.supabaseAdmin
+            .from("annunci_candidati")
+            .update({
+              ...processedVersionMark(candidate),
+              dati_estratti: appendStatusHistory(candidate.dati_estratti, {
+                data: new Date().toISOString(),
+                origine: "sincronizzazione",
+                azione: "conservato_non_riconosciuto",
+                regola: rule,
+                motivo: "Email riletta e non più riconosciuta come avviso: il candidato resta nel suo stato per la revisione manuale"
+              }),
+              updated_at: new Date().toISOString()
+            })
+            .eq("owner_id", owner)
+            .eq("id", candidate.id);
+          if (keepError) throw new Error("Aggiornamento delle notifiche non riconosciute non riuscito");
+          keptForReview++;
+        }
       }
 
       const rows = await Promise.all(classified.map(async ({ email, text, seller }) => {
@@ -653,10 +673,11 @@ export default {
       let updated = 0;
       let notificationEventsLinked = 0;
       let autoArchived = 0;
+      let reopenedOnPriceDrop = 0;
       for (const row of rows) {
         const { data: currentCandidate, error: currentError } = await ctx.supabaseAdmin
           .from("annunci_candidati")
-          .select("id,seller_manual_override,stato,listing_key")
+          .select("id,seller_manual_override,stato,listing_key,tipo_venditore,dati_estratti,deduplication_version,data_extraction_version,seller_classification_version")
           .eq("owner_id", owner)
           .eq("dedup_key", row.dedup_key)
           .maybeSingle();
@@ -666,7 +687,7 @@ export default {
         if (row.listing_key) {
           const { data, error } = await ctx.supabaseAdmin
             .from("annunci_candidati")
-            .select("id,seller_manual_override,stato,listing_key")
+            .select("id,seller_manual_override,stato,listing_key,tipo_venditore,dati_estratti,deduplication_version,data_extraction_version,seller_classification_version")
             .eq("owner_id", owner)
             .eq("listing_key", row.listing_key)
             .maybeSingle();
@@ -685,7 +706,9 @@ export default {
           };
 
           // I record già scartati o già trasferiti nell'archivio non vengono
-          // riaperti. La notifica viene comunque conservata nello storico.
+          // aggiornati qui. La notifica viene comunque conservata nello storico e,
+          // se documenta un ribasso, il candidato scartato torna in revisione
+          // (vedi shouldReopenDiscarded più avanti).
           if (existingCandidate.stato === "da_verificare") {
             Object.assign(candidateUpdate, {
               titolo: row.titolo,
@@ -703,14 +726,20 @@ export default {
               camere: row.camere,
               bagni: row.bagni,
               dati_fonte: row.dati_fonte,
-              dati_estratti: row.dati_estratti,
+              // La nuova estrazione sostituisce i dati estratti ma conserva lo
+              // storico delle decisioni (storico_stato).
+              dati_estratti: preserveStatusHistory(existingCandidate.dati_estratti, row.dati_estratti),
               data_extraction_version: row.data_extraction_version
             });
-            if (existingCandidate.seller_manual_override !== true) {
-              Object.assign(candidateUpdate, {
-                tipo_venditore: row.tipo_venditore,
-                seller_confidence: row.seller_confidence,
-                seller_evidence: row.seller_evidence,
+            // Le classificazioni manuali non vengono toccate; un candidato in coda
+            // non viene mai declassato automaticamente ad "Agenzia".
+            const sellerFields = sellerFieldsForExisting(existingCandidate, {
+              classification: row.tipo_venditore,
+              confidence: row.seller_confidence,
+              evidence: row.seller_evidence
+            });
+            if (sellerFields) {
+              Object.assign(candidateUpdate, sellerFields, {
                 seller_classification_version: row.seller_classification_version
               });
             }
@@ -745,11 +774,14 @@ export default {
             updated += updatedRows?.length || 0;
           }
 
-          // La riga email legacy resta intatta, ma non viene rielaborata ad ogni cron.
+          // La riga email legacy (copia storica dello stesso immobile) resta intatta
+          // nei dati, ma viene marcata con le versioni attuali: senza questo
+          // segno resterebbe idonea alla rielaborazione e verrebbe riletta da
+          // Gmail a ogni sincronizzazione.
           if (currentCandidate && String(currentCandidate.id) !== candidateId) {
             const { error: markError } = await ctx.supabaseAdmin
               .from("annunci_candidati")
-              .update({ deduplication_version: 1 })
+              .update(processedVersionMark(currentCandidate))
               .eq("owner_id", owner)
               .eq("id", currentCandidate.id);
             if (markError) throw new Error("Aggiornamento dello stato di deduplicazione non riuscito");
@@ -854,6 +886,32 @@ export default {
         if (notificationError) throw new Error("Salvataggio dello storico notifiche non riuscito");
         notificationEventsLinked++;
 
+        // Uno scarto precedente non deve nascondere un nuovo ribasso: il candidato
+        // torna "da verificare" con la motivazione registrata. Nessun dato viene
+        // rimosso; la scelta resta reversibile dall'interfaccia.
+        if (existingCandidate && shouldReopenDiscarded(existingCandidate.stato, hasPriceDrop)) {
+          const { data: reopened, error: reopenError } = await ctx.supabaseAdmin
+            .from("annunci_candidati")
+            .update({
+              stato: "da_verificare",
+              dati_estratti: appendStatusHistory(existingCandidate.dati_estratti, {
+                data: new Date().toISOString(),
+                origine: "sincronizzazione",
+                azione: "riaperto_per_ribasso",
+                da: "scartato",
+                a: "da_verificare",
+                motivo: "Nuovo ribasso documentato" + (priceDropPercent !== null ? " (-" + priceDropPercent + "%)" : "")
+              }),
+              updated_at: new Date().toISOString()
+            })
+            .eq("owner_id", owner)
+            .eq("id", candidateId)
+            .eq("stato", "scartato")
+            .select("id");
+          if (reopenError) throw new Error("Riapertura del candidato con ribasso non riuscita");
+          reopenedOnPriceDrop += reopened?.length || 0;
+        }
+
         // Archivia solo i privati con prova esplicita ad alta affidabilita o verifica manuale gia salvata.
         if (row.tipo_venditore === "Privato") {
           const { data: archiveResult, error: archiveError } = await ctx.supabaseAdmin
@@ -865,7 +923,11 @@ export default {
 
       await saveSyncCursor(ctx.supabaseAdmin, nextHistoryId);
 
-      const excludedAgencies = propertyEmails.length - classified.length;
+      // Con NMRE_KEEP_AGENCY_CANDIDATES attivo le agenzie restano salvate: il
+      // contatore indica le notifiche tenute fuori dalla coda principale.
+      const excludedAgencies = keepAgency
+        ? rows.filter(row => row.tipo_venditore === "Agenzia").length
+        : propertyEmails.length - classified.length;
       const completedAt = new Date();
       const syncRun = {
         owner_id: owner,
@@ -894,6 +956,11 @@ export default {
       if (syncLogError) {
         console.error("Gmail sync monitor write failed:", syncLogError.message);
       }
+      // Riepilogo diagnostico nei log della funzione: solo conteggi e nomi di regola.
+      console.log("nmre-gmail-scheduled summary", JSON.stringify({
+        syncMode, propertyFilterRules, keptForReview, reopenedOnPriceDrop,
+        agencyCandidatesKept: keepAgency, excludedAgencies
+      }));
 
       return Response.json({
         success: true,
@@ -913,6 +980,10 @@ export default {
         autoArchived,
         notificationEventsLinked,
         reprocessedExistingListingLinks: repairIds.length,
+        agencyCandidatesKept: keepAgency,
+        keptForReview,
+        reopenedOnPriceDrop,
+        propertyFilterRules,
         duplicatesOrExisting: Math.max(0, rows.length - inserted - updated),
         missingMessages: emails.filter(email => !email).length
       });

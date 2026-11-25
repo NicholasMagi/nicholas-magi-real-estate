@@ -45,8 +45,9 @@ La funzione legge il contenuto soltanto lato server e cerca notifiche di nuovi a
 
 - **Privato riconosciuto:** la notifica contiene un'indicazione esplicita che il venditore è un privato. Il candidato può essere confermato nell'archivio.
 - **Venditore da verificare:** l'email segnala un nuovo annuncio, ma non permette di stabilire con certezza se il venditore sia un privato. Il candidato viene mostrato e deve essere approvato manualmente con l'azione “Accetta come privato e inserisci”.
-- **Agenzia riconosciuta:** le notifiche chiaramente riferite a un'agenzia vengono escluse dalla coda dedicata ai privati.
-- **Notifiche non pertinenti:** verifiche account, messaggi di benvenuto, ricerche salvate, promozioni e annunci d'asta vengono escluse.
+- **Agenzia riconosciuta:** le notifiche chiaramente riferite a un'agenzia restano fuori dalla coda dedicata ai privati, ma vengono salvate e sono recuperabili dal pannello "Annunci fuori dalla coda". Un candidato già in coda non viene mai declassato automaticamente ad agenzia.
+- **Notifiche non pertinenti:** verifiche account, messaggi di benvenuto, ricerche salvate, promozioni e annunci d'asta non vengono salvate. Le esclusioni sono conteggiate per regola nei log della sincronizzazione.
+- **Nessuno scarto automatico:** un candidato viene scartato solo da un'azione dell'utente, che registra motivo, data e autore. Una nuova notifica con ribasso documentato riporta in revisione un annuncio scartato in passato. Dettagli: docs/proposte/A1-nessuna-opportunita-persa.md.
 
 L'estrazione dei dati è euristica: titolo, comune, prezzo e URL possono richiedere correzioni manuali. Il sito mostra soltanto i dati dell'opportunità, non il mittente, l'oggetto o il testo dell'email. La coda si aggiorna ogni cinque minuti mentre il sito è aperto; la raccolta del server non dipende dalla pagina.
 

@@ -1240,6 +1240,20 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
   </div>
   <div id="candidateList"><p class="hint">Nessuna email da verificare.</p></div>
   <div id="candidateMsg" class="status"></div>
+  <details class="crm candidate-recovery" id="candidateRecoveryPanel">
+    <summary>Annunci fuori dalla coda <span id="candidateRecoverySummary" class="small">Caricamento…</span></summary>
+    <p class="hint">Nessun annuncio viene cancellato. Qui trova gli annunci classificati come agenzia e quelli scartati: può riportarli in revisione in qualsiasi momento. Ogni decisione viene registrata con data, motivo e origine.</p>
+    <label for="candidateRecoveryFilter">Mostra</label>
+    <select id="candidateRecoveryFilter">
+      <option value="all">Tutti</option>
+      <option value="agency">Classificati automaticamente come agenzia</option>
+      <option value="sync">Scartati dalla sincronizzazione (probabile)</option>
+      <option value="same_url">Scartati con lo stesso link di uno scarto precedente</option>
+      <option value="manual_agency">Classificati manualmente come agenzia</option>
+      <option value="manual">Scartati manualmente o storici</option>
+    </select>
+    <div id="candidateRecoveryList"><p class="hint">Nessun annuncio fuori dalla coda.</p></div>
+  </details>
 </section>
 
 <div class="grid panel" hidden>
@@ -1394,6 +1408,8 @@ let appBootGeneration = 0;
 let listingCache = [];
 let trashCache = [];
 let candidateCache = [];
+let candidateAgencyCache = [];
+let candidateDismissedCache = [];
 let sellerRegistryCache = [];
 let insightsCanImport = false;
 let omiQuotationCache = [];
@@ -1430,7 +1446,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-candidate-archive-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-no-lost-opportunity-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1505,7 +1521,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261125-candidate-archive-1");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-no-lost-opportunity-1");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -4214,7 +4230,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-candidate-archive-1");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-no-lost-opportunity-1");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);
@@ -4882,6 +4898,7 @@ function renderCandidates(){
     const emailCount=Number(c.notification_count)>1?Number(c.notification_count)+" email collegate":"1 email";
     const sellerStateLabel=isPrivate?"Privato riconosciuto · archiviazione da completare":"Venditore da verificare";
     const duplicateBadge=quality.duplicate?'<span class="candidate-email-duplicate">Possibile duplicato</span>':"";
+    const dismissedBadge=c.previously_dismissed?'<span class="candidate-email-duplicate">Già scartato in passato · verificare'+(Number(c.price_drop_percent)>0?' · nuovo ribasso':'')+'</span>':"";
 
     return '<article id="candidate-'+safe(c.id)+'" class="candidate candidate-email-card candidate-source-'+sourceTheme+'" data-candidate="'+safe(c.id)+'" data-url="'+safe(c.url||"")+'" data-url-originale="'+safe(c.url_originale||"")+'" data-portal="'+safe(c.portale||"Portale non indicato")+'">'
       +'<div class="candidate-email-meta">'
@@ -4894,7 +4911,7 @@ function renderCandidates(){
       +'<div class="candidate-email-subject"><span>Oggetto email</span> '+safe(emailSubject)+'</div>'
       +'<h3>'+safe(c.titolo||"Annuncio immobiliare")+'</h3>'
       +'<p class="candidate-quick-facts">'+safe(quickFacts||"Caratteristiche dell’immobile da completare")+'</p>'
-      +'<div class="candidate-email-status">'+safe(sellerStateLabel)+' '+duplicateBadge+'</div>'
+      +'<div class="candidate-email-status">'+safe(sellerStateLabel)+' '+duplicateBadge+' '+dismissedBadge+'</div>'
       +'</div>'
       +'<div class="candidate-actions candidate-actions-primary">'+reviewAction+linkHtml+'<button class="gold" type="button" data-confirm="'+safe(c.id)+'">Archivia</button><button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta email</button></div>'
       +'<details class="candidate-detail-panel" data-candidate-details>'
@@ -4955,7 +4972,7 @@ async function loadCandidates(){
   for(let offset=0;;offset+=pageSize){
     const {data:page,error}=await supabase.from("annunci_candidati")
       .select("*").eq("stato","da_verificare")
-      .in("tipo_venditore",["Privato","Da verificare"])
+      .in("tipo_venditore",["Privato","Da verificare","Agenzia"])
       .not("source_email_id","is",null).neq("source_email_id","")
       .order("created_at",{ascending:false}).order("id",{ascending:true})
       .range(offset,offset+pageSize-1);
@@ -5032,43 +5049,151 @@ async function loadCandidates(){
     item.current_price_at_drop=priceDrop?Number(priceDrop.listing_price):null;
   });
 
-  // Mantiene nel tempo lo scarto di un immobile: se una nuova email genera
-  // un altro record con lo stesso link già scartato, non deve riapparire in coda.
-  const dismissedListingUrls=new Set();
+  // Nessuna opportunità persa: uno scarto precedente non nasconde più le nuove
+  // notifiche dello stesso immobile e non viene più replicato automaticamente.
+  // Gli annunci con lo stesso link di uno scartato restano in coda con il
+  // contrassegno "già scartato in passato" (e l'eventuale nuovo ribasso).
+  const dismissed=[];
   for(let offset=0;;offset+=pageSize){
     const {data:page,error}=await supabase.from("annunci_candidati")
-      .select("url").eq("stato","scartato").not("url","is",null)
-      .order("created_at",{ascending:false})
+      .select("id,titolo,comune,prezzo,portale,url,url_originale,tipo_venditore,seller_manual_override,seller_evidence,notification_sender,email_subject,dati_estratti,data_pubblicazione,created_at,updated_at")
+      .eq("stato","scartato")
+      .order("updated_at",{ascending:false}).order("id",{ascending:true})
       .range(offset,offset+pageSize-1);
-    if(error){msg("candidateMsg","Impossibile verificare gli annunci già scartati: "+error.message,"error");return;}
-    for(const item of page||[]){
-      const key=canonicalCandidateUrl(item.url);
-      if(key)dismissedListingUrls.add(key);
-    }
+    if(error){msg("candidateMsg","Impossibile leggere gli annunci scartati: "+error.message,"error");break;}
+    dismissed.push(...(page||[]));
     if(!page||page.length<pageSize)break;
   }
-
-  const reappearedIds=data
-    .filter(item=>{
-      const key=canonicalCandidateUrl(item.url);
-      return key&&dismissedListingUrls.has(key);
-    })
-    .map(item=>String(item.id));
-
-  if(reappearedIds.length){
-    const {error}=await supabase.from("annunci_candidati")
-      .update({stato:"scartato",updated_at:new Date().toISOString()})
-      .in("id",reappearedIds)
-      .eq("stato","da_verificare");
-    if(error){msg("candidateMsg","Impossibile completare la pulizia dei duplicati già scartati: "+error.message,"error");return;}
-  }
-
-  candidateCache=data.filter(item=>{
+  const dismissedListingUrls=new Set(dismissed.map(item=>canonicalCandidateUrl(item.url)).filter(Boolean));
+  data.forEach(item=>{
     const key=canonicalCandidateUrl(item.url);
-    return !key||!dismissedListingUrls.has(key);
+    item.previously_dismissed=!!(key&&dismissedListingUrls.has(key));
   });
+  candidateDismissedCache=dismissed;
+  candidateAgencyCache=data.filter(item=>item.tipo_venditore==="Agenzia");
+  candidateCache=data.filter(item=>item.tipo_venditore!=="Agenzia");
   renderDashboard();
   renderCandidates();
+  renderCandidateRecovery();
+}
+
+// Storico delle decisioni su un candidato, conservato in dati_estratti.storico_stato
+// (stessa struttura della funzione di sincronizzazione, _shared/retention.ts).
+const NMRE_STATUS_HISTORY_LIMIT=50;
+function nmreAppendStatusHistory(datiEstratti,entry){
+  const base=datiEstratti&&typeof datiEstratti==="object"&&!Array.isArray(datiEstratti)?{...datiEstratti}:{};
+  const previous=Array.isArray(base.storico_stato)?base.storico_stato:[];
+  const clean={...entry,motivo:entry.motivo?String(entry.motivo).slice(0,300):null};
+  base.storico_stato=[...previous,clean].slice(-NMRE_STATUS_HISTORY_LIMIT);
+  return base;
+}
+function nmreLastStatusEntry(item){
+  const history=item&&item.dati_estratti&&Array.isArray(item.dati_estratti.storico_stato)?item.dati_estratti.storico_stato:[];
+  return history.length?history[history.length-1]:null;
+}
+// Rilegge dati_estratti dal database subito prima di scrivere, per non
+// sovrascrivere dati salvati nel frattempo (per esempio dall'analisi della pagina).
+async function nmreUpdateCandidateWithHistory(id,entry,fields,guard={}){
+  const {data:current,error:readError}=await supabase.from("annunci_candidati")
+    .select("id,dati_estratti").eq("id",id).eq("owner_id",currentUser.id).maybeSingle();
+  if(readError)return {error:readError,updated:0};
+  if(!current)return {error:null,updated:0};
+  let query=supabase.from("annunci_candidati").update({
+    ...fields,
+    dati_estratti:nmreAppendStatusHistory(current.dati_estratti,entry),
+    updated_at:new Date().toISOString()
+  }).eq("id",id).eq("owner_id",currentUser.id);
+  for(const [column,value] of Object.entries(guard))query=query.eq(column,value);
+  const {data,error}=await query.select("id");
+  return {error,updated:Array.isArray(data)?data.length:0};
+}
+
+const NMRE_RECOVERY_GROUP_LABELS={
+  agency:"Classificato automaticamente come agenzia",
+  sync:"Scartato dalla sincronizzazione (probabile)",
+  same_url:"Scartato con lo stesso link di uno scarto precedente",
+  manual_agency:"Classificato manualmente come agenzia",
+  manual:"Scartato manualmente o storico"
+};
+// Stessa inferenza della query di audit AQ2: è un'indicazione, non una certezza.
+function candidateRecoveryGroup(item,earliestDismissByUrl){
+  if(item.tipo_venditore==="Agenzia")return "manual_agency";
+  const last=nmreLastStatusEntry(item);
+  if(last&&last.origine==="utente")return "manual";
+  if(item.seller_manual_override!==true&&!item.notification_sender&&!item.email_subject)return "sync";
+  const key=canonicalCandidateUrl(item.url);
+  const earliest=key?earliestDismissByUrl.get(key):null;
+  if(earliest&&earliest.id!==String(item.id)&&earliest.updated_at<String(item.updated_at||""))return "same_url";
+  return "manual";
+}
+function renderCandidateRecovery(){
+  const box=$("candidateRecoveryList"),summary=$("candidateRecoverySummary");
+  if(!box||!summary)return;
+  const filter=$("candidateRecoveryFilter")?.value||"all";
+  const earliestDismissByUrl=new Map();
+  for(const item of candidateDismissedCache){
+    const key=canonicalCandidateUrl(item.url);if(!key)continue;
+    const current=earliestDismissByUrl.get(key);
+    if(!current||String(item.updated_at||"")<current.updated_at)earliestDismissByUrl.set(key,{id:String(item.id),updated_at:String(item.updated_at||"")});
+  }
+  const items=[
+    ...candidateAgencyCache.map(item=>({item,kind:"agency",group:"agency"})),
+    ...candidateDismissedCache.map(item=>({item,kind:"dismissed",group:candidateRecoveryGroup(item,earliestDismissByUrl)}))
+  ];
+  summary.textContent=candidateAgencyCache.length+" classificati come agenzia · "+candidateDismissedCache.length+" scartati";
+  const visible=items.filter(entry=>filter==="all"||entry.group===filter);
+  if(!visible.length){box.innerHTML='<p class="hint">Nessun annuncio in questa categoria.</p>';return;}
+  box.innerHTML=visible.slice(0,300).map(({item,kind,group})=>{
+    const last=nmreLastStatusEntry(item);
+    const url=validUrl(item.url||item.url_originale);
+    const when=item.updated_at?new Date(item.updated_at).toLocaleDateString("it-IT"):"data non disponibile";
+    const facts=[item.comune,item.portale,Number(item.prezzo)>0?euro(item.prezzo):null].filter(Boolean).join(" · ");
+    const reason=last
+      ?(last.motivo||last.azione)+" · "+(last.origine==="utente"?"utente":"automatico")
+      :(item.seller_evidence||"Motivo non registrato (scarto precedente alla registrazione dei motivi)");
+    return '<article class="candidate candidate-recovery-item" data-recovery-item="'+safe(item.id)+'">'
+      +'<div class="candidate-email-meta"><span class="candidate-source-badge">'+safe(NMRE_RECOVERY_GROUP_LABELS[group]||group)+'</span><span class="candidate-email-date">'+safe(when)+'</span></div>'
+      +'<h3>'+safe(item.titolo||"Annuncio immobiliare")+'</h3>'
+      +'<p class="candidate-quick-facts">'+safe(facts||"Dati da completare")+'</p>'
+      +'<p class="small">Motivo: '+safe(reason)+'</p>'
+      +'<div class="candidate-actions">'
+      +(url?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>':'<span class="candidate-link-warning">Link annuncio non disponibile</span>')
+      +'<button class="gold" type="button" data-recover="'+safe(item.id)+'" data-recover-kind="'+safe(kind)+'">Riporta in revisione</button>'
+      +'</div></article>';
+  }).join("")+(visible.length>300?'<p class="hint">Mostrati i primi 300 annunci su '+visible.length+'. Usi il filtro per restringere.</p>':'');
+  box.querySelectorAll("[data-recover]").forEach(btn=>btn.addEventListener("click",()=>recoverCandidate(btn.dataset.recover,btn.dataset.recoverKind,btn)));
+}
+async function recoverCandidate(id,kind,button){
+  const source=kind==="agency"?candidateAgencyCache:candidateDismissedCache;
+  const item=source.find(entry=>String(entry.id)===String(id));
+  if(!item){msg("candidateMsg","Annuncio non trovato. Aggiorni la lista e riprovi.","error");return;}
+  const reason=prompt("Riportare l’annuncio tra quelli da verificare?\nMotivo (facoltativo):","Riesame manuale");
+  if(reason===null)return;
+  if(button)button.disabled=true;
+  const entry={
+    data:new Date().toISOString(),origine:"utente",azione:"riportato_in_revisione",
+    da:kind==="agency"?"agenzia_automatica":"scartato",a:"da_verificare",
+    motivo:reason.trim()||"Riesame manuale"
+  };
+  let fields,guard;
+  if(kind==="agency"){
+    fields={tipo_venditore:"Da verificare",seller_confidence:0,seller_manual_override:true,seller_classification_version:100,
+      seller_evidence:"Riportato in revisione manualmente dopo la classificazione automatica come agenzia"};
+    guard={stato:"da_verificare",tipo_venditore:"Agenzia"};
+  }else{
+    fields={stato:"da_verificare"};
+    if(item.tipo_venditore==="Agenzia")Object.assign(fields,{tipo_venditore:"Da verificare",seller_confidence:0,
+      seller_evidence:"Riportato in revisione manualmente dopo una classificazione come agenzia"});
+    guard={stato:"scartato"};
+  }
+  const result=await nmreUpdateCandidateWithHistory(id,entry,fields,guard);
+  if(result.error||result.updated!==1){
+    msg("candidateMsg",result.error?"Impossibile riportare l’annuncio in revisione: "+result.error.message:"Nessun record modificato: l’annuncio potrebbe essere già cambiato. Aggiorni la lista.","error");
+    if(button)button.disabled=false;
+    return;
+  }
+  await loadCandidates();
+  msg("candidateMsg","Annuncio riportato tra quelli da verificare. La decisione è registrata nello storico.","success");
 }
 
 async function analyzeCandidatePage(id,button){
@@ -5229,7 +5354,12 @@ async function saveCandidateSeller(id,button){
     }
   }
 
-  const {error}=await supabase.from("annunci_candidati").update({
+  const previousSeller=(candidateCache||[]).find(item=>String(item.id)===String(id))?.tipo_venditore||null;
+  const {error,updated:sellerUpdated}=await nmreUpdateCandidateWithHistory(id,{
+    data:new Date().toISOString(),origine:"utente",
+    azione:isAgency?"classificato_agenzia_e_scartato":"classificazione_manuale",
+    da:previousSeller,a:seller,motivo:evidence
+  },{
     tipo_venditore:seller,
     contatto:contact||null,
     seller_identity:identity||null,
@@ -5239,12 +5369,11 @@ async function saveCandidateSeller(id,button){
       :" · Nessun identificativo riutilizzabile inserito"),
     seller_manual_override:true,
     seller_classification_version:100,
-    stato:isAgency?"scartato":"da_verificare",
-    updated_at:new Date().toISOString()
-  }).eq("id",id);
+    stato:isAgency?"scartato":"da_verificare"
+  });
 
-  if(error){
-    msg("candidateMsg",error.message,"error");
+  if(error||sellerUpdated!==1){
+    msg("candidateMsg",error?error.message:"Nessun record modificato. Aggiorni la lista e riprovi.","error");
     button.disabled=false;
     return;
   }
@@ -5367,26 +5496,29 @@ async function discardCandidate(id,button){
   );
   const ids=[...new Set([String(id),...matching.map(item=>String(item.id))])];
 
-  const prompt=ids.length>1
+  const question=ids.length>1
     ? "Scartare questo immobile e tutte le sue "+(ids.length-1)+" copie presenti nella lista?"
     : "Scartare questo candidato?";
-  if(!confirm(prompt))return;
+  // Ogni scarto registra motivo, data e autore; resta recuperabile da
+  // "Annunci fuori dalla coda".
+  const reason=prompt(question+"\nMotivo dello scarto:","Non pertinente");
+  if(reason===null)return;
 
   if(button)button.disabled=true;
-  const {data,error}=await supabase
-    .from("annunci_candidati")
-    .update({stato:"scartato",updated_at:new Date().toISOString()})
-    .in("id",ids)
-    .eq("stato","da_verificare")
-    .select("id");
-
-  if(error){
-    msg("candidateMsg","Impossibile scartare l'annuncio: "+error.message,"error");
-    if(button)button.disabled=false;
-    return;
+  let discardedCount=0;
+  for(const candidateId of ids){
+    const result=await nmreUpdateCandidateWithHistory(candidateId,{
+      data:new Date().toISOString(),origine:"utente",azione:"scartato",
+      da:"da_verificare",a:"scartato",motivo:reason.trim()||"Scarto manuale senza motivo indicato"
+    },{stato:"scartato"},{stato:"da_verificare"});
+    if(result.error){
+      msg("candidateMsg","Impossibile scartare l'annuncio: "+result.error.message,"error");
+      if(button)button.disabled=false;
+      await loadCandidates();
+      return;
+    }
+    discardedCount+=result.updated;
   }
-
-  const discardedCount=Array.isArray(data)?data.length:0;
   if(discardedCount===0){
     msg("candidateMsg","Nessun record è stato modificato. Aggiorni la lista e riprovi.","error");
     if(button)button.disabled=false;
@@ -6345,6 +6477,7 @@ $("candidateResetFilters").addEventListener("click",()=>{
   [...candidateTextFilters,...candidateSelectFilters].forEach(id=>$(id).value="");
   renderCandidates();
 });
+$("candidateRecoveryFilter").addEventListener("change",renderCandidateRecovery);
 $("refreshCandidates").addEventListener("click",loadCandidates);
 $("archiveManualToggle").addEventListener("click",()=>{
   const panel=$("archiveManualPanel");

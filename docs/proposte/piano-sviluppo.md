@@ -82,7 +82,17 @@ L'audit è interamente in **sola lettura**.
 **Principio:** i numeri non dimostrano che gli elementi scartati o da verificare
 siano privati. L'audit serve a stabilirlo con dati e campioni, non a presumerlo.
 
-#### Dati verificati in produzione (48 ore)
+#### Risultati verificati il 26/11 (AQ2, AQ4, AQ9)
+| Query | Esito |
+|---|---|
+| AQ2 | 104 scartati: 63 "Da verificare" manuali o storici non determinabili; 14 "Da verificare" con lo stesso URL di uno scarto precedente (D2 o D4); 11 "Da verificare" probabilmente scartati dalla sincronizzazione (D1); 16 "Agenzia" manuali (D3) |
+| AQ4 | Nessun segnale esplicito di privato o proprietario negli 88 "Da verificare" scartati; un solo riferimento a forma societaria; due casi Casa.it con la parola "privato", non sufficienti per cambiare la classificazione |
+| AQ9 | 508 notifiche, 508 "Da verificare", 0 privati, 0 agenzie escluse, 59 inserimenti, 449 aggiornamenti, 0 scarti e 0 archiviazioni automatiche |
+
+**Analisi completa, punti di perdita, patch e procedura di recupero:**
+`docs/proposte/A1-nessuna-opportunita-persa.md`.
+
+#### Dati verificati in produzione (48 ore, prima serie)
 | Indicatore | Valore |
 |---|---|
 | Annunci rilevati nelle sincronizzazioni riuscite | 671 |
@@ -101,12 +111,12 @@ siano privati. L'audit serve a stabilirlo con dati e campioni, non a presumerlo.
 - I contatori di `nmre_gmail_sync_runs` sono **somme per esecuzione**, quindi
   **eventi** e non annunci distinti: un messaggio rielaborato (per esempio per
   l'aggiornamento della versione del parser) viene contato di nuovo.
-- ⚠️ Se 671 corrisponde a `property_notifications_count` e 508 alle righe
-  classificate non-agenzia, la differenza (**circa 163 notifiche**) è stata esclusa
-  come "Agenzia". ✅ Nel codice attuale queste notifiche **non vengono salvate da
-  nessuna parte**: nessun candidato, nessuna riga in `annunci_candidati_notifiche`
-  (`nmre-gmail-scheduled/index.ts:538` e ciclo da riga 656). Non sono quindi
-  verificabili dal database.
+- ~~Circa 163 notifiche escluse come agenzia~~: **stima non confermata**. AQ9
+  (26/11) riporta 508 notifiche immobiliari, tutte "Da verificare", e **0 escluse
+  come agenzia**. La stima è ritirata.
+- ✅ Restano invece **non misurate** le email escluse dal filtro avvisi prima del
+  salvataggio, che non lasciano traccia: vedi L1–L7 in
+  `docs/proposte/A1-nessuna-opportunita-persa.md` e la query AQ10.
 - ✅ Zero archiviazioni automatiche discendono **meccanicamente** da zero privati
   riconosciuti: l'archiviazione automatica parte solo per le righe `Privato`
   (`index.ts:858`). Non è un secondo problema indipendente.
@@ -209,6 +219,12 @@ titolare durante la revisione e **non va condivisa** in chat o su GitHub. Le alt
 restituiscono solo conteggi e indicatori.
 
 ### A.1 Nessuna perdita automatica (priorità più alta del modulo)
+
+**Stato:** la Fase 1 è implementata sul branch come patch isolata con test, non
+distribuita. Dettaglio: `docs/proposte/A1-nessuna-opportunita-persa.md` (§3 patch,
+§5 recupero degli 88 scartati, §6 priorità). I punti che seguono restano
+l'obiettivo complessivo; quelli coperti dalla Fase 1 sono indicati nel rapporto.
+
 - Le email classificate "Agenzia" vengono **salvate** con stato `agenzia_esclusa`, visibili in un filtro dedicato e recuperabili con un clic.
 - Le email scartate come "non pertinenti" restano registrate con il motivo (`motivo_scarto`) e senza testo personale; nessun candidato già in coda passa a `scartato` senza una ragione registrata.
 - Ogni percorso di scarto (D1–D4 dell'audit) registra **chi o cosa** ha scartato (`scartato_da`: sincronizzazione, regola, utente) e **quando**.

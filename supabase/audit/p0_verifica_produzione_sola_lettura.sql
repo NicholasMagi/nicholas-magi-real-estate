@@ -546,3 +546,84 @@ select sum(property_notifications_count) as notifiche_immobiliari,
        count(*) filter (where coalesce(property_notifications_count, 0) > 0) as esecuzioni_con_notifiche
   from public.nmre_gmail_sync_runs
  where status = 'success' and started_at > now() - interval '48 hours';
+
+
+-- =====================================================================
+-- AUDIT ACQUISIZIONE · AGGIUNTE DEL 26/11 (docs/proposte/A1-nessuna-opportunita-persa.md)
+-- =====================================================================
+
+-- AQ10 · Email escluse dal filtro avvisi PRIMA del salvataggio (48 ore) ---
+-- read_count = email lette (escluse spam/cestino); property_notifications
+-- = email che hanno superato il filtro. La differenza comprende email non
+-- immobiliari legittime E avvisi reali esclusi per errore (L1–L4): è un
+-- limite superiore, non una stima delle perdite. Dopo la patch di Fase 1 la
+-- ripartizione per regola è nei log della funzione (propertyFilterRules).
+select sum(listed_count)                                   as messaggi_elencati,
+       sum(read_count)                                     as email_lette,
+       sum(property_notifications_count)                   as avvisi_accettati,
+       sum(read_count) - sum(property_notifications_count) as escluse_dal_filtro,
+       sum(listed_count) - sum(read_count)                 as spam_cestino_o_mancanti,
+       sum(missing_messages_count)                         as messaggi_non_piu_esistenti
+  from public.nmre_gmail_sync_runs
+ where status = 'success' and started_at > now() - interval '48 hours';
+
+
+-- AQ11 · Vincoli di annunci_candidati (prerequisito della patch) -------
+-- Definizioni di vincoli: schema, non dati. Verificare che nessun vincolo
+-- impedisca tipo_venditore = 'Agenzia' con stato = 'da_verificare'.
+select conname as vincolo, contype as tipo,
+       pg_get_constraintdef(oid) ~ 'stato'          as riguarda_stato,
+       pg_get_constraintdef(oid) ~ 'tipo_venditore' as riguarda_tipo_venditore,
+       case when contype = 'c' then pg_get_constraintdef(oid) end as definizione_check
+  from pg_constraint
+ where conrelid = 'public.annunci_candidati'::regclass
+ order by contype, conname;
+
+
+-- AQ12 · Trigger su annunci_candidati e annunci_candidati_notifiche ----
+-- Se un trigger crea notifiche push a ogni inserimento, le agenzie
+-- conservate dalla patch genererebbero avvisi "Nuove opportunità".
+select c.relname as tabella, t.tgname as trigger,
+       t.tgenabled <> 'D' as attivo,
+       (t.tgtype & 4) <> 0  as su_insert,
+       (t.tgtype & 16) <> 0 as su_update,
+       p.proname as funzione,
+       p.prosrc ~* 'nmre_notifications'      as crea_notifiche,
+       p.prosrc ~* 'tipo_venditore'          as filtra_per_tipo_venditore,
+       p.prosrc ~* 'price_drop|ribass'       as riguarda_ribassi
+  from pg_trigger t
+  join pg_class c on c.oid = t.tgrelid
+  join pg_proc p on p.oid = t.tgfoid
+ where not t.tgisinternal
+   and c.relname in ('annunci_candidati', 'annunci_candidati_notifiche')
+ order by 1, 2;
+
+
+-- AQ13 · Decisioni registrate nello storico (dopo la patch) ------------
+-- Conta le voci di dati_estratti.storico_stato per azione e origine.
+select coalesce(c.stato, 'n/d') as stato_attuale,
+       e->>'azione'  as azione,
+       e->>'origine' as origine,
+       count(*) as voci,
+       count(distinct c.id) as candidati,
+       max(e->>'data') as ultima
+  from public.annunci_candidati c
+  cross join lateral jsonb_array_elements(
+    case when jsonb_typeof(c.dati_estratti->'storico_stato') = 'array'
+         then c.dati_estratti->'storico_stato' else '[]'::jsonb end) e
+ group by 1, 2, 3
+ order by voci desc;
+
+
+-- AQ14 · Registro venditori: rischio di corrispondenze per sottostringa --
+-- Solo lunghezze e conteggi: gli identificativi non vengono mostrati.
+select seller_type, identifier_type,
+       count(*) as identificativi,
+       count(*) filter (where identifier_type = 'identity' and length(identifier_normalized) < 8)
+         as identita_brevi_meno_8,
+       count(*) filter (where identifier_type = 'identity' and identifier_normalized !~ ' ')
+         as identita_di_una_sola_parola,
+       min(length(identifier_normalized)) as lunghezza_min
+  from public.seller_identity_registry
+ group by 1, 2
+ order by 1, 2;
