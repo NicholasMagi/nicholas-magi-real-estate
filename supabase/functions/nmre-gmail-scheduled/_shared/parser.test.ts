@@ -1,6 +1,7 @@
 import {
   bathrooms,
   bedrooms,
+  listingUrl,
   municipality,
   price,
   propertyType,
@@ -59,4 +60,11 @@ Deno.test("municipality parser recognises core territory",()=>{
   assertEquals(municipality("Castelfidardo (AN)"),"Castelfidardo","Castelfidardo");
   assertEquals(municipality("Porto Sant'Elpidio - zona centro"),"Porto Sant'Elpidio","Porto Sant'Elpidio");
   assertEquals(municipality("Morro d'Alba"),"Morro d'Alba","Morro d'Alba");
+});
+
+Deno.test("listing URL parser resolves portal links wrapped by Gmail or Google redirects",()=>{
+  const target="https://www.idealista.it/immobile/12345678/";
+  const wrapped="https://www.google.com/url?q="+encodeURIComponent(target)+"&source=gmail";
+  assertEquals(listingUrl('Nuovo annuncio: Appartamento a Osimo <a href="'+wrapped+'">Vedi annuncio</a>'),target,"Google redirect query target");
+  assertEquals(listingUrl('Nuovo annuncio: Appartamento a Osimo '+target),target,"direct listing URL");
 });
