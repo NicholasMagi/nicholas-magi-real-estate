@@ -5,6 +5,7 @@ import type {
   NovaListing,
   NovaPriceObservation,
   NovaReply,
+  NovaReadyContext,
   NovaSuggestedAction
 } from "./types";
 

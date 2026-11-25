@@ -78,16 +78,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   useEffect(() => {
-    if (!supabase || Platform.OS === "web") return;
+    const authClient = supabase;
+    if (!authClient || Platform.OS === "web") return;
     const updateAutoRefresh = (appState: string) => {
-      if (appState === "active") supabase.auth.startAutoRefresh();
-      else supabase.auth.stopAutoRefresh();
+      if (appState === "active") authClient.auth.startAutoRefresh();
+      else authClient.auth.stopAutoRefresh();
     };
     updateAutoRefresh(AppState.currentState ?? "active");
     const subscription = AppState.addEventListener("change", updateAutoRefresh);
     return () => {
       subscription.remove();
-      supabase.auth.stopAutoRefresh();
+      authClient.auth.stopAutoRefresh();
     };
   }, []);
 

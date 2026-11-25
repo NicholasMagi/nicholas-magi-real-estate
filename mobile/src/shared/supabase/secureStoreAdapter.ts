@@ -9,11 +9,12 @@ function parseChunkReference(value: string | null): ChunkReference | null {
   if (!value || !value.startsWith(CHUNK_PREFIX)) return null;
   const match = /^([a-z0-9]+):(\d+)$/.exec(value.slice(CHUNK_PREFIX.length));
   if (!match) throw new Error("Il contenuto della sessione protetta non è valido.");
+  const generation = match[1];
   const count = Number(match[2]);
-  if (!Number.isInteger(count) || count < 1 || count > MAX_CHUNKS) {
+  if (!generation || !Number.isInteger(count) || count < 1 || count > MAX_CHUNKS) {
     throw new Error("La sessione protetta supera il limite previsto.");
   }
-  return { generation: match[1], count };
+  return { generation, count };
 }
 
 function chunkKey(key: string, generation: string, index: number): string {
@@ -80,7 +81,9 @@ export const secureStoreAdapter = {
     const generation = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     try {
       for (let index = 0; index < chunks.length; index += 1) {
-        await SecureStore.setItemAsync(chunkKey(key, generation, index), chunks[index]);
+        const chunk = chunks[index];
+        if (chunk === undefined) throw new Error("Frammento di sessione non disponibile.");
+        await SecureStore.setItemAsync(chunkKey(key, generation, index), chunk);
       }
       // Publish the new pointer only after every encrypted chunk has been stored.
       await SecureStore.setItemAsync(key, CHUNK_PREFIX + generation + ":" + chunks.length);

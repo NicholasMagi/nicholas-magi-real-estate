@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Text } from "react-native";
+import { Text, type ColorValue } from "react-native";
 
 const colors = {
   navy: "#101A2B",
@@ -8,8 +8,8 @@ const colors = {
   border: "#26344A"
 };
 
-function TabGlyph({ symbol, color }: { symbol: string; color: string }) {
-  return <Text style={{ color, fontSize: 18, fontWeight: "700" }}>{symbol}</Text>;
+function TabGlyph({ symbol, color }: { symbol: string; color: ColorValue | null | undefined }) {
+  return <Text style={{ color: color ?? colors.muted, fontSize: 18, fontWeight: "700" }}>{symbol}</Text>;
 }
 
 export default function TabsLayout() {
