@@ -147,3 +147,13 @@ Platform boundary:
 - Opportunity count means unreviewed candidates with `stato = da_verificare` and no linked archived listing. Discarded and already-promoted candidates are excluded.
 - Dashboard refresh is user initiated. Application data stays in memory only; only the Auth session is persisted in SecureStore.
 - This slice contains SELECT requests only and cannot write to application tables.
+
+
+## 18. M4.2 — Candidate queue (2026-11-25)
+
+- Candidate queue uses a typed read-only repository over the deployed public.annunci_candidati table. The signed-in Auth user id is an additional owner filter; deployed RLS remains the authorization boundary.
+- Query projection is deliberately narrow: listing title, municipality, price, type, portal, source URL, publication/creation dates, candidate state, linked listing id, property facts, seller type, seller confidence/evidence and manual-override flag. It excludes direct contact, email sender/subject/id and raw JSON source/extraction payloads.
+- Pagination is 25 rows with exact filtered count and stable order created_at DESC, id ASC. Municipality search is server-side. Refresh and stale-request guards prevent results from an older filter replacing the current view.
+- Candidate state (da_verificare, confermato, scartato) is separate from seller type. A private seller is called confirmed only when seller type is exactly Privato and candidate state is confermato; otherwise the UI shows unverified/agency classification without upgrading it.
+- Source links open only on explicit tap and must be valid HTTPS URLs without embedded credentials. No candidate state is edited, promoted or discarded by this screen.
+- No schema, RLS policy, Edge Function, trigger, production record or PWA file is changed.

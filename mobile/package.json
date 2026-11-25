@@ -16,7 +16,8 @@
     "check:expo": "npx expo-doctor",
     "test:nova": "node --experimental-strip-types --test scripts/test-nova.mjs",
     "test:auth": "node --experimental-strip-types --test scripts/test-auth.mjs",
-    "test": "npm run test:nova && npm run test:auth"
+    "test": "npm run test:nova && npm run test:auth && npm run test:candidates",
+    "test:candidates": "node --experimental-strip-types --test scripts/test-candidates.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.119.2",
