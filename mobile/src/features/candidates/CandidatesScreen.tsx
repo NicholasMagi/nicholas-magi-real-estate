@@ -18,12 +18,15 @@ import {
   candidateStatusLabel,
   formatCandidateDate,
   formatCandidatePrice,
-  safeHttpsUrl
+  safeHttpsUrl,
+  canManageCandidate
 } from "@/features/candidates/candidatePresentation";
 import { useCandidates } from "@/features/candidates/useCandidates";
 import {
   type CandidateStatusFilter,
-  type CandidateSummary
+  type CandidateSummary,
+  archiveCandidate,
+  discardCandidate
 } from "@/shared/data/candidateRepository";
 import { theme } from "@/shared/theme";
 
@@ -40,6 +43,7 @@ export function CandidatesScreen() {
   const [municipalityInput, setMunicipalityInput] = useState("");
   const [municipality, setMunicipality] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
   const candidates = useCandidates(user?.id ?? "", filter, municipality);
 
   useEffect(() => {
@@ -56,6 +60,67 @@ export function CandidatesScreen() {
     void Linking.openURL(destination).catch(() => {
       Alert.alert("Impossibile aprire l'annuncio", "Verifichi la connessione e riprovi.");
     });
+  }
+
+  function confirmArchive(item: CandidateSummary) {
+    if (actionId) return;
+    Alert.alert(
+      "Archivia nell'archivio?",
+      "L'annuncio verrà trasferito in Archivio annunci con i dati già raccolti e il collegamento alla fonte. La classificazione attuale del venditore sarà mantenuta: non verrà considerata una verifica manuale.",
+      [
+        { text: "Annulla", style: "cancel" },
+        { text: "Archivia", onPress: () => void performArchive(item) }
+      ]
+    );
+  }
+
+  async function performArchive(item: CandidateSummary) {
+    if (actionId) return;
+    setActionId(item.id);
+    try {
+      const result = await archiveCandidate(user?.id ?? "", item);
+      await candidates.refresh(true);
+      const detail = result.enriched
+        ? "Ho recuperato e salvato anche i metadati pubblici disponibili."
+        : result.enrichmentWarning ?? "Sono stati conservati i dati già presenti.";
+      Alert.alert("Annuncio archiviato", detail + " La scheda è ora disponibile in Archivio annunci.");
+    } catch (error) {
+      Alert.alert(
+        "Archiviazione non riuscita",
+        error instanceof Error ? error.message : "Non è stato possibile archiviare l'annuncio. Riprovi."
+      );
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  function confirmDiscard(item: CandidateSummary) {
+    if (actionId) return;
+    Alert.alert(
+      "Scartare questa opportunità?",
+      "L'annuncio verrà contrassegnato come scartato, ma resterà registrato nello storico. Non verrà eliminato.",
+      [
+        { text: "Annulla", style: "cancel" },
+        { text: "Scarta", style: "destructive", onPress: () => void performDiscard(item) }
+      ]
+    );
+  }
+
+  async function performDiscard(item: CandidateSummary) {
+    if (actionId) return;
+    setActionId(item.id);
+    try {
+      await discardCandidate(user?.id ?? "", item.id);
+      await candidates.refresh(true);
+      Alert.alert("Opportunità scartata", "La scheda è stata conservata nello storico con stato Scartato.");
+    } catch (error) {
+      Alert.alert(
+        "Operazione non riuscita",
+        error instanceof Error ? error.message : "Non è stato possibile scartare l'opportunità. Riprovi."
+      );
+    } finally {
+      setActionId(null);
+    }
   }
 
   function renderCandidate({ item }: { item: CandidateSummary }) {
@@ -141,6 +206,33 @@ export function CandidatesScreen() {
             <Pressable accessibilityRole="button" onPress={() => openListing(item)} style={styles.openButton}>
               <Text style={styles.openButtonText}>Apri annuncio originale ↗</Text>
             </Pressable>
+            {canManageCandidate(item.status, item.linkedListingId) ? (
+              <View style={styles.actionArea}>
+                <View style={styles.actionRow}>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={actionId !== null}
+                    onPress={() => confirmArchive(item)}
+                    style={[styles.archiveAction, actionId !== null && styles.actionDisabled]}
+                  >
+                    {actionId === item.id ? (
+                      <ActivityIndicator color={theme.colors.gold} size="small" />
+                    ) : (
+                      <Text style={styles.archiveActionText}>Archivia in archivio</Text>
+                    )}
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={actionId !== null}
+                    onPress={() => confirmDiscard(item)}
+                    style={[styles.discardAction, actionId !== null && styles.actionDisabled]}
+                  >
+                    <Text style={styles.discardActionText}>Scarta</Text>
+                  </Pressable>
+                </View>
+                <Text style={styles.actionHint}>Archivia conserva fonte e dati disponibili; scarta mantiene la scheda nello storico senza eliminarla.</Text>
+              </View>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -172,7 +264,7 @@ export function CandidatesScreen() {
                     : "Lettura dall'archivio in corso"}
                 </Text>
               </View>
-              <View style={styles.readOnlyPill}><Text style={styles.readOnlyText}>SOLA LETTURA</Text></View>
+              <View style={styles.readOnlyPill}><Text style={styles.readOnlyText}>GESTIONE ATTIVA</Text></View>
             </View>
             <View style={styles.filters}>
               {filters.map(option => (
@@ -314,6 +406,14 @@ const styles = StyleSheet.create({
   linkedNote: { color: theme.colors.muted, fontSize: 9, marginTop: 10, fontStyle: "italic" },
   openButton: { minHeight: 42, borderRadius: 10, backgroundColor: theme.colors.softGold, justifyContent: "center", alignItems: "center", marginTop: 13 },
   openButtonText: { color: theme.colors.navy, fontSize: 11, fontWeight: "900" },
+  actionArea: { marginTop: 13 },
+  actionRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  archiveAction: { flex: 1, minHeight: 43, borderRadius: 10, backgroundColor: theme.colors.navy, justifyContent: "center", alignItems: "center", paddingHorizontal: 10 },
+  archiveActionText: { color: theme.colors.gold, fontSize: 10, fontWeight: "900" },
+  discardAction: { minWidth: 84, minHeight: 43, borderRadius: 10, borderWidth: 1, borderColor: "#D8BDB6", backgroundColor: "#FBF7F6", justifyContent: "center", alignItems: "center", paddingHorizontal: 12 },
+  discardActionText: { color: "#9A5145", fontSize: 10, fontWeight: "900" },
+  actionDisabled: { opacity: 0.55 },
+  actionHint: { color: theme.colors.muted, fontSize: 9, lineHeight: 14, marginTop: 7 },
   emptyState: { alignItems: "center", paddingHorizontal: 18, paddingVertical: 34, gap: 10 },
   emptyTitle: { color: theme.colors.ink, fontSize: 13, fontWeight: "800" },
   emptyText: { color: theme.colors.muted, fontSize: 11, textAlign: "center", lineHeight: 17 },

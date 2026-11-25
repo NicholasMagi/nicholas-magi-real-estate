@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   candidateSellerPresentation,
+  canManageCandidate,
   candidateStatusLabel,
   formatCandidatePrice,
   safeHttpsUrl
@@ -88,4 +89,13 @@ test("external listing links must use HTTPS and cannot contain credentials", () 
 test("candidate price is formatted in euros", () => {
   assert.match(formatCandidatePrice(125000), /125\.000/);
   assert.match(formatCandidatePrice(null), /non indicato/);
+});
+
+
+test("only unlinked candidates awaiting verification expose archive and discard actions", () => {
+  assert.equal(canManageCandidate("da_verificare", null), true);
+  assert.equal(canManageCandidate("da_verificare", "listing-1"), false);
+  assert.equal(canManageCandidate("confermato", null), false);
+  assert.equal(canManageCandidate("scartato", null), false);
+  assert.equal(canManageCandidate("unknown", null), false);
 });

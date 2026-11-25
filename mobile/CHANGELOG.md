@@ -1,3 +1,12 @@
+## 2026-11-25 — M4.3 azioni sulle opportunità
+- Aggiunte le azioni Archivia e Scarta nella scheda espansa delle opportunità ancora da verificare e non collegate all'archivio.
+- Archivia usa la funzione PostgreSQL già esistente nmre_confirm_annuncio_candidato, con controllo auth.uid() e proprietà del candidato; crea la scheda in annunci, conserva collegamento source_candidate_id, provenienza e dati estratti, e aggiorna il candidato nella stessa transazione.
+- Prima dell'archiviazione viene tentato il recupero dei soli metadati pubblici tramite nmre-candidate-enrich per i portali supportati; i valori rilevati completano solo i campi vuoti e l'estrazione viene conservata senza essere mostrata nella UI.
+- La classificazione venditore esistente è mantenuta; archiviare non equivale a una verifica manuale del venditore privato.
+- Scarta imposta stato=scartato sul solo candidato selezionato; il record non viene eliminato.
+- Nessuna nuova tabella, migration, policy, funzione o deploy backend. Le scritture usano la sessione Auth e filtro owner_id; la funzione esistente verifica anche l'utente autenticato.
+- Typecheck, lint, test automatici e verifica su iPhone per entrambe le azioni sono ancora da eseguire.
+
 # NMRE Mobile — Changelog
 
 ## 2026-11-25 — M4.2 coda opportunità read-only

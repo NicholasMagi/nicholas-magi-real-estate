@@ -15,6 +15,10 @@ export interface CandidateSellerEvidence {
   evidence: string | null;
 }
 
+export function canManageCandidate(status: CandidateRecordStatus, linkedListingId: string | null): boolean {
+  return status === "da_verificare" && linkedListingId === null;
+}
+
 export function candidateStatusLabel(status: CandidateRecordStatus): string {
   switch (status) {
     case "da_verificare": return "Da verificare";

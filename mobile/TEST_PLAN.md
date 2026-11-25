@@ -100,3 +100,14 @@ Still required after local dependency installation:
 - Confirm a query error shows an error state rather than a zero count; confirm the seller-type badge never labels Da verificare as a confirmed private seller.
 - Confirm no contact/email/raw JSON fields are included in the candidate projection.
 - Production behavior remains read-only; no update/promotion/discard action is present.
+
+
+## M4.3 — Candidate actions (manual device checks pending)
+- [ ] On a pending unlinked candidate, Archivia and Scarta appear only after expanding details.
+- [ ] Canceling either confirmation leaves the record unchanged.
+- [ ] Scarta changes the record to Scartato without deleting it; it remains visible under the Scartati filter.
+- [ ] Archivia creates one record in Archivio annunci, keeps the original source URL/provenance and links the candidate; it disappears from Da verificare and appears as Confermato/Tutte.
+- [ ] An unsupported or unavailable source-enrichment response does not block archive when title and municipality already exist.
+- [ ] Missing title or municipality blocks archive with a clear message.
+- [ ] Archiving a candidate classified as Privato but not manually verified does not show it as Privato confermato.
+- [ ] Repeating archive after success does not create a second listing.

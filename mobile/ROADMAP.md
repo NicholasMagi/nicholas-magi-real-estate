@@ -105,3 +105,13 @@ No production migration without explicit approval and rollback. No merge to main
 - Source links open only on explicit tap and must be valid HTTPS URLs.
 - No candidate is confirmed, promoted or discarded by this screen; no database writes.
 - Remaining: local typecheck/lint/tests, Expo exports and iPhone checks for filters, search and pagination.
+
+
+## M4.3 — Candidate archive and discard actions (source implemented; verification pending)
+- Expanded pending candidate details expose two explicit, confirmation-protected actions: archive in the existing listings archive, or mark as discarded.
+- Archive calls the existing authenticated nmre_confirm_annuncio_candidato PostgreSQL function, which validates auth.uid() and owner_id, inserts the listing with source/extraction provenance, and atomically links the candidate as confirmed.
+- Before the RPC, the app attempts the existing authenticated nmre-candidate-enrich Edge Function for supported HTTPS portals. New public metadata fills only missing listing fields and is saved alongside existing extraction JSON. If enrichment is unavailable, archive can proceed with already captured data, provided title and municipality are present.
+- The candidate's current seller classification is retained. Archiving never creates manual seller verification or upgrades an unverified private seller to confirmed.
+- Discard updates only the selected pending candidate to scartato; no candidate or archive row is deleted.
+- Both actions are restricted to candidates still da_verificare and not linked to an archived listing. No new production schema, policy, function or backend deployment is introduced.
+- Remaining gates: local typecheck/lint/tests, physical-device confirmation of successful archive/discard, and refresh/visibility checks in both Opportunità and Archivio annunci.
