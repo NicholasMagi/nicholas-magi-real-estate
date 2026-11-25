@@ -5055,6 +5055,26 @@ async function discardCandidate(id,button){
     :"Immobile scartato: rimosse "+discardedCount+" notifiche duplicate dalla coda.", "success");
 }
 
+function renderArchiveExtractedDetails(item){
+  const page=item?.dati_estratti?.pagina_pubblica;
+  const data=page?.suggestions;
+  if(!data||typeof data!=="object")return "";
+  const labels={
+    indirizzo:"Indirizzo rilevato",descrizione:"Descrizione",anno_costruzione:"Anno di costruzione",
+    piano:"Piano",classe_energetica:"Classe energetica"
+  };
+  const rows=Object.entries(labels).filter(([key])=>data[key]!==null&&data[key]!==undefined&&String(data[key]).trim()!=="")
+    .map(([key,label])=>'<div class="crm-entry"><strong>'+safe(label)+'</strong><span>'+safe(data[key])+'</span></div>').join("");
+  const images=Array.isArray(data.immagini)?data.immagini.filter(url=>validUrl(url)).slice(0,12):[];
+  const imageLinks=images.length
+    ?'<div class="hint">Immagini individuate: '+images.map((url,index)=>'<a href="'+safe(validUrl(url))+'" target="_blank" rel="noopener noreferrer">Foto '+(index+1)+'</a>').join(" · ")+'</div>'
+    :"";
+  const description=data.descrizione?'<p class="hint">'+safe(data.descrizione)+'</p>':"";
+  const source=page.url_finale?'<div class="hint">Pagina analizzata: <a href="'+safe(validUrl(page.url_finale)||"#")+'" target="_blank" rel="noopener noreferrer">apri fonte</a> · '+safe(page.recuperato_il?new Date(page.recuperato_il).toLocaleString("it-IT"):"data non disponibile")+'</div>':"";
+  if(!rows&&!description&&!imageLinks)return "";
+  return '<details class="candidate-quality candidate-source-details"><summary>Altri dati recuperati automaticamente</summary>'+rows+description+imageLinks+source+'</details>';
+}
+
 function renderListings(){
   const data=listingCache||[];
   $("totalCount").textContent=data.length;
@@ -5105,10 +5125,11 @@ function renderListings(){
     const detailText=[item.tipologia_immobile,item.superficie_mq?item.superficie_mq+" m²":null,item.locali?item.locali+" locali":null,item.camere?item.camere+" camere":null,item.bagni?item.bagni+" bagni":null].filter(Boolean).join(" · ")||"Dettagli dimensionali non disponibili";
     return '<article class="listing"><div>'
       +'<h3>'+safe(item.titolo)+'</h3>'
-      +'<div class="meta">'+safe(item.comune)+' · '+safe(item.contatto||"Contatto non inserito")+'<br>'+safe(item.portale||"Fonte non indicata")+'</div>'
+      +'<div class="meta">'+safe(item.comune)+' · '+safe(item.indirizzo||"Indirizzo non rilevato")+' · '+safe(item.contatto||"Contatto non inserito")+'<br>'+safe(item.portale||"Fonte non indicata")+'</div>'
       +'<div class="price">'+euro(item.prezzo)+'</div>'
       +'<div class="meta">'+safe(detailText)+'</div>'
       +renderSourceDetails(item)
+      +renderArchiveExtractedDetails(item)
       +'<span class="pill">'+safe(item.tipo_venditore||"Da verificare")+'</span>'
       +'<span class="pill">'+safe(item.stato_contatto||"da_contattare")+'</span>'
       +linkHtml
