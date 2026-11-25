@@ -540,6 +540,7 @@ con `main`).
 | [45703041375](https://github.com/NicholasMagi/nicholas-magi-real-estate/actions/runs/45703041375) | `5725c31` | ❌ | ✅ | `deno check` esteso a `nmre-insights-sync` ha rivelato un errore di tipo **preesistente** (`index.ts:82`, token in cache `string \| null`) |
 | [45703247449](https://github.com/NicholasMagi/nicholas-magi-real-estate/actions/runs/45703247449) | `368586a` | ✅ | ✅ | Errore corretto senza cambiare il comportamento |
 | [45703420105](https://github.com/NicholasMagi/nicholas-magi-real-estate/actions/runs/45703420105) | `fedf754` | ✅ | ✅ | Commit con il rapporto completo (solo documentazione rispetto al precedente); entrambi i job verdi, confermato anche dalla verifica indipendente del titolare |
+| [45704550649](https://github.com/NicholasMagi/nicholas-magi-real-estate/actions/runs/45704550649) | `1204d4d` | ✅ | ✅ | **Protezione delle push di ribasso** (migrazione `20261125202000`): tutti i passi di `validate` riusciti; nel job `migrations` il log di PostgreSQL mostra l'esecuzione dei nuovi test, compresi i casi negativi attesi ("Forma del trigger inattesa" per il trigger per istruzione, "Nessun trigger di notifica"), fino all'ultimo controllo di rollback degli avvisi dubbi. Suite completa: 59 controlli (verificati con l'elenco esplicito in locale) |
 
 Dettaglio del job `validate` (run 45703247449, verificato nei log; il run
 45703420105 sul commit `fedf754` ha eseguito gli stessi passi, tutti riusciti):
@@ -555,8 +556,9 @@ Dettaglio del job `validate` (run 45703247449, verificato nei log; il run
 | ID HTML univoci | 362 verificati |
 
 Job `migrations`: PostgreSQL 16 usa e getta (container di servizio). Lo script
-si interrompe al primo controllo fallito, quindi l'esito verde implica tutti i 28
-controlli superati. Nel log di PostgreSQL compaiono gli errori **attesi** dei test
+si interrompe al primo controllo fallito, quindi l'esito verde implica tutti i
+controlli superati: 28 fino a `fedf754`, 59 da `1204d4d` (con i test delle push di
+ribasso). Nel log di PostgreSQL compaiono gli errori **attesi** dei test
 negativi: forma inattesa del trigger, RLS, permessi, vincolo `https`, duplicato,
 accesso ritirato dal rollback.
 
