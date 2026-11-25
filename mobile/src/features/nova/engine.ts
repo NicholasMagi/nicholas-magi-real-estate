@@ -241,7 +241,7 @@ export function candidateQuality(
   if (!candidate.propertyType) missing.push("tipologia");
   if (!(candidate.surfaceSqm && candidate.surfaceSqm > 0)) missing.push("superficie");
   if (!(candidate.rooms && candidate.rooms > 0)) missing.push("locali");
-  if (!candidate.notificationAt && !candidate.createdAt) missing.push("data notifica email");
+  if (!candidate.notificationAt) missing.push("data notifica email");
   if (!candidate.hasDirectContact) recommendedMissing.push("recapito diretto da verificare");
 
   let score = 0;
@@ -251,7 +251,7 @@ export function candidateQuality(
   if (candidate.surfaceSqm && candidate.surfaceSqm > 0) score += 15;
   if (candidate.rooms && candidate.rooms > 0) score += 5;
   if (specificLink) score += 15;
-  if (candidate.notificationAt || candidate.createdAt) score += 10;
+  if (candidate.notificationAt) score += 10;
   if (candidate.sellerClass === "Privato" && (candidate.sellerConfidence ?? 0) >= 90) score += 10;
   if (candidate.hasDirectContact) score += 5;
 
@@ -392,7 +392,7 @@ export function buildNovaActionPlan(
       if (!item.saleTimeline) gaps.push("tempistiche");
       if (!item.otherAgencies || item.otherAgencies === "da_verificare") gaps.push("situazione agenzie");
       if (!item.priceNegotiable || item.priceNegotiable === "da_verificare") gaps.push("margine sul prezzo");
-      if (gaps.length && item.status !== "interessato") {
+      if (gaps.length) {
         add(makeAction("listing", item.id, title, item.municipality,
           "SCHEDA PROPRIETARIO DA COMPLETARE", meta + " · " + gaps.length + " informazioni mancanti",
           "Completare durante il prossimo contatto: " + gaps.slice(0, 3).join(", ") + ".", 58 + Math.min(12, gaps.length * 2)));
