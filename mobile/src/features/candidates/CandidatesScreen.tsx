@@ -79,11 +79,12 @@ export function CandidatesScreen() {
     setActionId(item.id);
     try {
       const result = await archiveCandidate(user?.id ?? "", item);
+      setExpandedId(null);
       await candidates.refresh(true);
       const detail = result.enriched
         ? "Ho recuperato e salvato anche i metadati pubblici disponibili."
         : result.enrichmentWarning ?? "Sono stati conservati i dati già presenti.";
-      Alert.alert("Annuncio archiviato", detail + " La scheda è ora disponibile in Archivio annunci.");
+      Alert.alert("Annuncio archiviato", detail + " La scheda è stata salvata nell’archivio centrale del gestionale.");
     } catch (error) {
       Alert.alert(
         "Archiviazione non riuscita",
@@ -111,6 +112,7 @@ export function CandidatesScreen() {
     setActionId(item.id);
     try {
       await discardCandidate(user?.id ?? "", item.id);
+      setExpandedId(null);
       await candidates.refresh(true);
       Alert.alert("Opportunità scartata", "La scheda è stata conservata nello storico con stato Scartato.");
     } catch (error) {

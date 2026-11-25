@@ -115,3 +115,5 @@ No production migration without explicit approval and rollback. No merge to main
 - Discard updates only the selected pending candidate to scartato; no candidate or archive row is deleted.
 - Both actions are restricted to candidates still da_verificare and not linked to an archived listing. No new production schema, policy, function or backend deployment is introduced.
 - Remaining gates: local typecheck/lint/tests, physical-device confirmation of successful archive/discard, and refresh/visibility checks in both Opportunità and Archivio annunci.
+
+- Nota: la nuova azione archivia nel backend condiviso. La consultazione paginata degli annunci dalla scheda nativa Immobili resta da implementare separatamente.

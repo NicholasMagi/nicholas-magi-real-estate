@@ -63,3 +63,5 @@
 - Connected dashboard metrics to owner-scoped Supabase counts for pending opportunities, listings to contact, due callbacks and acquired mandates.
 - Added refresh, loading and connection-error UI.
 - Kept this milestone read-only; no schema, production data, edge function or PWA changes.
+
+- Nota di disponibilità: la riga viene creata nell'archivio centrale Supabase già consultato dalla PWA; la schermata Immobili della app nativa resta una milestone distinta e non è ancora collegata.
