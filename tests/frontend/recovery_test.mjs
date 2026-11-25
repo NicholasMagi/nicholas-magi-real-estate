@@ -19,7 +19,7 @@ function grab(name) {
 }
 const names = ["validUrl", "isSpecificCandidateUrl", "canonicalCandidateUrl", "nmreAppendStatusHistory",
   "nmreLastStatusEntry", "nmreDiscardEntry", "nmreAgencyDecisionOrigin", "candidateRecoveryGroup",
-  "nmreNotificationsAfterDiscard"];
+  "nmreNotificationsAfterDiscard", "nmreAgencyReopenUpdates"];
 const api = new Function(
   'const NMRE_STATUS_HISTORY_LIMIT=50;const NMRE_DISCARD_ACTIONS=["scartato","classificato_agenzia_e_scartato"];' +
   names.map(grab).join("\n") + ";return {" + names.join(",") + "};"
@@ -81,6 +81,17 @@ eq(legacy.latest.listing_price, 2, "ultima notifica dal contrassegno");
 const legacyNoMarker = api.nmreNotificationsAfterDiscard({ dati_estratti: {}, notification_history: [{ created_at: "2026-11-24T00:00:00Z" }] });
 eq(legacyNoMarker.count, 0, "scarto storico senza data né contrassegno: nessuna supposizione");
 eq(legacyNoMarker.discardKnown, false, "segnalato come data di scarto non registrata");
+
+// Agenzia riaperta per ribasso
+const reopened = api.nmreAgencyReopenUpdates({ dati_estratti: { storico_stato: [
+  { azione: "classificato_agenzia_e_scartato", origine: "utente", data: "2026-11-01T00:00:00Z" },
+  { azione: "riaperto_per_ribasso", origine: "sincronizzazione", data: "2026-11-24T00:00:00Z", motivo: "Nuovo ribasso documentato (-5%)" }] } });
+eq(reopened.count, 1, "agenzia riaperta per ribasso: evidenziata");
+eq(reopened.reopenedForPriceDrop, true, "contrassegno 'Ribasso dopo lo scarto'");
+eq(api.nmreAgencyReopenUpdates({ dati_estratti: { storico_stato: [
+  { azione: "riaperto_per_ribasso" }, { azione: "riportato_in_revisione", origine: "utente" }] } }).count, 0,
+  "una decisione successiva toglie il contrassegno");
+eq(api.nmreAgencyReopenUpdates({}).count, 0, "agenzia senza storico: nessun contrassegno");
 
 if (failures) { console.error(failures + " test non superati"); process.exit(1); }
 console.log("Tutti i test del pannello di recupero superati.");

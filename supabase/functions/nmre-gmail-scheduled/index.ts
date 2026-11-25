@@ -588,6 +588,20 @@ export default {
             oggetto: String(email.subject || "").slice(0, 300) || null
           });
         }
+        // Un'email che ha già un candidato (per esempio riletta per un cambio di
+        // etichetta) non è un avviso dubbio: resta gestita dal suo candidato.
+        if (dubiousRows.length) {
+          const { data: existingForDubious, error: existingForDubiousError } = await ctx.supabaseAdmin
+            .from("annunci_candidati")
+            .select("dedup_key")
+            .eq("owner_id", owner)
+            .in("dedup_key", dubiousRows.map(row => "gmail:" + row.gmail_message_id));
+          if (existingForDubiousError) throw new Error("Verifica dei candidati esistenti per gli avvisi dubbi non riuscita");
+          const existingKeys = new Set((existingForDubious || []).map((row: any) => String(row.dedup_key)));
+          for (let index = dubiousRows.length - 1; index >= 0; index--) {
+            if (existingKeys.has("gmail:" + dubiousRows[index].gmail_message_id)) dubiousRows.splice(index, 1);
+          }
+        }
         if (dubiousRows.length) {
           const { data: savedDubious, error: dubiousError } = await ctx.supabaseAdmin
             .from("nmre_gmail_avvisi_dubbi")

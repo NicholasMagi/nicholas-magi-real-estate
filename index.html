@@ -4397,7 +4397,7 @@ async function syncInsightsApi(){
       data.inserted+" nuovi annunci privati con indicatore di recapito presente importati (numero non restituito dall’API)",
       data.matchedEmailAsPrivate+" annunci email riconosciuti come privati",
       data.matchedEmailAsPrivateWithPhone+" annunci privati con indicatore di recapito presente (numero da verificare sull’annuncio)",
-      data.matchedEmailAsProfessional+" annunci email riconosciuti come professionisti e rimossi dalla coda",
+      data.matchedEmailAsProfessional+" annunci email segnalati come professionisti e lasciati in coda per la conferma manuale",
       data.alreadyPresent+" già presenti"
     ];
     if(!data.phoneFilterAvailable){
@@ -5209,6 +5209,13 @@ function nmreNotificationsAfterDiscard(item){
   }:null);
   return {count,latest,reference,discardKnown:!!discard,totalNotifications:history.length,lastNotification:history[0]||null};
 }
+// Un'agenzia scartata e riaperta dalla sincronizzazione per un ribasso resta nella
+// sezione agenzie: il ribasso viene evidenziato finché non c'è una nuova decisione.
+function nmreAgencyReopenUpdates(item){
+  const last=nmreLastStatusEntry(item);
+  if(!last||last.azione!=="riaperto_per_ribasso")return {count:0};
+  return {count:1,reopenedForPriceDrop:true,latest:{notified_at:last.data,listing_title:last.motivo||null}};
+}
 function renderCandidateRecovery(){
   const box=$("candidateRecoveryList"),summary=$("candidateRecoverySummary");
   if(!box||!summary)return;
@@ -5220,7 +5227,7 @@ function renderCandidateRecovery(){
     if(!current||String(item.updated_at||"")<current.updated_at)earliestDismissByUrl.set(key,{id:String(item.id),updated_at:String(item.updated_at||"")});
   }
   const items=[
-    ...candidateAgencyCache.map(item=>({item,kind:"agency",group:candidateRecoveryGroup(item,earliestDismissByUrl,"agency"),updates:{count:0}})),
+    ...candidateAgencyCache.map(item=>({item,kind:"agency",group:candidateRecoveryGroup(item,earliestDismissByUrl,"agency"),updates:nmreAgencyReopenUpdates(item)})),
     ...candidateDismissedCache.map(item=>({item,kind:"dismissed",group:candidateRecoveryGroup(item,earliestDismissByUrl,"dismissed"),updates:nmreNotificationsAfterDiscard(item)}))
   ];
   const withNew=items.filter(entry=>entry.updates.count>0);
@@ -5230,7 +5237,7 @@ function renderCandidateRecovery(){
   if(alert){
     alert.hidden=!withNew.length;
     if(withNew.length){
-      alert.innerHTML='<strong>'+withNew.length+(withNew.length===1?' annuncio scartato ha':' annunci scartati hanno')+' nuove notifiche dopo lo scarto.</strong> '
+      alert.innerHTML='<strong>'+withNew.length+(withNew.length===1?' annuncio fuori dalla coda ha':' annunci fuori dalla coda hanno')+' nuove notifiche o ribassi dopo lo scarto.</strong> '
         +'<button class="secondary" type="button" id="candidateRecoveryAlertOpen">Mostra</button>';
       $("candidateRecoveryAlertOpen").addEventListener("click",()=>{
         $("candidateRecoveryFilter").value="with_new";$("candidateRecoveryPanel").open=true;renderCandidateRecovery();
@@ -5264,7 +5271,7 @@ function renderCandidateRecovery(){
         Number(latest.price_drop_percent)>0?"ribasso "+Number(latest.price_drop_percent).toLocaleString("it-IT")+"%":null,
         latest.listing_title||null
       ].filter(Boolean).join(" · ");
-      updatesHtml='<div class="candidate-quality candidate-quality-warning"><strong>Nuova notifica dopo lo scarto</strong> · '
+      updatesHtml='<div class="candidate-quality candidate-quality-warning"><strong>'+(updates.reopenedForPriceDrop?"Ribasso dopo lo scarto":"Nuova notifica dopo lo scarto")+'</strong> · '
         +safe(updates.count+(updates.count===1?" notifica":" notifiche"))+' · '+safe(latestFacts)+'</div>';
     }else if(kind==="dismissed"&&!updates.discardKnown&&updates.totalNotifications>0){
       updatesHtml='<p class="small">Notifiche ricevute in totale: '+safe(updates.totalNotifications)+' · ultima il '
@@ -5273,7 +5280,7 @@ function renderCandidateRecovery(){
     }
     return '<article class="candidate candidate-recovery-item" data-recovery-item="'+safe(item.id)+'">'
       +'<div class="candidate-email-meta"><span class="candidate-source-badge">'+safe(NMRE_RECOVERY_GROUP_LABELS[group]||group)+'</span>'
-      +(updates.count>0?'<span class="candidate-email-duplicate">Nuova notifica dopo lo scarto</span>':'')
+      +(updates.count>0?'<span class="candidate-email-duplicate">'+(updates.reopenedForPriceDrop?"Ribasso dopo lo scarto":"Nuova notifica dopo lo scarto")+'</span>':'')
       +'<span class="candidate-email-date">'+safe(when)+'</span></div>'
       +'<h3>'+safe(item.titolo||"Annuncio immobiliare")+'</h3>'
       +'<p class="candidate-quick-facts">'+safe(facts||"Dati da completare")+'</p>'
@@ -5282,7 +5289,7 @@ function renderCandidateRecovery(){
       +'<div class="candidate-actions">'
       +(url?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>':'<span class="candidate-link-warning">Link annuncio non disponibile</span>')
       +'<button class="gold" type="button" data-recover="'+safe(item.id)+'" data-recover-kind="'+safe(kind)+'">Riporta in revisione</button>'
-      +(updates.count>0?'<button class="secondary" type="button" data-recovery-seen="'+safe(item.id)+'">Ho visto: resta scartato</button>':'')
+      +(updates.count>0&&kind==="dismissed"?'<button class="secondary" type="button" data-recovery-seen="'+safe(item.id)+'">Ho visto: resta scartato</button>':'')
       +'</div></article>';
   }).join("")+(visible.length>300?'<p class="hint">Mostrati i primi 300 annunci su '+visible.length+'. Usi il filtro per restringere.</p>':'');
   box.querySelectorAll("[data-recover]").forEach(btn=>btn.addEventListener("click",()=>recoverCandidate(btn.dataset.recover,btn.dataset.recoverKind,btn)));

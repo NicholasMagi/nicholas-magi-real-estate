@@ -381,13 +381,13 @@ Deno.serve(async (req: Request) => {
     if (professionalUpdateIds.length) {
       const { data, error } = await supabase
         .from("annunci_candidati")
+        // Nessuna opportunità viene scartata automaticamente: il candidato resta in
+        // coda "Da verificare" con l'indicazione del portale, da confermare a mano.
         .update({
-          tipo_venditore: "Agenzia",
-          seller_confidence: 99,
-          seller_evidence: "Immobiliare.it Insights: corrispondenza URL con filtro ufficiale clientTypeID=2 (Professionista)",
+          tipo_venditore: "Da verificare",
+          seller_confidence: 0,
+          seller_evidence: "Immobiliare.it Insights indica un professionista (clientTypeID=2, corrispondenza URL): conferma manuale necessaria",
           seller_classification_version: 4,
-          seller_manual_override: false,
-          stato: "scartato",
           updated_at: nowIso
         })
         .eq("owner_id", userData.user.id)
