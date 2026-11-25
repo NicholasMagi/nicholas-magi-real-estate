@@ -1,4 +1,4 @@
-// NMRE service worker build 20261125-trash-2
+// NMRE service worker build 20261125-contact-sync-1
 self.addEventListener("install",event=>{self.skipWaiting();});
 self.addEventListener("activate",event=>{event.waitUntil(self.clients.claim());});
 self.addEventListener("push",event=>{
