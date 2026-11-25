@@ -641,7 +641,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div class="nmre-menu-items">
         <button type="button" data-nmre-nav="candidateSection" data-nmre-label="Nuove opportunità"><span class="nmre-menu-item-icon">⌕</span><span><strong>Nuove opportunità</strong><small>Email da verificare</small></span></button>
         <button type="button" data-nmre-nav="archiveSection" data-nmre-label="Archivio annunci"><span class="nmre-menu-item-icon">▤</span><span><strong>Archivio annunci</strong><small>Annunci già acquisiti nel gestionale</small></span></button>
-        <button type="button" data-nmre-nav="trashSection" data-nmre-label="Cestino"><span class="nmre-menu-item-icon">♲</span><span><strong>Cestino</strong><small>Ripristino entro 365 giorni</small></span></button>
+        
       </div>
     </div>
     <div class="nmre-menu-group">
@@ -1288,7 +1288,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 </section>
 
 <section id="archiveSection" class="panel dash-section-anchor" hidden>
-<div class="topline"><h2>Archivio annunci</h2><div class="actions"><button class="secondary" id="exportCsv">Esporta CSV</button><button class="secondary" id="exportXlsx">Esporta Excel</button><button class="secondary" id="refresh">Aggiorna</button><button class="gold" id="archiveManualToggle" type="button" aria-expanded="false"><span aria-hidden="true">＋</span> Aggiungi annuncio</button></div></div><div id="archiveManualPanel" class="panel archive-manual-form" hidden>
+<div class="topline"><h2>Archivio annunci</h2><div class="actions"><button class="secondary" type="button" id="openTrashFromArchive">♲ Cestino</button><button class="secondary" id="exportCsv">Esporta CSV</button><button class="secondary" id="exportXlsx">Esporta Excel</button><button class="secondary" id="refresh">Aggiorna</button><button class="gold" id="archiveManualToggle" type="button" aria-expanded="false"><span aria-hidden="true">＋</span> Aggiungi annuncio</button></div></div><div id="archiveManualPanel" class="panel archive-manual-form" hidden>
   <div class="topline">
     <div><h3>Aggiungi un annuncio all’Archivio</h3><p class="hint">Incolli il link: NMRE proverà a recuperare automaticamente i dati pubblici. Potrà completare o correggere i campi prima del salvataggio.</p></div>
     <button class="secondary" id="archiveManualClose" type="button">Chiudi</button>
@@ -1349,7 +1349,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div id="listMsg" class="status"></div>
 </section>
 <section id="trashSection" class="panel dash-section-anchor" hidden>
- <div class="topline"><div><h2>Cestino</h2><p class="hint">Gli annunci restano recuperabili per 365 giorni dalla data di eliminazione. Il ripristino li riporta nell’Archivio con tutti i dati originali.</p></div><button class="secondary" id="refreshTrash" type="button">Aggiorna</button></div>
+ <div class="topline"><div><h2>Cestino</h2><p class="hint">Gli annunci restano recuperabili per 365 giorni dalla data di eliminazione. Il ripristino li riporta nell’Archivio con tutti i dati originali.</p></div><div class="actions"><button class="secondary" type="button" id="backToArchive">← Torna all’Archivio</button><button class="secondary" id="refreshTrash" type="button">Aggiorna</button></div></div>
  <div id="trashSummary" class="hint">Caricamento cestino…</div><div id="trashList"><p class="hint">Caricamento annunci eliminati…</p></div><div id="trashMsg" class="status" aria-live="polite"></div>
 </section>
 </div></div>
@@ -6225,6 +6225,8 @@ $("exportCandidatesXlsx").addEventListener("click",()=>exportXlsx(candidateCache
 $("exportCsv").addEventListener("click",exportListingsCsv);
 $("refresh").addEventListener("click",loadListings);
 $("refreshTrash").addEventListener("click",loadTrash);
+$("openTrashFromArchive").addEventListener("click",()=>nmreShowView("trashSection",{label:"Archivio annunci · Cestino"}));
+$("backToArchive").addEventListener("click",()=>nmreShowView("archiveSection",{label:"Archivio annunci"}));
 
 const candidateTextFilters=["candidateSearch","candidatePriceMin","candidatePriceMax","candidateSurfaceMin","candidateSurfaceMax","candidateFromFilter","candidateToFilter"];
 const candidateSelectFilters=["candidateTownFilter","candidateTypeFilter","candidatePortalFilter","candidateSellerFilter","candidateQualityFilter"];
