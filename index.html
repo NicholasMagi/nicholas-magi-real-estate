@@ -5308,8 +5308,8 @@ async function manualCandidateIdentity(value){
   for(const key of [...parsed.searchParams.keys()]){
     if(/^(utm_.+|gclid|fbclid|mc_cid|mc_eid|ref|source)$/i.test(key))parsed.searchParams.delete(key);
   }
-  const host=parsed.hostname.toLowerCase().replace(/^www\\./,"");
-  const path=decodeURIComponent(parsed.pathname).replace(/\\/+$/,"").toLowerCase()||"/";
+  const host=parsed.hostname.toLowerCase().replace(/^www\./,"");
+  const path=decodeURIComponent(parsed.pathname).replace(/\/+$/,"").toLowerCase()||"/";
   const query=[...parsed.searchParams.entries()].sort(([a],[b])=>a.localeCompare(b));
   return host+path+(query.length?"?"+new URLSearchParams(query).toString():"");
 }
@@ -5321,7 +5321,7 @@ async function manualCandidateDedupKey(identity){
 
 function manualCandidatePortal(url){
   try{
-    const host=new URL(url).hostname.toLowerCase().replace(/^www\\./,"");
+    const host=new URL(url).hostname.toLowerCase().replace(/^www\./,"");
     if(host.includes("idealista"))return "Idealista";
     if(host.includes("immobiliare"))return "Immobiliare.it";
     if(host.includes("casa.it"))return "Casa.it";
