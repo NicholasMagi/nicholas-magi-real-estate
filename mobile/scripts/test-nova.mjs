@@ -147,9 +147,11 @@ test("lists only confirmed private candidates and keeps unverified ones separate
 });
 
 test("summarizes overdue and upcoming callbacks", () => {
+  const overdueDate = new Date();
+  overdueDate.setDate(overdueDate.getDate() - 5);
   const context = readyContext({
     listings: [
-      makeListing({ id: "old", nextContactDate: "2026-11-20" }),
+      makeListing({ id: "old", nextContactDate: dateOnly(overdueDate) }),
       makeListing({ id: "today", status: "appuntamento", nextContactDate: dateOnly(new Date()) })
     ]
   });
