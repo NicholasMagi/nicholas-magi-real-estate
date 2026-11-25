@@ -335,10 +335,6 @@ button:disabled{opacity:.55;cursor:not-allowed}
 
 .seller-radar{margin:0 0 14px}
 .seller-radar-intro{font-size:11px;line-height:1.55;color:var(--muted);margin:-5px 0 13px}
-.seller-radar-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-bottom:13px}
-.seller-radar-metric{background:#f8f9fb;border:1px solid var(--line);border-radius:10px;padding:11px 12px;min-width:0}
-.seller-radar-metric strong{display:block;font-family:Georgia,serif;font-size:22px;color:var(--ink);font-variant-numeric:tabular-nums}
-.seller-radar-metric span{display:block;font-size:10px;color:var(--muted);margin-top:3px}
 .seller-radar-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .seller-radar-item{border:1px solid var(--line);border-radius:11px;padding:13px;min-width:0;background:#fff}
 .seller-radar-item-top{display:flex;justify-content:space-between;gap:8px;align-items:center}
@@ -350,11 +346,9 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .seller-radar-signal{font-size:10px;color:#526075;background:#f1f3f6;border-radius:20px;padding:5px 7px}
 .seller-radar-item details{border-top:1px solid #edf0f4;margin-top:10px;padding-top:9px}
 .seller-radar-item summary{font-size:11px;font-weight:700;color:#785d35;cursor:pointer}
-.seller-radar-script-text{font-size:11px;line-height:1.55;color:#46536a;white-space:pre-line;margin:8px 0}
 .seller-radar-item .actions{margin-top:10px}
 .seller-radar-item .actions button{font-size:10px;padding:8px 10px}
-.seller-radar-feedback{font-size:11px;color:#267447;min-height:16px;margin-top:9px}
-@media(max-width:650px){.seller-radar-list{grid-template-columns:1fr}.seller-radar-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.seller-radar-metric{padding:9px}.seller-radar-metric strong{font-size:19px}}
+@media(max-width:650px){.seller-radar-list{grid-template-columns:1fr}}
 
 
 .sales-performance{margin:14px 0}
@@ -958,21 +952,6 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
     </div>
     <div id="callQueueList" class="call-queue"><div class="call-center-empty">La lista apparirà dopo il caricamento dell'archivio.</div></div>
     <p class="call-center-foot">La lista usa soltanto i recapiti già presenti nell'archivio. La chiamata o il messaggio partono solo quando seleziona il relativo collegamento; nessun contatto viene inviato automaticamente.</p>
-  </section>
-
-  <section class="dash-card seller-radar" id="sellerRadarPanel" aria-label="Radar proprietari">
-    <div class="dash-card-head">
-      <div><h2>Radar proprietari</h2><div class="dash-card-sub">Le opportunità da approfondire prima, ordinate per segnali verificabili</div></div>
-      <button class="dash-link" id="sellerRadarAll">Apri tutte le opportunità</button>
-    </div>
-    <p class="seller-radar-intro">Il punteggio indica una priorità di lavorazione, non la probabilità che il proprietario incarichi un'agenzia. La data mostrata è quella di ricezione dell'email Gmail e non certifica da quanto tempo l'annuncio sia online. Più email indicano più notifiche, non necessariamente una ripubblicazione.</p>
-    <div class="seller-radar-metrics">
-      <div class="seller-radar-metric"><strong id="sellerRadarHigh">0</strong><span>Priorità elevate</span></div>
-      <div class="seller-radar-metric"><strong id="sellerRadarDrops">0</strong><span>Con ribasso documentato</span></div>
-      <div class="seller-radar-metric"><strong id="sellerRadarPrivate">0</strong><span>Privati verificati</span></div>
-    </div>
-    <div id="sellerRadarList" class="seller-radar-list"><div class="dash-empty">Il radar si popolerà con le opportunità caricate.</div></div>
-    <div id="sellerRadarFeedback" class="seller-radar-feedback" aria-live="polite"></div>
   </section>
 
   <section class="dash-card seller-radar" id="priceHistoryPanel" aria-label="Storico prezzi annunci">
@@ -2325,7 +2304,6 @@ function renderSellerRelationshipScore(all=listingCache,now=new Date()){
 function renderDashboard(){
   const all=Array.isArray(listingCache)?listingCache:[];
   const candidates=Array.isArray(candidateCache)?candidateCache:[];
-  renderSellerRadar(candidates);
   renderPriceHistoryRadar(candidates);
   renderAcquisitionIntelligence(candidates);
   const today=new Date();
@@ -2479,7 +2457,6 @@ $("callWhatsappTemplate").addEventListener("change",renderCallCenter);
 $("callCenterOpenArchive").addEventListener("click",()=>dashboardScroll("archiveSection"));
 $("dashOpenArchive").addEventListener("click",()=>dashboardScroll("archiveSection"));
 $("dashOpenCandidates").addEventListener("click",()=>dashboardScroll("candidateSection"));
-$("sellerRadarAll").addEventListener("click",()=>dashboardScroll("candidateSection"));
 $("dashPriorities").addEventListener("click",event=>{
   const button=event.target.closest("button");
   if(!button)return;
@@ -4308,115 +4285,6 @@ function renderPriceHistoryRadar(candidates=candidateCache){
   if(button.dataset.priceHistoryKind==="crm")openCallCrm(button.dataset.priceHistoryOpen);
   else openDashboardCandidate(button.dataset.priceHistoryOpen);
  }));
-}
-
-function sellerRadarPriority(item,now=new Date()){
-  let score=0;
-  const signals=[];
-  const add=(points,label)=>{score+=points;signals.push(label);};
-  if(item.tipo_venditore==="Privato")add(20,"Privato verificato");
-  else if(item.tipo_venditore==="Da verificare")add(6,"Venditore da identificare");
-
-  const history=Array.isArray(item.notification_history)?item.notification_history:[];
-  const emailIds=new Set(history.map(entry=>String(entry.source_email_id||"")).filter(Boolean));
-  const notificationCount=emailIds.size||history.length;
-  if(notificationCount>=4)add(10,notificationCount+" notifiche email collegate");
-  else if(notificationCount>=2)add(6,notificationCount+" notifiche email collegate");
-
-  const reduction=Number(item.price_drop_percent);
-  const previous=Number(item.previous_price);
-  const current=Number(item.current_price_at_drop||item.prezzo);
-  const documentedDrop=reduction>0&&Number.isFinite(previous)&&Number.isFinite(current)&&previous>current&&current>0;
-  if(documentedDrop)add(reduction>=10?32:22,"Ribasso documentato del "+reduction.toLocaleString("it-IT")+"%");
-
-  // Notification age is shown as context only; it is not evidence of online duration
-  // or of a seller becoming more negotiable, so it does not increase the radar score.
-  const municipality=normalizedMatchText(item.comune);
-  const core=new Set(["ancona","osimo","castelfidardo","jesi"]);
-  const nearby=new Set(["loreto","recanati","camerano","numana","sirolo","falconara marittima","porto recanati","filottrano","polverigi","agugliano","offagna","chiaravalle","montemarciano","monte urano","civitanova marche","porto sant elpidio","monte san vito","santa maria nuova","monsano"]);
-  if(core.has(municipality))add(15,"Comune nel territorio principale");
-  else if(nearby.has(municipality))add(8,"Comune nel territorio esteso");
-
-  if(String(item.contatto||"").trim())add(15,"Recapito presente");
-  if(Number(item.prezzo)>0&&Number(item.superficie_mq)>0)add(5,"Prezzo e superficie disponibili");
-  score=Math.min(100,score);
-  const level=score>=65?"high":score>=40?"medium":"low";
-  return {score,level,signals,documentedDrop,notificationCount};
-}
-
-function sellerRadarCallScript(item){
-  const title=String(item.titolo||item.tipologia_immobile||"immobile").trim();
-  const town=String(item.comune||"").trim();
-  let script="Buongiorno, sono Nicholas Magi, consulente immobiliare. La contatto in merito al Suo annuncio relativo a "+title+(town?" a "+town:"")+". ";
-  const reduction=Number(item.price_drop_percent);
-  const previous=Number(item.previous_price);
-  const current=Number(item.current_price_at_drop||item.prezzo);
-  if(reduction>0&&previous>current&&current>0){
-    script+="Ho notato che sul portale la richiesta è stata aggiornata da "+formatCurrency(previous)+" a "+formatCurrency(current)+". Vorrei capire se sta ancora gestendo direttamente la vendita e come stanno andando le visite e le eventuali proposte. ";
-  }else{
-    script+="Vorrei chiederLe qualche informazione sulla vendita e capire se sta gestendo direttamente l'immobile. ";
-  }
-  script+="Mi interesserebbe conoscere le Sue tempistiche e gli obiettivi, così da capire se posso esserLe concretamente utile con una valutazione e una strategia di vendita. Quando Le sarebbe più comodo parlarne? La ringrazio.";
-  return script;
-}
-
-function renderSellerRadar(candidates=candidateCache){
-  const box=$("sellerRadarList");
-  if(!box)return;
-  const rows=(Array.isArray(candidates)?candidates:[])
-    .filter(item=>item.tipo_venditore!=="Agenzia")
-    .map(item=>({item,radar:sellerRadarPriority(item),base:candidatePriority(item)}))
-    .sort((a,b)=>b.radar.score-a.radar.score||b.base.score-a.base.score)
-    .slice(0,6);
-  const all=(Array.isArray(candidates)?candidates:[]).filter(item=>item.tipo_venditore!=="Agenzia");
-  $("sellerRadarHigh").textContent=String(all.filter(item=>sellerRadarPriority(item).score>=65).length);
-  $("sellerRadarDrops").textContent=String(all.filter(item=>sellerRadarPriority(item).documentedDrop).length);
-  $("sellerRadarPrivate").textContent=String(all.filter(item=>item.tipo_venditore==="Privato").length);
-  if(!rows.length){
-    box.innerHTML='<div class="dash-empty">Nessuna opportunità in attesa di valutazione. Le nuove notifiche idonee compariranno qui.</div>';
-    return;
-  }
-  box.innerHTML=rows.map(({item,radar},index)=>{
-    const currentPrice=item.prezzo!==null&&item.prezzo!==undefined?euro(item.prezzo):"Prezzo non indicato";
-    const seller=item.tipo_venditore==="Privato"?"Privato verificato":"Venditore da verificare";
-    const title=safe(item.titolo||"Immobile senza titolo");
-    const notificationTime=item.data_pubblicazione;
-    const notificationLabel=notificationTime&&Number.isFinite(Date.parse(notificationTime))
-      ?"Email ricevuta il "+new Date(notificationTime).toLocaleDateString("it-IT")
-      :"Data email non disponibile";
-    const meta=safe([item.comune,item.tipologia_immobile,item.portale].filter(Boolean).join(" · ")||"Dettagli da completare");
-    const signals=radar.signals.slice(0,4).map(signal=>'<span class="seller-radar-signal">'+safe(signal)+'</span>').join("");
-    const link=validUrl(item.url)&&isSpecificCandidateUrl(item.url)
-      ?'<a href="'+safe(validUrl(item.url))+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
-      :"";
-    const script=sellerRadarCallScript(item);
-    return '<article class="seller-radar-item">'
-      +'<div class="seller-radar-item-top"><span class="dash-lead-rank">'+(index===0?"Prima opportunità":"Priorità "+(index+1))+'</span><span class="seller-radar-score '+(radar.level==="high"?"seller-radar-score-high":"")+'">'+radar.score+'/100</span></div>'
-      +'<div class="seller-radar-title">'+title+'</div>'
-      +'<div class="seller-radar-meta">'+meta+'<br>'+safe(seller)+' · '+safe(currentPrice)+'<br>'+safe(notificationLabel)+'</div>'
-      +'<div class="seller-radar-signals">'+signals+'</div>'
-      +'<details><summary>Prepara la telefonata</summary><p class="seller-radar-script-text">'+safe(script)+'</p><button type="button" class="secondary" data-radar-copy="'+safe(item.id)+'">Copia copione</button></details>'
-      +'<div class="actions"><button type="button" class="gold" data-radar-open="'+safe(item.id)+'">Apri scheda</button>'+link+'</div>'
-      +'</article>';
-  }).join("");
-  box.querySelectorAll("[data-radar-open]").forEach(button=>
-    button.addEventListener("click",()=>openDashboardCandidate(button.dataset.radarOpen))
-  );
-  box.querySelectorAll("[data-radar-copy]").forEach(button=>
-    button.addEventListener("click",async()=>{
-      const item=(candidateCache||[]).find(row=>String(row.id)===String(button.dataset.radarCopy));
-      if(!item)return;
-      const script=sellerRadarCallScript(item);
-      const feedback=$("sellerRadarFeedback");
-      try{
-        await navigator.clipboard.writeText(script);
-        feedback.textContent="Copione copiato negli appunti.";
-      }catch{
-        window.prompt("Copi il copione della telefonata:",script);
-        feedback.textContent="Copi il testo dalla finestra visualizzata.";
-      }
-    })
-  );
 }
 
 function candidatePriority(item,now=new Date()){
