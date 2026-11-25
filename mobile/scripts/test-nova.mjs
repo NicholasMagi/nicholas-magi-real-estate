@@ -97,9 +97,13 @@ test("quality check catches missing data and possible duplicates", () => {
     askingPrice: null,
     surfaceSqm: null,
     hasDirectContact: false,
-    listingUrl: null
+    listingUrl: "https://www.idealista.it/immobile/87654321/"
   });
-  const duplicate = makeCandidate({ id: "duplicate", title: candidate.title });
+  const duplicate = makeCandidate({
+    id: "duplicate",
+    title: candidate.title,
+    listingUrl: "https://www.idealista.it/immobile/87654321/"
+  });
   const quality = candidateQuality(candidate, [candidate, duplicate], []);
   assert.ok(quality.missing.includes("comune"));
   assert.ok(quality.missing.includes("prezzo"));
