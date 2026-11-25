@@ -1426,7 +1426,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-contact-sync-2");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-contact-sync-3");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1501,7 +1501,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261125-contact-sync-2");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261125-contact-sync-3");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -3660,15 +3660,14 @@ function nmreCrmRenderContacts(){
  });
  const roleLabels={proprietario:"Proprietario",comproprietario:"Comproprietario",referente:"Referente",familiare:"Familiare",altro:"Altro"};
  $("nmreCrmContactList").innerHTML=rows.length?rows.map(x=>{
-  const properties=nmreCrmPropertiesForContact(x.id),archiveListings=(listingCache||[]).filter(a=>String(a.contact_id||"")===String(x.id)),linkedIds=new Set(properties.map(p=>String(p.id)));
+  const properties=nmreCrmPropertiesForContact(x.id),archiveListings=(listingCache||[]).filter(a=>String(a.contact_id||"")===String(x.id)),linkedIds=new Set(properties.map(p=>String(p.id))),representedArchiveIds=new Set(properties.map(p=>String(p.source_listing_id||"")).filter(Boolean)),archiveOnlyListings=archiveListings.filter(a=>!representedArchiveIds.has(String(a.id)));
   const availableProperties=nmreCrmProperties.filter(p=>!linkedIds.has(String(p.id)));
   const availableArchive=(listingCache||[]).filter(a=>!nmreCrmProperties.some(p=>String(p.source_listing_id||"")===String(a.id)));
-  const propertyHtml=properties.length?properties.map(p=>{
+  const propertyHtml=properties.map(p=>{
    const link=nmreCrmPropertyContacts.find(row=>String(row.contact_id)===String(x.id)&&String(row.property_id)===String(p.id));
    const source=(listingCache||[]).find(a=>String(a.id)===String(p.source_listing_id));
-   const sourceUrl=source?validUrl(source.url||source.url_originale||""):"";
-   return '<article class="nmre-contact-property"><div><strong>'+safe(p.title)+'</strong><small>'+safe(p.municipality)+(p.property_type?" · "+safe(p.property_type):"")+' · '+safe(nmreCrmLabels.propertyStatus[p.status]||p.status)+'</small><small>'+euro(p.asking_price)+(p.surface_sqm?" · "+p.surface_sqm+" m²":"")+(p.rooms?" · "+p.rooms+" locali":"")+' · '+safe(roleLabels[link?.relation_role]||"Proprietario")+'</small>'+(sourceUrl?'<a href="'+safe(sourceUrl)+'" target="_blank" rel="noopener noreferrer">Apri annuncio in Archivio</a>':"")+'</div><button class="secondary nmre-contact-unlink" type="button" data-contact-property-unlink="'+safe(x.id)+'" data-property-id="'+safe(p.id)+'">Rimuovi collegamento</button></article>';
-  }).join(""):'<div class="nmre-crm-empty">Nessun immobile collegato a questo contatto.</div>';
+   return '<article class="nmre-contact-property"><div><strong>'+safe(p.title)+'</strong><small>'+safe(p.municipality)+(p.property_type?" · "+safe(p.property_type):"")+' · '+safe(nmreCrmLabels.propertyStatus[p.status]||p.status)+'</small><small>'+euro(p.asking_price)+(p.surface_sqm?" · "+p.surface_sqm+" m²":"")+(p.rooms?" · "+p.rooms+" locali":"")+' · '+safe(roleLabels[link?.relation_role]||"Proprietario")+'</small>'+(source?'<button class="secondary" type="button" data-open-associated-listing="'+safe(source.id)+'">Apri immobile in Archivio</button>':"")+'</div><button class="secondary nmre-contact-unlink" type="button" data-contact-property-unlink="'+safe(x.id)+'" data-property-id="'+safe(p.id)+'">Rimuovi collegamento</button></article>';
+  }).join("")+archiveOnlyListings.map(a=>'<article class="nmre-contact-property"><div><strong>'+safe(a.titolo||"Annuncio")+'</strong><small>'+safe(a.comune||"Comune non indicato")+' · '+euro(a.prezzo)+'</small><button class="secondary" type="button" data-open-associated-listing="'+safe(a.id)+'">Apri immobile in Archivio</button></div></article>').join("")||'<div class="nmre-crm-empty">Nessun immobile collegato a questo contatto.</div>';
   const existingOptions=availableProperties.length?availableProperties.map(p=>'<option value="'+safe(p.id)+'">'+safe(p.title+" · "+p.municipality+" · "+euro(p.asking_price))+'</option>').join(""):'<option value="">Nessuna scheda CRM disponibile</option>';
   const archiveOptions=availableArchive.length?availableArchive.map(a=>'<option value="'+safe(a.id)+'">'+safe((a.titolo||"Annuncio")+" · "+(a.comune||"Comune non indicato")+" · "+euro(a.prezzo))+'</option>').join(""):'<option value="">Nessun annuncio disponibile da associare</option>';
   const editForm='<details class="nmre-contact-edit"><summary>Modifica dati del contatto</summary><form class="nmre-crm-form nmre-contact-edit-form" data-contact-edit="'+safe(x.id)+'">'+
@@ -3680,7 +3679,7 @@ function nmreCrmRenderContacts(){
    '<label>Indirizzo<input name="address" maxlength="220" value="'+safe(x.address||"")+'"></label>'+
    '<label class="wide">Note<textarea name="notes" rows="2" maxlength="4000">'+safe(x.notes||"")+'</textarea></label>'+
    '<div class="wide"><button class="gold" type="submit">Salva modifiche</button><span class="status" data-contact-edit-msg></span></div></form></details>';
-  const propertyManager='<details class="nmre-contact-properties"><summary>Immobili associati <b>'+properties.length+'</b></summary>'+
+  const propertyManager='<details class="nmre-contact-properties"><summary>Immobili associati <b>'+(properties.length+archiveOnlyListings.length)+'</b></summary>'+
    '<div class="nmre-contact-property-list">'+propertyHtml+'</div>'+
    '<details class="nmre-contact-add-property" data-contact-add-property="'+safe(x.id)+'"><summary>+ Aggiungi o associa un immobile</summary>'+
    '<form class="nmre-crm-form nmre-contact-property-form" data-contact-property-form="'+safe(x.id)+'">'+
@@ -3697,7 +3696,7 @@ function nmreCrmRenderContacts(){
    '<label class="wide">Note immobile<textarea name="notes" rows="2" maxlength="4000"></textarea></label>'+
    '<div class="wide"><button class="gold" type="submit">Salva collegamento</button><span class="status" data-contact-property-msg></span></div></form></details></details>';
   return '<article class="nmre-crm-item"><div class="nmre-crm-contact-main"><h4>'+safe(x.full_name)+'</h4><p>'+safe(nmreCrmLabels.contact[x.contact_type]||x.contact_type)+' · '+safe(x.municipality||"Comune non indicato")+(x.address?" · "+safe(x.address):"")+'</p><p>'+safe(x.phone||"")+(x.phone&&x.email?" · ":"")+safe(x.email||"")+'</p>'+(x.notes?'<p>'+safe(x.notes)+'</p>':"")+
-   '<details class="nmre-contact-properties"><summary>Annunci in Archivio <b>'+archiveListings.length+'</b></summary><div class="nmre-contact-property-list">'+(archiveListings.length?archiveListings.map(a=>'<article class="nmre-contact-property"><div><strong>'+safe(a.titolo||"Annuncio")+'</strong><small>'+safe(a.comune||"Comune non indicato")+' · '+euro(a.prezzo)+'</small>'+(a.url?'<a href="'+safe(validUrl(a.url)||"#")+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>':"")+'</div></article>').join(""):'<div class="nmre-crm-empty">Nessun annuncio collegato.</div>')+'</div></details>'+propertyManager+editForm+
+   propertyManager+editForm+
    '<details class="nmre-sales-coach" data-sales-coach="'+safe(x.id)+'"><summary>Prepara telefonata · Sales Coach</summary><div class="nmre-sales-coach-output" data-sales-coach-output="'+safe(x.id)+'"><div class="hint">Apra per preparare la conversazione.</div></div></details>'+
    '<details class="nmre-crm-history" data-crm-history="'+safe(x.id)+'"><summary>Storico conversazioni e interazioni</summary>'+
    '<form class="nmre-crm-history-form" data-crm-history-form="'+safe(x.id)+'">'+
@@ -3712,6 +3711,7 @@ function nmreCrmRenderContacts(){
    '<div class="nmre-crm-item-side"><select aria-label="Stato contatto" data-crm-contact-status="'+safe(x.id)+'">'+Object.entries(nmreCrmLabels.contactStatus).map(([v,l])=>'<option value="'+v+'" '+(x.status===v?"selected":"")+'>'+l+'</option>').join("")+'</select></div></article>';
  }).join(""):'<div class="nmre-crm-empty">Nessun contatto registrato. Inserisca il primo contatto qui sopra.</div>';
 
+ $("nmreCrmContactList").querySelectorAll("[data-open-associated-listing]").forEach(button=>button.addEventListener("click",()=>openCallCrm(button.dataset.openAssociatedListing)));
  $("nmreCrmContactList").querySelectorAll("[data-crm-contact-status]").forEach(el=>el.addEventListener("change",async()=>{
   const {error}=await supabase.from("nmre_contacts").update({status:el.value,updated_at:new Date().toISOString()}).eq("id",el.dataset.crmContactStatus).eq("owner_id",currentUser.id);
   if(error){$("nmreCrmContactMsg").textContent=error.message;return;}await loadCrmWorkspace();
@@ -4161,7 +4161,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-contact-sync-2");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-contact-sync-3");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);
