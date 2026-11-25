@@ -4804,6 +4804,69 @@ async function analyzeCandidatePage(id,button){
   }
 }
 
+async function prepareCandidateForArchive(candidate,fields={}){
+  const merged={...fields};
+  const sourceUrl=validUrl(candidate?.url||candidate?.url_originale);
+  if(!sourceUrl)return {fields:merged,enriched:false,error:null,url:candidate?.url||candidate?.url_originale||null};
+  try{
+    const {data,error}=await supabase.functions.invoke("nmre-candidate-enrich",{body:{url:sourceUrl}});
+    if(error)throw new Error(error.message||"Analisi della pagina non disponibile.");
+    if(!data?.success)throw new Error(data?.error||"La pagina non ha restituito dati leggibili.");
+    const suggestions=data.suggestions||{};
+    const blank=value=>value===null||value===undefined||String(value).trim()==="";
+    const fill=(field,suggestion)=>{
+      if(suggestion===null||suggestion===undefined||suggestion==="")return;
+      if(blank(merged[field])||(field==="titolo"&&String(merged[field]).trim().toLocaleLowerCase("it")==="annuncio immobiliare")){
+        merged[field]=suggestion;
+      }
+    };
+    fill("titolo",suggestions.titolo);
+    fill("comune",suggestions.comune);
+    fill("prezzo",suggestions.prezzo);
+    fill("tipologia_immobile",suggestions.tipologia_immobile);
+    fill("superficie_mq",suggestions.superficie_mq);
+    fill("locali",suggestions.locali);
+    fill("camere",suggestions.camere);
+    fill("bagni",suggestions.bagni);
+    const base=candidate?.dati_estratti&&typeof candidate.dati_estratti==="object"&&!Array.isArray(candidate.dati_estratti)
+      ?candidate.dati_estratti:{};
+    const extracted={
+      ...base,
+      pagina_pubblica:{
+        ...(base.pagina_pubblica&&typeof base.pagina_pubblica==="object"?base.pagina_pubblica:{}),
+        url_originale:sourceUrl,
+        url_finale:data.final_url||sourceUrl,
+        portale:candidate?.portale||null,
+        recuperato_il:data.retrieved_at||new Date().toISOString(),
+        evidenza:data.evidence||"Metadati pubblici della pagina",
+        suggestions
+      }
+    };
+    const updates={
+      titolo:merged.titolo||candidate.titolo,
+      comune:merged.comune||candidate.comune,
+      prezzo:blank(merged.prezzo)?candidate.prezzo:Number(merged.prezzo),
+      tipologia_immobile:merged.tipologia_immobile||candidate.tipologia_immobile,
+      superficie_mq:blank(merged.superficie_mq)?candidate.superficie_mq:Number(merged.superficie_mq),
+      locali:blank(merged.locali)?candidate.locali:Number(merged.locali),
+      camere:blank(merged.camere)?candidate.camere:Number(merged.camere),
+      bagni:blank(merged.bagni)?candidate.bagni:Number(merged.bagni),
+      contatto:merged.contatto||candidate.contatto||null,
+      url:data.final_url||candidate.url||sourceUrl,
+      url_originale:candidate.url_originale||candidate.url||sourceUrl,
+      dati_estratti:extracted,
+      data_extraction_version:2,
+      updated_at:new Date().toISOString()
+    };
+    const {error:updateError}=await supabase.from("annunci_candidati").update(updates).eq("id",candidate.id);
+    if(updateError)throw new Error("Dati recuperati, ma non è stato possibile salvarli prima dell’archiviazione: "+updateError.message);
+    Object.assign(merged,updates);
+    return {fields:merged,enriched:true,error:null,url:updates.url};
+  }catch(error){
+    return {fields:merged,enriched:false,error:error.message||"Analisi della pagina non riuscita.",url:sourceUrl};
+  }
+}
+
 async function saveCandidateSeller(id,button){
   const card=button.closest("[data-candidate]");
   const seller=card.querySelector('[data-field="venditore"]').value;
@@ -4854,6 +4917,23 @@ async function saveCandidateSeller(id,button){
   await loadSellerRegistry();
   let privateArchiveMessage="";
   if(seller==="Privato"){
+    const candidate=(candidateCache||[]).find(item=>String(item.id)===String(id));
+    const archiveFields={
+      titolo:card.querySelector('[data-field="titolo"]')?.value.trim()||candidate?.titolo,
+      comune:card.querySelector('[data-field="comune"]')?.value.trim()||candidate?.comune,
+      prezzo:card.querySelector('[data-field="prezzo"]')?.value.trim()||candidate?.prezzo,
+      tipologia_immobile:card.querySelector('[data-field="tipologia_immobile"]')?.value.trim()||candidate?.tipologia_immobile,
+      superficie_mq:card.querySelector('[data-field="superficie_mq"]')?.value.trim()||candidate?.superficie_mq,
+      locali:card.querySelector('[data-field="locali"]')?.value.trim()||candidate?.locali,
+      camere:card.querySelector('[data-field="camere"]')?.value.trim()||candidate?.camere,
+      bagni:card.querySelector('[data-field="bagni"]')?.value.trim()||candidate?.bagni,
+      contatto:contact
+    };
+    if(candidate){
+      const prepared=await prepareCandidateForArchive(candidate,archiveFields);
+      if(prepared.enriched)privateArchiveMessage+=" Dati pubblici dell’annuncio recuperati automaticamente.";
+      else if(prepared.error)privateArchiveMessage+=" Alcuni dati non sono stati recuperati automaticamente: "+prepared.error;
+    }
     const {data:archiveResult,error:archiveError}=await supabase.rpc("nmre_auto_archive_private_candidate",{p_candidate_id:id});
     if(archiveError){
       msg("candidateMsg","Verifica del privato salvata, ma archiviazione automatica non riuscita: "+archiveError.message,"error");
@@ -4881,28 +4961,49 @@ async function saveCandidateSeller(id,button){
 async function confirmCandidate(id,button){
   const card=button.closest("[data-candidate]");
   const value=name=>card.querySelector('[data-field="'+name+'"]').value.trim();
-  const title=value("titolo"), municipality=value("comune"), price=value("prezzo");
   const seller=value("venditore");
   if(!["Privato","Agenzia","Da verificare"].includes(seller)){msg("candidateMsg","Selezioni una classificazione valida del venditore.","error");return;}
-  const contact=value("contatto")||null;
-  const sourceUrl=card.dataset.url||null;
-  const sourcePortal=card.dataset.portal||"Portale non indicato";
-  const optionalNumber=name=>value(name)===""?null:Number(value(name));
-  if(!title||!municipality){msg("candidateMsg","Titolo e comune sono necessari per confermare.","error");return;}
+  const candidate=(candidateCache||[]).find(item=>String(item.id)===String(id));
+  if(!candidate){msg("candidateMsg","Non trovo più questo annuncio. Aggiorni la lista e riprovi.","error");return;}
+  const sourcePortal=card.dataset.portal||candidate.portale||"Portale non indicato";
+  const fields={
+    titolo:value("titolo"),comune:value("comune"),prezzo:value("prezzo"),
+    contatto:value("contatto")||null,
+    tipologia_immobile:value("tipologia_immobile"),
+    superficie_mq:value("superficie_mq"),locali:value("locali"),
+    camere:value("camere"),bagni:value("bagni")
+  };
   button.disabled=true;
+  const originalLabel=button.textContent;
+  button.textContent="Recupero dati e archiviazione…";
+  msg("candidateMsg","Sto recuperando i dati pubblici disponibili e preparando la scheda completa nell’Archivio.");
+  const prepared=await prepareCandidateForArchive(candidate,fields);
+  const finalFields=prepared.fields;
+  const title=String(finalFields.titolo||"").trim();
+  const municipality=String(finalFields.comune||"").trim();
+  if(!title||!municipality){
+    msg("candidateMsg","Non è possibile archiviare: titolo e comune non sono disponibili. Completi questi due campi e riprovi.","error");
+    button.disabled=false;button.textContent=originalLabel;return;
+  }
+  const numberOrNull=value=>value===null||value===undefined||String(value).trim()===""?null:Number(value);
   const {error}=await supabase.rpc("nmre_confirm_annuncio_candidato",{
     p_candidate_id:id,p_titolo:title,p_comune:municipality,
-    p_prezzo:price===""?null:Number(price),
-    p_contatto:contact,p_tipo_venditore:seller,
-    p_portale:sourcePortal,p_url:sourceUrl,
-    p_tipologia_immobile:value("tipologia_immobile")||null,
-    p_superficie_mq:optionalNumber("superficie_mq"),
-    p_locali:optionalNumber("locali"),
-    p_camere:optionalNumber("camere"),
-    p_bagni:optionalNumber("bagni")
+    p_prezzo:numberOrNull(finalFields.prezzo),
+    p_contatto:finalFields.contatto||null,p_tipo_venditore:seller,
+    p_portale:sourcePortal,p_url:prepared.url||candidate.url||candidate.url_originale||null,
+    p_tipologia_immobile:finalFields.tipologia_immobile||null,
+    p_superficie_mq:numberOrNull(finalFields.superficie_mq),
+    p_locali:numberOrNull(finalFields.locali),
+    p_camere:numberOrNull(finalFields.camere),
+    p_bagni:numberOrNull(finalFields.bagni)
   });
-  if(error){msg("candidateMsg",error.message,"error");button.disabled=false;return;}
-  msg("candidateMsg","Annuncio confermato e trasferito nell'archivio.","success");
+  if(error){msg("candidateMsg","Impossibile archiviare l’annuncio: "+error.message,"error");button.disabled=false;button.textContent=originalLabel;return;}
+  const extra=prepared.enriched
+    ?" Dati della pagina pubblica e link originale conservati nella scheda."
+    :prepared.error
+      ?" Il link originale è stato conservato; alcuni dati aggiuntivi non erano accessibili ("+prepared.error+")."
+      :" I dati disponibili e il link sono stati conservati.";
+  msg("candidateMsg","Annuncio archiviato correttamente."+extra,"success");
   await loadListings();await loadCandidates();
 }
 
