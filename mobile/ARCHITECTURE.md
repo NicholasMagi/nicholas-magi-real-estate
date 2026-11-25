@@ -98,3 +98,18 @@ Only one Supabase project was verified. Create staging before any write-capable 
 6. Favorites as relation, not copied listing.
 7. Native push distinct from VAPID Web Push.
 8. Defer ALBim adapter pending provider contract.
+
+## 14. NOVA — phase 1, deterministic assistant (2026-11-25)
+
+Decision:
+- The existing responsive PWA assistant is named **NOVA** and, in phase 1, uses deterministic command handlers in the browser rather than an external generative-AI API.
+- It reuses already-loaded `candidateCache` and `listingCache`, the existing `candidatePriority()` commercial work-order score and the saved follow-up dates. It does not introduce a parallel data model.
+- Supported tasks: acquisition priorities, top opportunities (including known municipality filters), due/overdue follow-ups, current seller-classification counts, archive summary and a templated owner-call script.
+- The conversation text is handled in the browser. The assistant does not invoke `nmre-ai-assistant`, OpenAI, or another AI endpoint. No new database table, Edge Function, secret or paid service is required for this phase.
+- The score is a workflow ordering signal only; it is not an estimate of mandate probability and does not certify seller identity. Missing data remains missing.
+- No voice, generative free-form dialogue, or persistent cross-device conversation memory is included in this phase.
+
+Platform boundary:
+- The same responsive PWA can be opened from a desktop browser or a mobile browser.
+- The separate Expo client remains a scaffold and is not yet connected to Auth or operational repositories. Native Expo integration of NOVA follows the authentication and read-only data milestones (M3/M4); do not claim the native client has NOVA until those gates are implemented and tested.
+- The previous `nmre-ai-assistant` Edge Function remains deployed but is not called by the phase-1 PWA assistant. No function deployment or production database change was made.
