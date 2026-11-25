@@ -1850,7 +1850,6 @@ function renderDailyActionPlan(all,candidates,today){
 function acquisitionIntelligence(item,now=new Date()){
  const history=priceHistoryAnalysis(item);
  const base=candidatePriority(item,now);
- const radar=sellerRadarPriority(item,now);
  const signals=[];
  let score=0;
  const add=(points,label)=>{score+=points;signals.push(label);};
@@ -1879,7 +1878,7 @@ function acquisitionIntelligence(item,now=new Date()){
  else if(history.drops.length===1)next="Chiedere come sta andando la vendita dopo l'aggiornamento della richiesta";
  else if(item.tipo_venditore==="Privato"&&item.contatto)next="Qualificare tempistiche, visite e gestione diretta della vendita";
  else if(item.contatto)next="Verificare se il venditore gestisce direttamente l'immobile";
- return {score:Math.min(100,score),level,signals,history,next,base,radar};
+ return {score:Math.min(100,score),level,signals,history,next,base};
 }
 function buildAcquisitionStrategy(item){
  const title=String(item.titolo||item.tipologia_immobile||"immobile").trim();
