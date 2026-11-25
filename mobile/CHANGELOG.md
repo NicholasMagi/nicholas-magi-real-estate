@@ -2,7 +2,7 @@
 
 ## 2026-11-25 — NOVA phase 1 (responsive PWA)
 - Renamed the existing web assistant to NOVA and replaced its OpenAI Edge Function invocation with deterministic browser-side command handling.
-- NOVA now uses the already-loaded candidate/archive caches and the existing commercial-priority score to summarize acquisition priorities, rank opportunities, filter by known municipality, list due/overdue follow-ups, report seller-classification counts, summarize the archive and prepare a standard owner-call script.
+- NOVA now uses the already-loaded candidate/archive caches and the existing commercial-priority score to summarize acquisition priorities, rank opportunities, show confirmed private sellers separately from unverified sellers, filter by known municipality, list due/overdue follow-ups, report seller-classification counts, summarize the archive and prepare a standard owner-call script. Opportunity results also include the existing completeness score, missing fields and possible duplicates.
 - User messages are not sent to OpenAI; the phase-1 assistant makes no AI API request and introduces no database table, Edge Function, secret or paid service.
 - The score remains a work-order aid, not a prediction of mandate acquisition or proof of seller identity. Conversation history is session-only; voice and free-form generative chat are deferred.
 - The responsive PWA can be opened from desktop and mobile browsers. The separate Expo app remains unconnected to Auth and live data; native NOVA integration is deferred until M3/M4.
