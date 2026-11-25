@@ -682,3 +682,37 @@ select c.relname as tabella,
  order by 1, 2;
 -- Per leggere il codice della funzione (solo il titolare, senza condividerlo):
 --   select pg_get_functiondef('<schema>.<funzione>'::regproc);
+
+
+-- AQ17b · Prerequisiti tecnici delle migrazioni 20261125200000 e 20261125202000
+-- Sola lettura. Una sola riga di risultato. Atteso PRIMA delle migrazioni:
+--   funzione_notifica_candidati_esiste = true
+--   trigger_che_usano_funzione_candidati = 1
+--   trigger_notifica_su_storico = 1
+--   trigger_storico_con_delete_o_truncate = 0
+--   trigger_storico_per_istruzione_o_before = 0
+--   funzione_supporto_esiste = false   (altrimenti verrebbe sostituita)
+--   tabella_backup_esiste = false      (true solo se una migrazione è già stata tentata)
+--   tipo_candidate_id = 'uuid', tipo_id_candidati = 'uuid', tipo_tipo_venditore = 'text'
+select
+  to_regprocedure('private.nmre_notify_candidate_insert()') is not null as funzione_notifica_candidati_esiste,
+  (select count(*) from pg_trigger t
+    where t.tgrelid = 'public.annunci_candidati'::regclass and not t.tgisinternal
+      and t.tgfoid = to_regprocedure('private.nmre_notify_candidate_insert()')) as trigger_che_usano_funzione_candidati,
+  (select count(*) from pg_trigger t join pg_proc p on p.oid = t.tgfoid
+    where t.tgrelid = 'public.annunci_candidati_notifiche'::regclass and not t.tgisinternal
+      and p.prosrc ~* 'nmre_notifications') as trigger_notifica_su_storico,
+  (select count(*) from pg_trigger t join pg_proc p on p.oid = t.tgfoid
+    where t.tgrelid = 'public.annunci_candidati_notifiche'::regclass and not t.tgisinternal
+      and p.prosrc ~* 'nmre_notifications' and (t.tgtype & (8 | 32)) <> 0) as trigger_storico_con_delete_o_truncate,
+  (select count(*) from pg_trigger t join pg_proc p on p.oid = t.tgfoid
+    where t.tgrelid = 'public.annunci_candidati_notifiche'::regclass and not t.tgisinternal
+      and p.prosrc ~* 'nmre_notifications' and ((t.tgtype & 1) = 0 or (t.tgtype & 2) <> 0)) as trigger_storico_per_istruzione_o_before,
+  to_regprocedure('private.nmre_candidate_is_agency(uuid)') is not null as funzione_supporto_esiste,
+  to_regclass('private.nmre_trigger_definition_backups') is not null as tabella_backup_esiste,
+  (select data_type from information_schema.columns
+    where table_schema = 'public' and table_name = 'annunci_candidati_notifiche' and column_name = 'candidate_id') as tipo_candidate_id,
+  (select data_type from information_schema.columns
+    where table_schema = 'public' and table_name = 'annunci_candidati' and column_name = 'id') as tipo_id_candidati,
+  (select data_type from information_schema.columns
+    where table_schema = 'public' and table_name = 'annunci_candidati' and column_name = 'tipo_venditore') as tipo_tipo_venditore;

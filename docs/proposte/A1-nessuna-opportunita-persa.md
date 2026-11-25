@@ -375,7 +375,7 @@ Vedi §13 per l'esito dettagliato, con i link alle esecuzioni.
 ### 7.1 Ordine esatto
 | Passo | Azione | Come | Verifica | Se qualcosa non va |
 |---|---|---|---|---|
-| 0 | Controlli finali in sola lettura | **AQ17** (entrambi i trigger di notifica), AQ6 (base delle rielaborazioni), AQ10 (base delle esclusioni) | Un trigger di notifica per tabella, AFTER FOR EACH ROW; `gia_protetto = false` | Fermarsi |
+| 0 | Controlli finali in sola lettura | **AQ17 e AQ17b** secondo la procedura del §14; AQ6 (base delle rielaborazioni), AQ10 (base delle esclusioni) | Tutte le condizioni del §14.4 soddisfatte | Fermarsi nei casi del §14.5 |
 | 1 | **Migrazione del trigger** `20261125200000_guard_agency_candidate_notifications.sql` | SQL Editor di Supabase, **solo questo file**. Non usare `supabase db push`: la cronologia delle migrazioni di produzione non è allineata al repository (P0 §7) e il comando potrebbe tentare di applicare altri file | Messaggio "Trigger … protetto"; `pg_get_triggerdef` contiene `WHEN ((new.tipo_venditore IS DISTINCT FROM 'Agenzia'::text))`; una riga in `private.nmre_trigger_definition_backups` | Rollback 7.2-A |
 | 1-bis | **Migrazione del trigger dei ribassi** `20261125202000_guard_agency_price_drop_notifications.sql` | SQL Editor, solo questo file | Messaggio "Trigger … protetto"; AQ17: `gia_protetto = true` su entrambe le tabelle; la definizione contiene `nmre_candidate_is_agency` e l'eventuale condizione originale | Rollback 7.2-E, poi eventualmente A |
 | 2 | **Funzione `nmre-gmail-scheduled`** dal commit approvato | `supabase functions deploy nmre-gmail-scheduled`; `NMRE_CAPTURE_DUBIOUS_ALERTS` **non impostato**; `NMRE_KEEP_AGENCY_CANDIDATES` non impostato (conserva le agenzie) | Risposte 200 con `keptForReview`, `reopenedOnPriceDrop`, `notificationsAfterDiscard`, `propertyFilterRules`; registro senza errori per 24 ore; nessuna notifica "Nuove opportunità" per agenzie | Rollback 7.2-B |
@@ -541,6 +541,7 @@ con `main`).
 | [45703247449](https://github.com/NicholasMagi/nicholas-magi-real-estate/actions/runs/45703247449) | `368586a` | ✅ | ✅ | Errore corretto senza cambiare il comportamento |
 | [45703420105](https://github.com/NicholasMagi/nicholas-magi-real-estate/actions/runs/45703420105) | `fedf754` | ✅ | ✅ | Commit con il rapporto completo (solo documentazione rispetto al precedente); entrambi i job verdi, confermato anche dalla verifica indipendente del titolare |
 | [45704550649](https://github.com/NicholasMagi/nicholas-magi-real-estate/actions/runs/45704550649) | `1204d4d` | ✅ | ✅ | **Protezione delle push di ribasso** (migrazione `20261125202000`): tutti i passi di `validate` riusciti; nel job `migrations` il log di PostgreSQL mostra l'esecuzione dei nuovi test, compresi i casi negativi attesi ("Forma del trigger inattesa" per il trigger per istruzione, "Nessun trigger di notifica"), fino all'ultimo controllo di rollback degli avvisi dubbi. Suite completa: 59 controlli (verificati con l'elenco esplicito in locale) |
+| [45704723104](https://github.com/NicholasMagi/nicholas-magi-real-estate/actions/runs/45704723104) | `0679ef2` | ✅ | ✅ | Commit finale della revisione (solo il rapporto A1 aggiornato rispetto a `1204d4d`): tutti i passi di `validate` e il job `migrations` riusciti; esito confermato anche dalla verifica indipendente del titolare (59 controlli delle migrazioni) |
 
 Dettaglio del job `validate` (run 45703247449, verificato nei log; il run
 45703420105 sul commit `fedf754` ha eseguito gli stessi passi, tutti riusciti):
@@ -565,3 +566,110 @@ accesso ritirato dal rollback.
 Avviso non bloccante: GitHub segnala la deprecazione di Node.js 20 per
 `actions/checkout@v4` e `actions/setup-node@v4`; da aggiornare in seguito,
 senza effetti oggi.
+
+
+---
+
+## 14. Verifica AQ17 prima delle migrazioni (istruzioni operative)
+
+**Scopo:** confermare in produzione, **in sola lettura**, che i due trigger di
+notifica push hanno la forma su cui sono state costruite e testate le migrazioni
+`20261125200000` (notifiche `new_opportunities`) e `20261125202000`
+(notifiche `price_drop`). Le query non modificano nulla: sono `SELECT` sui
+cataloghi di sistema e sono state eseguite con successo dentro una transazione
+`READ ONLY`, che rifiuta qualsiasi scrittura.
+
+### 14.1 File e query
+- File: `supabase/audit/p0_verifica_produzione_sola_lettura.sql`, nel branch
+  `claude/confident-knuth-yvuju7` (scheda "Files changed" della PR #68).
+- Query da eseguire, **una alla volta**:
+  1. **AQ17**: blocco che inizia con `-- AQ17 · Trigger di notifica push`.
+  2. **AQ17b**: blocco che inizia con `-- AQ17b · Prerequisiti tecnici`.
+- Le altre query del file non servono per questa verifica.
+
+### 14.2 Come eseguirle
+1. Supabase Dashboard → progetto NMRE → **SQL Editor** → **New query**.
+2. Come prima riga scrivere `set transaction read only;`. Poi incollare **solo**
+   la `select` di AQ17, fino al punto e virgola. Le righe di commento (`--`) si
+   possono includere.
+3. **Run**. L'editor mostra il risultato dell'ultima istruzione, cioè la `select`.
+4. Ripetere con una nuova query per AQ17b, sempre preceduta da
+   `set transaction read only;`.
+5. Non eseguire altro. In particolare non eseguire i file di `supabase/migrations/`
+   né quelli di `supabase/rollback/`.
+
+Cosa si può condividere: definizioni dei trigger, nomi delle funzioni e valori
+true/false sono schema, non dati personali. Il codice delle funzioni
+(`pg_get_functiondef`) non va condiviso.
+
+### 14.3 Risultati attesi
+
+**AQ17**: almeno due righe. Altre righe con `crea_notifiche = false` (per
+esempio trigger di aggiornamento delle date) non sono rilevanti.
+
+| Colonna | Riga `annunci_candidati` | Riga `annunci_candidati_notifiche` |
+|---|---|---|
+| `funzione` | `private.nmre_notify_candidate_insert` | il nome della funzione dei ribassi (annotarlo) |
+| `definizione_trigger` | `CREATE TRIGGER … AFTER INSERT ON public.annunci_candidati FOR EACH ROW EXECUTE FUNCTION private.nmre_notify_candidate_insert()`, **senza** `WHEN` e senza argomenti tra le parentesi | `… AFTER INSERT` e/o `UPDATE … FOR EACH ROW [WHEN (…)] EXECUTE FUNCTION …`, senza `DELETE` né `TRUNCATE` |
+| `abilitazione` | `O` | `O` |
+| `per_riga` | true | true |
+| `before` | false | false |
+| `su_insert` | true | true e/o `su_update` = true |
+| `su_update` | false | indifferente |
+| `ha_condizione_when` | false | indifferente (se presente viene conservata) |
+| `crea_notifiche` | true | true |
+| `categoria_new_opportunities` | true | indifferente |
+| `riguarda_price_drop` | indifferente | **true** |
+| `considera_tipo_venditore` | false | false |
+| `gia_protetto` | **false** | **false** |
+
+**AQ17b**: una sola riga.
+
+| Colonna | Valore atteso |
+|---|---|
+| `funzione_notifica_candidati_esiste` | true |
+| `trigger_che_usano_funzione_candidati` | 1 |
+| `trigger_notifica_su_storico` | 1 |
+| `trigger_storico_con_delete_o_truncate` | 0 |
+| `trigger_storico_per_istruzione_o_before` | 0 |
+| `funzione_supporto_esiste` | **false** |
+| `tabella_backup_esiste` | **false** |
+| `tipo_candidate_id` | `uuid` |
+| `tipo_id_candidati` | `uuid` |
+| `tipo_tipo_venditore` | `text` |
+
+Questi sono esattamente i valori ottenuti eseguendo le due query sul database
+di prova con i trigger che riproducono il comportamento osservato (§3.2–3.3).
+
+### 14.4 Condizioni per autorizzare le migrazioni
+Le migrazioni 1 e 1-bis (§7.1) si possono autorizzare solo se **tutte** le
+condizioni del §14.3 sono soddisfatte, cioè:
+1. un solo trigger su `annunci_candidati` usa `private.nmre_notify_candidate_insert`,
+   ed è AFTER INSERT FOR EACH ROW, senza WHEN, attivo (`O`), non protetto;
+2. un solo trigger su `annunci_candidati_notifiche` crea notifiche: AFTER FOR EACH
+   ROW, su INSERT e/o UPDATE, senza DELETE o TRUNCATE, riguarda `price_drop`,
+   attivo, non protetto;
+3. la funzione di supporto e la tabella di backup **non** esistono ancora;
+4. i tipi delle colonne sono quelli attesi;
+5. nessuna delle due funzioni considera già `tipo_venditore`.
+
+Dopo l'applicazione, rieseguire AQ17 e AQ17b. Atteso:
+- `gia_protetto = true` e `ha_condizione_when = true` su entrambe le righe;
+- `funzione_supporto_esiste = true` e `tabella_backup_esiste = true`;
+- nella definizione del trigger dei ribassi, l'eventuale condizione originale
+  ancora presente insieme a `nmre_candidate_is_agency`.
+
+### 14.5 Quando fermarsi (non applicare nulla e riesaminare insieme)
+| Caso | Perché |
+|---|---|
+| Una query restituisce un errore | Lo schema non è quello atteso |
+| Manca la riga di una delle due tabelle, oppure `funzione` su `annunci_candidati` non è `private.nmre_notify_candidate_insert` | Le migrazioni non troverebbero il trigger (si fermerebbero da sole, ma va capito dove nascono le push) |
+| Più di una riga con `crea_notifiche = true` sulla stessa tabella, oppure `trigger_notifica_su_storico` ≠ 1 | Esiste un altro percorso di notifica non coperto |
+| Il trigger dei candidati ha `su_update = true`, `ha_condizione_when = true`, argomenti nella definizione, `before = true` o `per_riga = false` | Forma diversa da quella testata: la migrazione 1 si fermerebbe |
+| Il trigger dei ribassi ha `before = true`, `per_riga = false`, DELETE o TRUNCATE (`trigger_storico_con_delete_o_truncate` > 0), oppure né INSERT né UPDATE | Forma diversa da quella testata: la migrazione 1-bis si fermerebbe |
+| `riguarda_price_drop = false` sul trigger dello storico, oppure `crea_notifiche = false` mentre le push di ribasso arrivano | Il trigger trovato non è quello delle push di ribasso: le notifiche nascono altrove (per esempio una funzione richiamata indirettamente) |
+| `categoria_new_opportunities = false` sul trigger dei candidati | La funzione potrebbe produrre altre categorie: va riletto il codice |
+| `gia_protetto = true`, `funzione_supporto_esiste = true` o `tabella_backup_esiste = true` | Una migrazione o un tentativo precedente risulta già presente: non va riapplicata senza capire lo stato |
+| `abilitazione` diversa da `O` | Il trigger è disattivato o in modalità replica: va chiarito prima |
+| `considera_tipo_venditore = true` | La funzione filtra già per tipo: la protezione potrebbe essere ridondante o in conflitto |
+| Tipi diversi da `uuid` / `uuid` / `text` | La condizione aggiunta dalla migrazione 1-bis non sarebbe valida |
