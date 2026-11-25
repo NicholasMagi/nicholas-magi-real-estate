@@ -641,6 +641,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <div class="nmre-menu-items">
         <button type="button" data-nmre-nav="candidateSection" data-nmre-label="Nuove opportunità"><span class="nmre-menu-item-icon">⌕</span><span><strong>Nuove opportunità</strong><small>Email da verificare</small></span></button>
         <button type="button" data-nmre-nav="archiveSection" data-nmre-label="Archivio annunci"><span class="nmre-menu-item-icon">▤</span><span><strong>Archivio annunci</strong><small>Annunci già acquisiti nel gestionale</small></span></button>
+        <button type="button" data-nmre-nav="trashSection" data-nmre-label="Cestino"><span class="nmre-menu-item-icon">♲</span><span><strong>Cestino</strong><small>Ripristino entro 365 giorni</small></span></button>
       </div>
     </div>
     <div class="nmre-menu-group">
@@ -1347,6 +1348,10 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div id="listingList"><p class="hint">Caricamento annunci...</p></div>
 <div id="listMsg" class="status"></div>
 </section>
+<section id="trashSection" class="panel dash-section-anchor" hidden>
+ <div class="topline"><div><h2>Cestino</h2><p class="hint">Gli annunci restano recuperabili per 365 giorni dalla data di eliminazione. Il ripristino li riporta nell’Archivio con tutti i dati originali.</p></div><button class="secondary" id="refreshTrash" type="button">Aggiorna</button></div>
+ <div id="trashSummary" class="hint">Caricamento cestino…</div><div id="trashList"><p class="hint">Caricamento annunci eliminati…</p></div><div id="trashMsg" class="status" aria-live="polite"></div>
+</section>
 </div></div>
 <p class="hint">I dati sono associati al Suo account e protetti dalle regole di sicurezza di Supabase.</p>
 
@@ -1383,6 +1388,7 @@ let appBootUserId = null;
 let appBootPromise = null;
 let appBootGeneration = 0;
 let listingCache = [];
+let trashCache = [];
 let candidateCache = [];
 let sellerRegistryCache = [];
 let insightsCanImport = false;
@@ -1691,7 +1697,7 @@ async function removeSellerRegistryEntry(id){
 
 const NMRE_VIEW_LABELS={
   dashboard:"Panoramica",
-  candidateSection:"Nuove opportunità",archiveSection:"Archivio annunci",
+  candidateSection:"Nuove opportunità",archiveSection:"Archivio annunci",trashSection:"Cestino",
   callCenter:"Centro telefonate",nmreCrm:"CRM",followupSection:"Richiami programmati",
   newListingSection:"Registra immobile",propertyMapSection:"Mappa immobili",marketAnalysisSection:"Analisi di mercato",
   salesPerformancePanel:"Performance commerciale",settingsSection:"Impostazioni"
@@ -1710,7 +1716,7 @@ function nmreToggleMenu(){
 }
 function nmreShowView(viewId,options={}){
    if(viewId==="automationSection")viewId="settingsSection";
-  const allowed=["dashboard","nmreCrm","settingsSection","marketAnalysisSection","automationSection","candidateSection","newListingSection","followupSection","archiveSection","propertyMapSection"];
+  const allowed=["dashboard","nmreCrm","settingsSection","marketAnalysisSection","automationSection","candidateSection","newListingSection","followupSection","archiveSection","trashSection","propertyMapSection"];
   if(!allowed.includes(viewId))return false;
   allowed.forEach(id=>{const section=$(id);if(section)section.hidden=id==="automationSection"?viewId!=="settingsSection":id!==viewId;});
   if(viewId==="nmreCrm")nmreCrmSetTab(options.crmTab||"contatti");
@@ -1725,6 +1731,7 @@ function nmreShowView(viewId,options={}){
   });
   nmreCloseMenu();
   if(viewId==="propertyMapSection")requestAnimationFrame(()=>nmreRenderPropertyMap());
+   if(viewId==="trashSection")loadTrash();
   if(options.scroll!==false)requestAnimationFrame(()=>{
     if(options.scrollTarget)options.scrollTarget.scrollIntoView({behavior:"smooth",block:"start"});
     else $("appArea")?.scrollIntoView({behavior:"smooth",block:"start"});
@@ -1743,6 +1750,7 @@ function nmreNavigateToTarget(targetId,crmTab=null,label=null){
   else if(target.closest("#newListingSection"))viewId="newListingSection";
   else if(target.closest("#followupSection"))viewId="followupSection";
   else if(target.closest("#archiveSection"))viewId="archiveSection";
+   else if(target.closest("#trashSection"))viewId="trashSection";
   else if(target.closest("#propertyMapSection"))viewId="propertyMapSection";
   if(viewId==="nmreCrm"&&!crmTab)crmTab="contatti";
   const isRoot=targetId===viewId;
@@ -5584,7 +5592,7 @@ async function loadListings(){
   const pageSize=500;
   for(let offset=0;;offset+=pageSize){
     const {data:page,error}=await supabase.from("annunci")
-      .select("*").order("created_at",{ascending:false})
+      .select("*").is("deleted_at",null).order("created_at",{ascending:false})
       .order("id",{ascending:true}).range(offset,offset+pageSize-1);
     if(error){
       $("listingList").innerHTML="";
@@ -6052,16 +6060,53 @@ async function addInteraction(id,details){
   await loadInteractions(id,details); await loadListings();
 }
 async function deleteListing(id){
-  if(!confirm("Vuole eliminare questo annuncio?"))return;
-
-  const {error}=await supabase.from("annunci").delete().eq("id",id).eq("owner_id",currentUser.id);
-
-  if(error){
-    msg("listMsg",error.message,"error");
-    return;
-  }
-
+  if(!confirm("Spostare questo annuncio nel Cestino? Rimarrà recuperabile per 365 giorni."))return;
+  const {error}=await supabase.from("annunci").update({deleted_at:new Date().toISOString()})
+    .eq("id",id).eq("owner_id",currentUser.id).is("deleted_at",null);
+  if(error){msg("listMsg","Spostamento nel Cestino non riuscito: "+error.message,"error");return;}
+  msg("listMsg","Annuncio spostato nel Cestino. Potrà ripristinarlo entro 365 giorni.","success");
   await loadListings();
+  if(nmreCurrentViewId==="trashSection")await loadTrash();
+}
+function trashExpiry(item){
+  const deletedAt=new Date(item.deleted_at),expiresAt=new Date(deletedAt.getTime()+365*86400000);
+  return {deletedAt,expiresAt,remaining:Math.max(0,Math.ceil((expiresAt.getTime()-Date.now())/86400000))};
+}
+function renderTrash(){
+  const box=$("trashList"),summary=$("trashSummary");if(!box||!summary)return;
+  summary.textContent=trashCache.length+" annunci nel Cestino · eliminazione automatica dopo 365 giorni.";
+  if(!trashCache.length){box.innerHTML='<p class="hint">Il Cestino è vuoto. Gli annunci eliminati dall’Archivio compariranno qui.</p>';return;}
+  box.innerHTML=trashCache.map(item=>{
+    const x=trashExpiry(item),deleted=Number.isNaN(x.deletedAt.getTime())?"Data non disponibile":x.deletedAt.toLocaleString("it-IT"),expires=Number.isNaN(x.expiresAt.getTime())?"—":x.expiresAt.toLocaleDateString("it-IT");
+    const details=[item.comune,item.indirizzo,item.portale].filter(Boolean).map(safe).join(" · ");
+    const link=item.url?'<a href="'+safe(validUrl(item.url)||"#")+'" target="_blank" rel="noopener noreferrer">Apri annuncio originale</a>':"Link originale non disponibile";
+    return '<article class="listing"><div style="min-width:0;flex:1"><h3>'+safe(item.titolo||"Immobile senza titolo")+'</h3><div class="meta">'+details+'</div><div class="price">'+euro(item.prezzo)+'</div><div class="meta">Eliminato il: '+safe(deleted)+'<br>Eliminazione definitiva prevista: '+safe(expires)+' · <strong>'+x.remaining+' giorni rimanenti</strong></div><div class="meta">'+link+'</div></div><div class="actions" style="align-content:flex-start;justify-content:flex-end"><button class="gold" type="button" data-restore-listing="'+safe(item.id)+'">Ripristina</button><button class="danger" type="button" data-permanent-delete="'+safe(item.id)+'">Elimina definitivamente</button></div></article>';
+  }).join("");
+  box.querySelectorAll("[data-restore-listing]").forEach(b=>b.addEventListener("click",()=>restoreListing(b.dataset.restoreListing)));
+  box.querySelectorAll("[data-permanent-delete]").forEach(b=>b.addEventListener("click",()=>permanentlyDeleteListing(b.dataset.permanentDelete)));
+}
+async function loadTrash(){
+  if(!currentUser)return;msg("trashMsg","Caricamento Cestino…");
+  const rows=[],pageSize=500;
+  for(let offset=0;;offset+=pageSize){
+    const {data,error}=await supabase.from("annunci").select("*").not("deleted_at","is",null).order("deleted_at",{ascending:false}).order("id",{ascending:true}).range(offset,offset+pageSize-1);
+    if(error){msg("trashMsg","Impossibile caricare il Cestino: "+error.message,"error");return;}
+    rows.push(...(data||[]));if(!data||data.length<pageSize)break;
+  }
+  trashCache=rows;renderTrash();msg("trashMsg",rows.length?"Cestino aggiornato.":"","success");
+}
+async function restoreListing(id){
+  if(!confirm("Ripristinare questo annuncio nell’Archivio? Tutti i dati e lo storico CRM verranno mantenuti."))return;
+  const {data,error}=await supabase.from("annunci").update({deleted_at:null}).eq("id",id).eq("owner_id",currentUser.id).not("deleted_at","is",null).select("id");
+  if(error){msg("trashMsg","Ripristino non riuscito: "+error.message,"error");return;}
+  if(!data?.length){msg("trashMsg","Annuncio non trovato nel Cestino o già ripristinato.","error");return;}
+  msg("trashMsg","Annuncio ripristinato nell’Archivio.","success");await Promise.all([loadListings(),loadTrash()]);
+}
+async function permanentlyDeleteListing(id){
+  if(!confirm("Eliminare definitivamente questo annuncio? L’operazione non è reversibile. Lo storico delle interazioni e le schede immobili CRM collegate verranno conservati, ma non saranno più collegate a questo annuncio."))return;
+  const {error}=await supabase.from("annunci").delete().eq("id",id).eq("owner_id",currentUser.id).not("deleted_at","is",null);
+  if(error){msg("trashMsg","Eliminazione definitiva non riuscita: "+error.message,"error");return;}
+  msg("trashMsg","Annuncio eliminato definitivamente. I dati CRM collegati sono stati conservati.","success");await Promise.all([loadTrash(),loadListings()]);
 }
 
 function renderFollowups(data){
@@ -6179,6 +6224,7 @@ $("exportCandidatesXlsx").addEventListener("click",()=>exportXlsx(candidateCache
 
 $("exportCsv").addEventListener("click",exportListingsCsv);
 $("refresh").addEventListener("click",loadListings);
+$("refreshTrash").addEventListener("click",loadTrash);
 
 const candidateTextFilters=["candidateSearch","candidatePriceMin","candidatePriceMax","candidateSurfaceMin","candidateSurfaceMax","candidateFromFilter","candidateToFilter"];
 const candidateSelectFilters=["candidateTownFilter","candidateTypeFilter","candidatePortalFilter","candidateSellerFilter","candidateQualityFilter"];
