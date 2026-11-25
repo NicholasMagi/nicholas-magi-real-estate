@@ -1633,7 +1633,7 @@ function nmreShowView(viewId,options={}){
    if(viewId==="automationSection")viewId="settingsSection";
   const allowed=["dashboard","nmreCrm","settingsSection","marketAnalysisSection","automationSection","candidateSection","newListingSection","followupSection","archiveSection","propertyMapSection"];
   if(!allowed.includes(viewId))return false;
-  allowed.forEach(id=>{const section=$(id);if(section)section.hidden=id!==viewId;});
+  allowed.forEach(id=>{const section=$(id);if(section)section.hidden=id==="automationSection"?viewId!=="settingsSection":id!==viewId;});
   if(viewId==="nmreCrm")nmreCrmSetTab(options.crmTab||"contatti");
   nmreCurrentViewId=options.targetId||viewId;
   const crmLabels={contatti:"Proprietari e contatti",immobili:"Immobili e incarichi",agenda:"Agenda appuntamenti"};
