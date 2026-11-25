@@ -1,6 +1,6 @@
 # NMRE Mobile
 
-App nativa iOS/Android del progetto Nicholas Magi Real Estate. È separata dalla PWA esistente e riutilizzerà il backend Supabase già operativo. Questa prima anteprima contiene struttura, navigazione e schermate visive: non legge ancora dati reali e non effettua scritture.
+App nativa iOS/Android del progetto Nicholas Magi Real Estate. È separata dalla PWA esistente e riutilizzerà il backend Supabase già operativo. La prima anteprima contiene la struttura nativa e la navigazione. È stata aggiunta la chat NOVA con motore deterministico senza API AI; autenticazione e dati operativi Supabase non sono ancora collegati, quindi NOVA non mostra conteggi o annunci finché non saranno completati M3/M4.
 
 ## Prima prova su iPhone o Android
 
@@ -28,6 +28,7 @@ npm install
 npm run typecheck
 npm run lint
 npm run check:expo
+npm run test:nova
 ```
 
 Il lockfile npm deve essere generato e committato dopo l'installazione in ambiente di sviluppo; non è stato generato durante la creazione remota dei file. Non avviare build di produzione in questa fase.
@@ -47,5 +48,11 @@ La build iOS richiede la configurazione delle credenziali di firma Apple/EAS. No
 - M0 audit: completato.
 - M1 documentazione: completata.
 - M2 scaffold Expo: avviato.
+- NOVA nativa: interfaccia e motore locale implementati; dati operativi non collegati.
 - Supabase Auth/dati reali: non collegati.
 - Preferiti, native push e ALBim: non implementati.
+
+
+## NOVA nativa
+
+Aprire la quinta scheda **NOVA** per usare l'assistente testuale. In questa fase può fornire aiuto generale e preparare una traccia telefonica; le richieste che dipendono dagli annunci o dal CRM dichiarano che i dati non sono ancora collegati. La cronologia resta nella memoria temporanea della schermata e viene persa quando la schermata viene rimontata. Non vengono salvati messaggi o dati personali sul dispositivo.
