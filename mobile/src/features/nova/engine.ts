@@ -167,7 +167,7 @@ function findDuplicate(
     if ((url && otherUrl && url === otherUrl) || isLikelySameProperty(candidate, other)) return true;
   }
   for (const other of listings) {
-    if ((url && url === canonicalUrl(null)) || isLikelySameProperty(candidate, other)) return true;
+    if (isLikelySameProperty(candidate, other)) return true;
   }
   return false;
 }
@@ -181,7 +181,7 @@ export function candidatePriority(candidate: NovaCandidate, now = new Date()): N
   };
 
   if (candidate.sellerClass === "Privato") add(25, "Privato riconosciuto");
-  else if (candidate.sellerClass === "Da verificare" || candidate.sellerClass === null) add(7, "Venditore da qualificare");
+  else if (candidate.sellerClass === "Da verificare") add(7, "Venditore da qualificare");
 
   const notificationDate = parseDate(candidate.notificationAt);
   const createdDate = parseDate(candidate.createdAt);
