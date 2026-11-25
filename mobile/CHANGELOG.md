@@ -1,5 +1,12 @@
 # NMRE Mobile — Changelog
 
+## 2026-11-25 — NOVA native Expo shell
+- Added the NOVA tab to the Expo app and a native text chat screen, visually aligned with NMRE's navy/gold mobile theme.
+- Added a pure typed TypeScript engine porting the PWA decision rules for candidate priority, data quality, possible duplicates, municipal filtering, action planning, callbacks, private classification, incomplete CRM qualification and documented price reductions.
+- The mobile screen intentionally uses a `not_connected` context until authentication and owner-scoped read-only repositories are implemented. Data-dependent commands therefore explain the limitation instead of returning invented records. Generic help and a reusable call script work locally.
+- Added a Node built-in test suite and `npm run test:nova`. The suite is committed but has not yet been executed in a local mobile workspace; no result is claimed.
+- No OpenAI/API requests, Supabase client, database write, migration, Edge Function deployment, production secret or PWA change was made. Voice and persistent/shared conversation memory remain deferred.
+
 ## 2026-11-25 — NOVA phase 1 (responsive PWA)
 - Renamed the existing web assistant to NOVA and replaced its OpenAI Edge Function invocation with deterministic browser-side command handling.
 - NOVA now uses the already-loaded candidate/archive caches and the existing commercial-priority score to summarize acquisition priorities, rank opportunities, show confirmed private sellers separately from unverified sellers, filter by known municipality, list due/overdue follow-ups, report seller-classification counts, summarize the archive and prepare a standard owner-call script. Opportunity results also include the existing completeness score, missing fields and possible duplicates.
