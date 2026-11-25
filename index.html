@@ -4843,7 +4843,7 @@ function renderCandidates(){
       +'<p class="candidate-quick-facts">'+safe(quickFacts||"Caratteristiche dell’immobile da completare")+'</p>'
       +'<div class="candidate-email-status">'+safe(sellerStateLabel)+' '+duplicateBadge+'</div>'
       +'</div>'
-      +'<div class="candidate-actions candidate-actions-primary">'+reviewAction+'<button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta email</button>'+linkHtml+'</div>'
+      +'<div class="candidate-actions candidate-actions-primary">'+reviewAction+linkHtml+'<button class="gold" type="button" data-confirm="'+safe(c.id)+'">Archivia</button><button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta email</button></div>'
       +'<details class="candidate-detail-panel" data-candidate-details>'
       +'<summary>Apri email e verifica del venditore</summary>'
       +'<div class="candidate-detail-content">'
@@ -4866,7 +4866,7 @@ function renderCandidates(){
       +'<div><label>Nome del proprietario o ragione sociale dell\'agenzia (facoltativo)</label><input data-field="seller_identity" value="'+safe(c.seller_identity||"")+'" placeholder="Es. Mario Rossi oppure Agenzia XYZ"></div>'
       +'<div class="row"><div><label>Verifica tipo venditore</label><select data-field="venditore"><option value="Da verificare" '+(c.tipo_venditore==="Da verificare"?"selected":"")+'>Da verificare</option><option value="Privato" '+(c.tipo_venditore==="Privato"?"selected":"")+'>Privato</option><option value="Agenzia" '+(c.tipo_venditore==="Agenzia"?"selected":"")+'>Agente / Agenzia</option></select></div></div>'
       +'<p class="candidate-verification-hint">Se conferma <strong>Privato</strong>, NMRE salva la verifica e prova a trasferire subito l’immobile nell’Archivio. Se seleziona <strong>Agenzia</strong>, l’email viene esclusa. Se non è certo, lasci <strong>Da verificare</strong>: resterà in questa coda.</p>'
-      +'<div class="candidate-actions candidate-detail-actions"><button class="secondary" type="button" data-enrich="'+safe(c.id)+'">Analizza pagina originale</button><button class="gold" type="button" data-confirm="'+safe(c.id)+'">Archivia nell’Archivio</button><button class="secondary" type="button" data-save-seller="'+safe(c.id)+'">Salva verifica venditore</button>'+(isPrivate?'<button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta</button>':"")+'</div>'
+      +'<div class="candidate-actions candidate-detail-actions"><button class="secondary" type="button" data-enrich="'+safe(c.id)+'">Analizza pagina originale</button><button class="secondary" type="button" data-save-seller="'+safe(c.id)+'">Salva verifica venditore</button>'+(isPrivate?'<button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta</button>':"")+'</div>'
       +'<div class="candidate-enrichment-result" data-enrichment-result="'+safe(c.id)+'"></div>'
       +'</div></details>'
       +'</article>';
