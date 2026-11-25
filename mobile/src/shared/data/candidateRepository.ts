@@ -124,6 +124,9 @@ export async function loadCandidatePage(
     throw new Error("Non è stato possibile caricare le opportunità. Verifichi la connessione e riprovi.");
   }
 
-  const items = (data ?? []).map((row: Record<string, unknown>) => mapCandidate(row));
+  // The project does not yet ship generated Database types. Keep the untyped
+  // PostgREST boundary explicit, then map each selected row into our domain model.
+  const rows = (data ?? []) as unknown as Record<string, unknown>[];
+  const items = rows.map(mapCandidate);
   return { items, total: count ?? items.length };
 }

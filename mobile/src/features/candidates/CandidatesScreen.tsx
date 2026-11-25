@@ -247,7 +247,7 @@ export function CandidatesScreen() {
             </Pressable>
           ) : candidates.status === "ready" && candidates.items.length > 0 ? (
             <Text style={styles.endNote}>Tutte le opportunità di questo filtro sono state caricate.</Text>
-          ) : null
+          ) : undefined
         }
       />
     </SafeAreaView>
