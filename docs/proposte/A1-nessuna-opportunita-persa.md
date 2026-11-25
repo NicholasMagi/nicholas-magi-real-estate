@@ -302,7 +302,7 @@ Vedi §13 per l'esito dettagliato, con i link alle esecuzioni.
 | Migrazione del trigger con il **codice reale** di `private.nmre_notify_candidate_insert` | Il codice non è nel repository; il test usa uno stub che riproduce il comportamento osservato (AQ12) | La migrazione verifica forma e nome prima di agire e si ferma se non corrispondono; dopo l'applicazione: AQ12 e un controllo del trigger |
 | Lettura reale di Gmail e Pub/Sub | Richiede credenziali e casella reali | Osservazione in produzione dopo la distribuzione (§7) |
 | Interfaccia contro Supabase reale | Nessun ambiente di prova | Verifica manuale dopo il passo 3 di §7 |
-| `deno check` di `nmre-search-engine` e `nmre-insights-sync` **in locale** | `esm.sh` non è raggiungibile da questo ambiente | Eseguito dal CI (§13) |
+| `deno check` di `nmre-search-engine` e `nmre-insights-sync` con gli import originali, **in locale** | `esm.sh` non è raggiungibile da questo ambiente (eseguito in locale su una copia con import npm equivalenti) | Eseguito dal CI con gli import originali: superato (§13) |
 | Test automatici dell'interfaccia nel CI (Playwright) | Prova eseguita solo in locale con Supabase simulato | Proposto per una fase successiva |
 
 ## 7. Distribuzione (solo dopo approvazione)
@@ -411,3 +411,83 @@ revoke all on table private.backup_candidati_scartati_20261125 from public, anon
 | `.github/workflows/validate-app.yml` | Nuovi test e job delle migrazioni |
 | `supabase/audit/p0_verifica_produzione_sola_lettura.sql` | Nota AQ10; AQ15–AQ16 |
 | Documenti | Questo rapporto, piano, P0, README |
+
+---
+
+## 12. Revisione tecnica finale (25/11/2026)
+
+| Requisito | Verifica | Esito |
+|---|---|---|
+| Nessuna opportunità scartata automaticamente | Ricerca di tutte le scritture di `stato = scartato` nel codice: restano solo azioni dell'utente con conferma e motivo (`discardCandidate`, classificazione manuale "Agenzia"). Rimossi D1 (sincronizzazione), D2 (interfaccia) e, nella revisione, lo scarto del connettore Insights (L23). Test: `retention_test.ts`, prova nel browser | ✅ |
+| Agenzie conservate senza notifiche push | Le agenzie sono inserite come candidati; la condizione WHEN della migrazione impedisce la chiamata alla funzione di notifica (test 🧪, anche in CI). Recupero e riclassificazione sono aggiornamenti, non inserimenti: il trigger (solo INSERT) non scatta. **Condizione:** migrazione applicata prima della funzione (§7.1, passi 1 e 2) | ✅ con prerequisito |
+| Ribassi e nuove notifiche sugli scartati visibili | Ribasso → riapertura (anche per le agenzie: "Ribasso dopo lo scarto"); senza ribasso → "Nuova notifica dopo lo scarto" con data e dati essenziali e avviso in coda. Test Deno, frontend, browser | ✅ |
+| Avvisi dubbi protetti da RLS, solo il proprietario | RLS attiva; select e update solo per `owner_id = auth.uid()`; update limitato a 3 colonne; nessun insert/delete per l'app; `anon` escluso. 12 test 🧪, anche in CI | ✅ |
+| Rollback documentati e testati | §7.2; rollback del trigger e degli avvisi dubbi eseguiti nei test (anche in CI); rollback di funzione e frontend tramite versione precedente e revert | ✅ |
+| Nessun problema introdotto nella sincronizzazione Gmail | Vedi sotto | ✅ con le osservazioni elencate |
+
+**Sincronizzazione Gmail: cosa ho ricontrollato**
+- **Cursore:** invariato. Tutti i nuovi errori vengono sollevati **prima** del
+  salvataggio del cursore, quindi un errore fa ritentare l'esecuzione e non fa
+  perdere messaggi.
+- **Interruttori:**
+  - `NMRE_CAPTURE_DUBIOUS_ALERTS` spento → nessun accesso alla nuova tabella;
+  - `NMRE_KEEP_AGENCY_CANDIDATES=false` → comportamento precedente per le agenzie.
+- **Classificazioni manuali:** mai toccate dalla sincronizzazione (test).
+- **Query in più per esecuzione:**
+  - lettura dei candidati legati alle email non riconosciute, a blocchi di 200;
+  - una verifica dello storico notifiche, solo per i candidati scartati;
+  - con la Fase 2 attiva, una verifica dei candidati esistenti per gli avvisi dubbi.
+
+  Volume limitato.
+- **Email già associate a un candidato:** non vengono duplicate tra gli avvisi
+  dubbi (correzione della revisione finale).
+- **Copie storiche:** marcate come elaborate, quindi non vengono più rilette a
+  ogni ciclo.
+- **Messaggi di errore:** restano testi fissi, senza dati personali.
+
+**Osservazioni e rischi residui**
+- Un errore nei nuovi percorsi rende **bloccante** l'intera esecuzione, come già
+  accadeva per gli altri passaggi. Le prime 24 ore dopo il passo 2 vanno
+  sorvegliate con il monitor e Q10/Q11; rollback B.
+- L'interfaccia, ad app aperta, ogni 60 secondi carica anche gli scartati, il
+  loro storico notifiche e gli avvisi dubbi. Il carico aggiuntivo è contenuto, ma
+  aggrava il problema già noto del polling completo (P1.2 del piano).
+- Il test della migrazione del trigger usa uno stub della funzione reale (§6.3).
+- Errore di tipo preesistente in `nmre-insights-sync` (cache del token) emerso con
+  il nuovo controllo CI: corretto senza cambiare il comportamento.
+
+---
+
+## 13. GitHub Actions sulla Pull Request #68
+
+Pull Request Draft: [NicholasMagi/nicholas-magi-real-estate#68](https://github.com/NicholasMagi/nicholas-magi-real-estate/pull/68).
+Workflow "Validate application code", eseguito su `pull_request` (commit di merge
+con `main`).
+
+| Run | Commit | Job `validate` | Job `migrations` | Note |
+|---|---|---|---|---|
+| [45702693682](https://github.com/NicholasMagi/nicholas-magi-real-estate/actions/runs/45702693682) | `83f467b` | ✅ | ✅ (28/28, "Tutti i test delle migrazioni superati" letto nel log) | Prima esecuzione |
+| [45703041375](https://github.com/NicholasMagi/nicholas-magi-real-estate/actions/runs/45703041375) | `5725c31` | ❌ | ✅ | `deno check` esteso a `nmre-insights-sync` ha rivelato un errore di tipo **preesistente** (`index.ts:82`, token in cache `string \| null`) |
+| [45703247449](https://github.com/NicholasMagi/nicholas-magi-real-estate/actions/runs/45703247449) | `368586a` | ✅ | ✅ | Errore corretto senza cambiare il comportamento |
+
+Dettaglio del job `validate` (run 45703247449, verificato nei log):
+
+| Passo | Esito |
+|---|---|
+| `deno check` di `nmre-gmail-scheduled`, `nmre-gmail-push`, `nmre-search-engine`, `nmre-insights-sync` | ✅ |
+| Test Deno di parser e cronologia | 18 superati, 0 falliti |
+| Test Deno di conservazione, filtro e avvisi dubbi | 33 superati, 0 falliti (16 + 7 + 10) |
+| Test del pannello di recupero (Node) | 24 superati |
+| Test del connettore Insights | 6 superati |
+| Sintassi del JavaScript incorporato | ✅ |
+| ID HTML univoci | 362 verificati |
+
+Job `migrations`: PostgreSQL 16 usa e getta (container di servizio). Lo script
+si interrompe al primo controllo fallito, quindi l'esito verde implica tutti i 28
+controlli superati. Nel log di PostgreSQL compaiono gli errori **attesi** dei test
+negativi: forma inattesa del trigger, RLS, permessi, vincolo `https`, duplicato,
+accesso ritirato dal rollback.
+
+Avviso non bloccante: GitHub segnala la deprecazione di Node.js 20 per
+`actions/checkout@v4` e `actions/setup-node@v4`; da aggiornare in seguito,
+senza effetti oggi.
