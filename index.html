@@ -3742,7 +3742,8 @@ function novaRespond(message){
   if(!intent)return novaHelp();
   if(intent!=="help")novaLastIntent=intent;
 
-  const scope=town||(query.length<=35?novaLastTown:null);
+  const isContextualFollowup=/^(e |anche |e invece |e poi )/.test(query);
+  const scope=town||(isContextualFollowup?novaLastTown:null);
   if(intent==="call")return novaReplyCall(scope);
   if(intent==="action-plan")return novaReplyActionPlan(scope);
   if(intent==="price-drops")return novaReplyPriceDrops(scope);
