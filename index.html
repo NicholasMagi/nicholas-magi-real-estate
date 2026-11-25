@@ -5568,7 +5568,7 @@ function renderListings(){
       +'<label>Richiamare il</label><input type="date" data-new-followup>'
       +'<div class="actions"><button class="secondary" data-add-interaction>Registra interazione</button></div>'
       +'<div class="crm-history" data-interaction-history>Aprire la scheda per caricare lo storico.</div>'
-      +'</details></div><button class="danger" data-delete="'+safe(item.id)+'">Elimina</button></article>';
+      +'</details></div><button class="danger" data-delete="'+safe(item.id)+'">Sposta nel Cestino</button></article>';
   }).join("");
 
   $("listingList").querySelectorAll("[data-delete]").forEach(btn=>{btn.addEventListener("click",()=>deleteListing(btn.dataset.delete));});
