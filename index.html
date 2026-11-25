@@ -3659,7 +3659,7 @@ function novaReplyFollowups(town){
     :"Non risultano richiami o appuntamenti in scadenza nei prossimi sette giorni nell'archivio caricato.";
   const overdue=rows.filter(row=>row.days<0).length;
   const dueToday=rows.filter(row=>row.days===0).length;
-  const header="Ho trovato "+rows.length+" attività entro i prossimi sette giorni: "+overdue+" in ritardo e "+dueToday+" da fare oggi.";
+  const header="Ho trovato "+rows.length+" attività entro i prossimi sette giorni"+(town?" a "+town:"")+": "+overdue+" in ritardo e "+dueToday+" da fare oggi.";
   return header+"\n\n"+rows.slice(0,8).map(novaFollowupText).join("\n\n")
     +(rows.length>8?"\n\nVisualizzate le prime 8 attività in ordine di scadenza.":"");
 }
