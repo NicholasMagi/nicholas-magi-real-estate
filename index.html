@@ -1426,7 +1426,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-manual-archive-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-trash-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1501,7 +1501,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261125-manual-archive-1");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261125-trash-1");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -4118,7 +4118,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-manual-archive-1");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-trash-1");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);
