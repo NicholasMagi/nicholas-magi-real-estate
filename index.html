@@ -4542,8 +4542,8 @@ function candidateQuality(item,candidates,archive,now=new Date()){
   if(String(item.tipologia_immobile||"").trim())qualityScore+=10;
   if(Number(item.superficie_mq)>0)qualityScore+=15;
   if(Number(item.locali)>0)qualityScore+=5;
-  if(specificLink)qualityScore+=15;
-  if(hasNotificationDate)qualityScore+=10;
+  if(specificLink||(isManualOpportunity&&!!validUrl(item.url)))qualityScore+=15;
+  if(hasNotificationDate&&!isManualOpportunity)qualityScore+=10;
   if(item.tipo_venditore==="Privato"&&Number(item.seller_confidence)>=90)qualityScore+=10;
   if(String(item.contatto||"").trim())qualityScore+=5;
 
@@ -4696,7 +4696,7 @@ function renderCandidates(){
     const notificationDate=quality.hasNotificationDate
       ?new Date(notificationTimestamp).toLocaleDateString("it-IT"):"Data email non indicata";
     const url=validUrl(c.url);
-    const linkHtml=quality.specificLink
+    const linkHtml=quality.specificLink||(isManualOpportunity&&!!url)
       ?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
       :'<span class="candidate-link-warning">Link diretto non verificato: apertura sospesa</span>';
     const ageText=isManualOpportunity
@@ -4704,13 +4704,13 @@ function renderCandidates(){
       :quality.hasNotificationDate
         ?(quality.notificationDays===0?"Email ricevuta oggi":"Email ricevuta "+quality.notificationDays+" giorni fa")
         :"Data di ricezione dell'email non disponibile";
-    const linkText=quality.specificLink?"Link specifico individuato":(quality.hasValidUrl?"Collegamento generico o non riconosciuto":"Nessun collegamento disponibile");
+    const linkText=isManualOpportunity&&url?"Link inserito manualmente":(quality.specificLink?"Link specifico individuato":(quality.hasValidUrl?"Collegamento generico o non riconosciuto":"Nessun collegamento disponibile"));
     const missingText=quality.missing.length?"Dati essenziali mancanti: "+quality.missing.join(", "):"Dati essenziali presenti";
     const recommendedText=quality.recommendedMissing.length?"Da verificare sull'annuncio: "+quality.recommendedMissing.join(", "):"Recapito diretto disponibile";
     const duplicateText=quality.duplicate
       ?"Possibile duplicato nell'"+(quality.duplicate.scope==="archivio"?"archivio":"elenco opportunità")+": "+(quality.duplicate.item.titolo||"annuncio simile")+" ("+quality.duplicate.reason+")"
       :"Nessun duplicato evidente individuato";
-    const tone=quality.duplicate||!quality.specificLink||quality.oldNotification?"warning":quality.incomplete||!quality.hasNotificationDate?"review":"ok";
+    const tone=quality.duplicate||(!quality.specificLink&&!isManualOpportunity)||quality.oldNotification?"warning":quality.incomplete||!quality.hasNotificationDate?"review":"ok";
     const qualityHtml='<div class="candidate-quality candidate-quality-'+tone+'"><strong>Controllo qualità:</strong> '+safe(linkText)+' · '+safe(ageText)+' · '+safe(missingText)+'<br>'+safe(recommendedText)+'<br>'+safe(duplicateText)+'</div>';
     const duplicateTarget=quality.duplicate?.item||null;
     const duplicateTargetVisible=!!duplicateTarget&&data.some(entry=>String(entry.id)===String(duplicateTarget.id));
@@ -5382,7 +5382,7 @@ async function saveManualCandidate(event){
   let price,surface,rooms,bedrooms,bathrooms;
   try{
     price=numeric("manualCandidatePrice","Prezzo",0,1000000000,false);
-    surface=numeric("manualCandidateSurface","Superficie",1,100000,false);
+    surface=numeric("manualCandidateSurface","Superficie",1,100000,1);
     rooms=numeric("manualCandidateRooms","Locali",0.5,100,false);
     bedrooms=numeric("manualCandidateBedrooms","Camere",0,100,1);
     bathrooms=numeric("manualCandidateBathrooms","Bagni",0,100,1);
