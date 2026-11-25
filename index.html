@@ -1086,20 +1086,20 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 </div></div>
 <p class="hint">I dati sono associati al Suo account e protetti dalle regole di sicurezza di Supabase.</p>
 
-<div id="nmreAiPanel" class="nmre-ai-panel" hidden role="dialog" aria-label="NMRE Intelligence">
-  <div class="nmre-ai-head"><div><strong>NMRE Intelligence</strong><small>Il Suo assistente di acquisizione</small></div><button id="nmreAiClose" class="nmre-ai-close" type="button" aria-label="Chiudi assistente">✕</button></div>
-  <div class="nmre-ai-context">Può consultare i dati operativi NMRE. Numeri di telefono, email e indirizzi riconoscibili vengono esclusi o oscurati. I dati operativi selezionati e il messaggio vengono inviati a OpenAI per generare la risposta.</div>
-  <div id="nmreAiMessages" class="nmre-ai-messages" aria-live="polite"><div class="nmre-ai-msg assistant">Buonasera. Sono NMRE Intelligence. Posso aiutarLa a individuare le priorità, preparare telefonate e analizzare le opportunità presenti nel Suo gestionale.</div></div>
-  <div id="nmreAiTyping" class="nmre-ai-typing" hidden>Sto analizzando i dati NMRE…</div>
+<div id="nmreAiPanel" class="nmre-ai-panel" hidden role="dialog" aria-label="NOVA, assistente operativo NMRE">
+  <div class="nmre-ai-head"><div><strong>NOVA</strong><small>Assistente operativo NMRE · modalità senza API AI</small></div><button id="nmreAiClose" class="nmre-ai-close" type="button" aria-label="Chiudi NOVA">✕</button></div>
+  <div class="nmre-ai-context">NOVA analizza nel browser i dati che NMRE ha già caricato. I messaggi non vengono inviati a OpenAI e la conversazione non genera chiamate API AI. Le risposte si basano sui dati disponibili e su criteri verificabili.</div>
+  <div id="nmreAiMessages" class="nmre-ai-messages" aria-live="polite"><div class="nmre-ai-msg assistant">Buongiorno. Sono NOVA, il Suo assistente operativo. Posso ordinare le opportunità, individuare i richiami, distinguere i privati già riconosciuti da quelli da verificare e preparare copioni telefonici.</div></div>
+  <div id="nmreAiTyping" class="nmre-ai-typing" hidden>NOVA sta elaborando…</div>
   <div class="nmre-ai-suggestions">
     <button type="button" data-ai-prompt="Quali sono le mie priorità di acquisizione oggi?">Priorità di oggi</button>
-    <button type="button" data-ai-prompt="Analizza le opportunità più promettenti nel CRM.">Migliori opportunità</button>
-    <button type="button" data-ai-prompt="Preparami una telefonata efficace per un proprietario privato.">Prepara telefonata</button>
+    <button type="button" data-ai-prompt="Mostrami le migliori 5 opportunità.">Migliori opportunità</button>
+    <button type="button" data-ai-prompt="Preparami una telefonata per un proprietario privato.">Prepara telefonata</button>
     <button type="button" data-ai-prompt="Quali richiami sto trascurando?">Richiami</button>
   </div>
-  <form id="nmreAiForm" class="nmre-ai-compose"><textarea id="nmreAiInput" rows="1" maxlength="2000" placeholder="Chieda qualcosa al Suo assistente…"></textarea><button id="nmreAiSend" class="gold" type="submit">Invia</button></form>
+  <form id="nmreAiForm" class="nmre-ai-compose"><textarea id="nmreAiInput" rows="1" maxlength="2000" placeholder="Chieda qualcosa a NOVA…"></textarea><button id="nmreAiSend" class="gold" type="submit">Invia</button></form>
 </div>
-<button id="nmreAiLauncher" class="nmre-ai-launcher" type="button"><span class="nmre-ai-launcher-mark">✦</span><span>Assistente AI</span></button>
+<button id="nmreAiLauncher" class="nmre-ai-launcher" type="button" aria-label="Apri NOVA"><span class="nmre-ai-launcher-mark">✦</span><span>NOVA</span></button>
 
 </section>
 </main>
@@ -3310,8 +3310,209 @@ $("salesGoalsToggle").addEventListener("click",()=>{const form=$("salesGoalsForm
 $("salesGoalsForm").addEventListener("submit",saveSalesGoals);
 
 
-/* NMRE Intelligence assistant */
-let nmreAiHistory=[];
+/* NOVA — assistente operativo deterministico, senza API AI */
+let novaLastIntent = null;
+let novaLastTown = null;
+
+function novaParseDate(value){
+  if(!value)return null;
+  const text=String(value).trim();
+  const dateOnly=text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const date=dateOnly
+    ?new Date(Number(dateOnly[1]),Number(dateOnly[2])-1,Number(dateOnly[3]))
+    :new Date(text);
+  return Number.isNaN(date.getTime())?null:date;
+}
+
+function novaFindTown(message){
+  const query=" "+normalizedMatchText(message)+" ";
+  const known=[
+    "Castelfidardo","Osimo","Ancona","Jesi","Loreto","Recanati","Sirolo","Numana",
+    "Camerano","Falconara Marittima","Chiaravalle","Senigallia","Porto Recanati",
+    "Civitanova Marche","Macerata","Fermo","Montemarciano","Monte San Vito",
+    "Santa Maria Nuova","Maiolati Spontini","Monte Urano","Montecassiano",
+    "Morro d'Alba","Filottrano","Polverigi","Agugliano","Offagna","Ostra",
+    "Tolentino","Staffolo","Cupramontana","Monsano","Trecastelli","Corridonia",
+    "Montegranaro","Porto Sant'Elpidio","Porto San Giorgio"
+  ];
+  const cached=[...(Array.isArray(listingCache)?listingCache:[]),...(Array.isArray(candidateCache)?candidateCache:[])]
+    .map(item=>String(item.comune||"").trim()).filter(Boolean);
+  const towns=[...new Set([...known,...cached])].sort((a,b)=>b.length-a.length);
+  return towns.find(town=>query.includes(" "+normalizedMatchText(town)+" "))||null;
+}
+
+function novaRankCandidates(town){
+  const data=Array.isArray(candidateCache)?candidateCache:[];
+  return data
+    .filter(item=>!town||normalizedMatchText(item.comune)===normalizedMatchText(town))
+    .map(item=>({item,priority:candidatePriority(item)}))
+    .sort((a,b)=>b.priority.score-a.priority.score
+      ||(Date.parse(b.item.created_at||"")||0)-(Date.parse(a.item.created_at||"")||0));
+}
+
+function novaLimit(message,defaultValue=5){
+  const match=String(message||"").match(/\b(?:top|migliori|migliore|prime|primi|ultime|ultimi)\s*(\d{1,2})\b/i);
+  return match?Math.max(1,Math.min(10,Number(match[1]))):defaultValue;
+}
+
+function novaOpportunityText(row,index){
+  const item=row.item,priority=row.priority;
+  const title=String(item.titolo||"Annuncio immobiliare");
+  const details=[item.comune,item.tipologia_immobile,Number(item.superficie_mq)>0?Number(item.superficie_mq)+" m²":null]
+    .filter(Boolean).join(" · ");
+  const seller=item.tipo_venditore==="Privato"?"Privato riconosciuto":"Venditore da verificare";
+  const price=Number(item.prezzo)>0?euro(item.prezzo):"Prezzo non indicato";
+  const reasons=priority.reasons.slice(0,2).join(" · ")||priority.description;
+  return (index+1)+". "+title+"\n   "+(details||"Caratteristiche da completare")
+    +"\n   "+seller+" · "+price+" · priorità "+priority.score+"/100"
+    +"\n   Motivo: "+reasons;
+}
+
+function novaGetFollowups(days=7,town=null){
+  const today=new Date();
+  today.setHours(0,0,0,0);
+  const end=new Date(today);
+  end.setDate(end.getDate()+days);
+  return (Array.isArray(listingCache)?listingCache:[])
+    .filter(item=>item.prossimo_contatto_il
+      &&!["incarico_acquisito","non_interessato"].includes(item.stato_contatto||"da_contattare")
+      &&(!town||normalizedMatchText(item.comune)===normalizedMatchText(town)))
+    .map(item=>({item,date:novaParseDate(item.prossimo_contatto_il)}))
+    .filter(row=>row.date&&row.date<=end)
+    .map(row=>({item:row.item,date:row.date,days:Math.round((row.date.getTime()-today.getTime())/86400000)}))
+    .sort((a,b)=>a.date-b.date);
+}
+
+function novaFollowupText(row,index){
+  const item=row.item;
+  const when=row.days<0?"In ritardo di "+Math.abs(row.days)+" giorni"
+    :row.days===0?"Da fare oggi":"Tra "+row.days+" giorni";
+  const kind=item.stato_contatto==="appuntamento"?"Appuntamento":"Richiamo";
+  const date=row.date.toLocaleDateString("it-IT");
+  const property=String(item.titolo||"Immobile");
+  const details=[item.comune,Number(item.prezzo)>0?euro(item.prezzo):null].filter(Boolean).join(" · ");
+  return (index+1)+". "+property+"\n   "+[kind,when,date,details].filter(Boolean).join(" · ");
+}
+
+function novaReplyOpportunities(message,town){
+  const ranked=novaRankCandidates(town);
+  if(!ranked.length){
+    if(town)return "Nella coda attuale non risultano opportunità da verificare a "+town+". Non deduco annunci che non sono presenti nei dati caricati.";
+    return "Al momento la coda delle opportunità da verificare è vuota nei dati caricati da NMRE.";
+  }
+  const count=Math.min(novaLimit(message,5),ranked.length);
+  const title=town?"Le opportunità a "+town:"Le "+count+" opportunità con priorità commerciale più alta";
+  const lines=ranked.slice(0,count).map(novaOpportunityText);
+  return title+":\n\n"+lines.join("\n\n")
+    +"\n\nIl punteggio ordina il lavoro commerciale: non misura la probabilità di acquisire l'incarico e non certifica il venditore.";
+}
+
+function novaReplyFollowups(town){
+  const rows=novaGetFollowups(7,town);
+  if(!rows.length)return town
+    ?"Non risultano richiami o appuntamenti in scadenza nei prossimi sette giorni a "+town+"."
+    :"Non risultano richiami o appuntamenti in scadenza nei prossimi sette giorni nell'archivio caricato.";
+  const overdue=rows.filter(row=>row.days<0).length;
+  const dueToday=rows.filter(row=>row.days===0).length;
+  const header="Ho trovato "+rows.length+" attività entro i prossimi sette giorni: "+overdue+" in ritardo e "+dueToday+" da fare oggi.";
+  return header+"\n\n"+rows.slice(0,8).map(novaFollowupText).join("\n\n")
+    +(rows.length>8?"\n\nVisualizzate le prime 8 attività in ordine di scadenza.":"");
+}
+
+function novaReplyPriorities(town){
+  const followups=novaGetFollowups(7,town);
+  const overdue=followups.filter(row=>row.days<0).length;
+  const today=followups.filter(row=>row.days===0).length;
+  const candidates=novaRankCandidates(town).slice(0,3);
+  let answer="Ecco le priorità operative ricavate dai dati attualmente caricati";
+  if(town)answer+=" per "+town;
+  answer+=".\n\n";
+  answer+="RICHIAMI E APPUNTAMENTI\n";
+  answer+=followups.length
+    ?overdue+" in ritardo · "+today+" da fare oggi · "+followups.length+" entro sette giorni.\n"+followups.slice(0,3).map(novaFollowupText).join("\n\n")
+    :"Nessuna scadenza registrata entro i prossimi sette giorni.";
+  answer+="\n\nOPPORTUNITÀ DA LAVORARE\n";
+  answer+=candidates.length
+    ?candidates.map(novaOpportunityText).join("\n\n")
+    :"Nessuna opportunità da verificare presente nella coda.";
+  answer+="\n\nIl punteggio è un ordine di lavorazione basato su venditore, tempestività, territorio e completezza dei dati: non è una previsione di acquisizione.";
+  return answer;
+}
+
+function novaReplyPrivateCounts(){
+  const archive=Array.isArray(listingCache)?listingCache:[];
+  const candidates=Array.isArray(candidateCache)?candidateCache:[];
+  const archivePrivate=archive.filter(item=>item.tipo_venditore==="Privato").length;
+  const candidatePrivate=candidates.filter(item=>item.tipo_venditore==="Privato").length;
+  const candidateUnknown=candidates.filter(item=>item.tipo_venditore==="Da verificare"||!item.tipo_venditore).length;
+  return "Classificazione attualmente registrata:\n\n"
+    +"ARCHIVIO: "+archivePrivate+" immobili con venditore classificato come privato su "+archive.length+" annunci.\n"
+    +"CODA OPPORTUNITÀ: "+candidatePrivate+" privati riconosciuti e "+candidateUnknown+" venditori ancora da verificare su "+candidates.length+" candidati.\n\n"
+    +"Non considero un venditore privato solo perché l'annuncio sembra pubblicato da una persona: riporto esclusivamente la classificazione già presente nel gestionale. I due gruppi non vengono sommati per evitare doppi conteggi.";
+}
+
+function novaReplyArchive(){
+  const rows=Array.isArray(listingCache)?listingCache:[];
+  const count=status=>rows.filter(item=>(item.stato_contatto||"da_contattare")===status).length;
+  return "Riepilogo dell'archivio caricato:\n\n"
+    +rows.length+" annunci complessivi.\n"
+    +rows.filter(item=>item.tipo_venditore==="Privato").length+" venditori classificati come privati.\n"
+    +count("da_contattare")+" da contattare · "+count("primo_contatto")+" al primo contatto · "
+    +count("interessato")+" interessati · "+count("appuntamento")+" con appuntamento · "
+    +count("incarico_acquisito")+" incarichi acquisiti.\n\n"
+    +"Nella coda opportunità risultano "+(Array.isArray(candidateCache)?candidateCache.length:0)+" annunci da verificare.";
+}
+
+function novaReplyCall(town){
+  const place=town||"[comune]";
+  return "Ecco un copione iniziale per contattare un proprietario privato.\n\n"
+    +"«Buongiorno, sono un consulente di Ghergo Immobiliare. La contatto in merito al Suo annuncio per un immobile a "+place+". È ancora disponibile? E sto parlando direttamente con il proprietario?\n\n"
+    +"Le chiedo anche qual è il motivo principale della vendita e in quali tempi vorrebbe concluderla. Glielo domando perché, prima di proporLe un servizio, vorrei capire le Sue esigenze e verificare se possiamo esserLe realmente utili.\n\n"
+    +"Se lo ritiene interessante, possiamo fissare un breve incontro per esaminare l'immobile, confrontarci sul valore di mercato e valutare insieme la strategia di vendita. Quale giorno Le sarebbe più comodo?»\n\n"
+    +"Prima della chiamata verifichi che l'annuncio sia ancora attivo e che la classificazione del venditore sia attendibile. Il testo è una traccia da personalizzare, non una promessa di risultato o di condizioni contrattuali.";
+}
+
+function novaHelp(){
+  return "Per ora lavoro come assistente operativo basato su regole verificabili, senza generazione AI esterna. Può chiedermi:\n\n"
+    +"• «Quali sono le mie priorità di oggi?»\n"
+    +"• «Mostrami le migliori 5 opportunità a Osimo»\n"
+    +"• «Quali richiami sto trascurando?»\n"
+    +"• «Quanti privati ho?»\n"
+    +"• «Preparami una telefonata per un proprietario»\n"
+    +"• «Fammi il riepilogo dell'archivio»\n\n"
+    +"Posso usare solo i dati effettivamente caricati in NMRE. Non invento informazioni mancanti e non eseguo modifiche ai record.";
+}
+
+function novaRespond(message){
+  const query=normalizedMatchText(message);
+  const town=novaFindTown(message);
+  if(town)novaLastTown=town;
+
+  let intent=null;
+  if(/\b(telefonat|telefon|chiamat|chiam|copion|script|contattare un proprietario|prepara)\b/.test(query))intent="call";
+  else if(/\b(richiam|richiamo|richiami|scadenz|appuntament|agenda)\b/.test(query))intent="followups";
+  else if(/\b(priorit|oggi|cosa devo fare|cosa dovrei fare|da dove comincio)\b/.test(query))intent="priorities";
+  else if(/\b(privat|venditor)\b/.test(query))intent="private";
+  else if(/\b(opportunit|candidat|lead|miglior|punteggio|da verificare)\b/.test(query))intent="opportunities";
+  else if(/\b(archiv|riepilog|quanti immobili|annunci in totale)\b/.test(query))intent="archive";
+  else if(/\b(aiuto|aiutami|comandi|cosa sai fare|come funziona)\b/.test(query))intent="help";
+  else if(/\b(costo|costi|openai|api)\b/.test(query))return "NOVA non invia messaggi a OpenAI e non genera costi API AI per questa conversazione. Analizza nel browser i dati che NMRE ha già caricato. Restano separati gli eventuali consumi ordinari del gestionale e di Supabase.";
+  else if(/\b(ciao|salve|buongiorno|buonasera)\b/.test(query))return "Buongiorno. Sono pronta ad aiutarLa con le priorità, le opportunità e i richiami presenti in NMRE.";
+
+  if(!intent&&town&&novaLastIntent)intent=novaLastIntent;
+  if(!intent)return novaHelp();
+  if(intent!=="help")novaLastIntent=intent;
+
+  const scope=town||novaLastTown;
+  if(intent==="call")return novaReplyCall(scope);
+  if(intent==="followups")return novaReplyFollowups(scope);
+  if(intent==="priorities")return novaReplyPriorities(scope);
+  if(intent==="private")return novaReplyPrivateCounts();
+  if(intent==="opportunities")return novaReplyOpportunities(message,scope);
+  if(intent==="archive")return novaReplyArchive();
+  return novaHelp();
+}
+
 function nmreAiAppend(role,text,type=""){
  const box=$("nmreAiMessages"),item=document.createElement("div");
  item.className="nmre-ai-msg "+role+(type?" "+type:"");
@@ -3325,28 +3526,19 @@ function nmreAiOpen(){
 function nmreAiClose(){
  $("nmreAiPanel").hidden=true;$("nmreAiLauncher").hidden=false;
 }
-async function nmreAiSend(message){
+function nmreAiSend(message){
  const clean=String(message||"").trim();
  if(!clean||clean.length>2000||!supabase||!currentUser)return;
  const button=$("nmreAiSend"),input=$("nmreAiInput");
- button.disabled=true;$("nmreAiTyping").hidden=false;
+ button.disabled=true;
  nmreAiAppend("user",clean);
- nmreAiHistory.push({role:"user",content:clean});
  input.value="";
  try{
-  const {data,error}=await supabase.functions.invoke("nmre-ai-assistant",{body:{messages:nmreAiHistory.slice(-10)}});
-  if(error)throw new Error(error.message||"Servizio AI non raggiungibile.");
-  if(data?.code==="OPENAI_API_KEY_MISSING"){
-   throw new Error("L'interfaccia è pronta, ma manca la chiave API OpenAI sul server. Occorre configurare OPENAI_API_KEY nelle Edge Function Secrets di Supabase.");
-  }
-  if(!data?.success||!data?.answer)throw new Error(data?.error||"Risposta dell'assistente non disponibile.");
-  nmreAiHistory.push({role:"assistant",content:data.answer});
-  nmreAiHistory=nmreAiHistory.slice(-10);
-  nmreAiAppend("assistant",data.answer);
+  nmreAiAppend("assistant",novaRespond(clean));
  }catch(error){
-  nmreAiAppend("assistant",error.message||"Si è verificato un errore.", "error");
+  nmreAiAppend("assistant","Non sono riuscita a completare l'analisi locale: "+(error.message||"errore inatteso")+". Riprovi con una richiesta più specifica.","error");
  }finally{
-  $("nmreAiTyping").hidden=true;button.disabled=false;input.focus();
+  button.disabled=false;input.focus();
  }
 }
 $("nmreAiLauncher").addEventListener("click",nmreAiOpen);
