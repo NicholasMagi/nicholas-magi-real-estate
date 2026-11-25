@@ -1,7 +1,8 @@
 # Proposta tecnica P0 · Sicurezza, schema e affidabilità
 
-Versione 2 · aggiornata il 25/11/2026 con le verifiche di produzione in sola
-lettura eseguite dal titolare.
+Versione 3 · aggiornata il 25/11/2026 con le verifiche di produzione in sola
+lettura eseguite dal titolare (seconda serie: permessi dell'archiviazione
+automatica, analisi dei log Gmail, contatori del motore di acquisizione).
 
 Stato: **proposta da approvare**. Nessuna modifica è stata applicata al codice
 dell'applicazione, alle Edge Functions distribuite, al database di produzione,
@@ -23,7 +24,7 @@ Legenda delle fonti:
 | V1 | Tutte le tabelle dello schema `public` hanno RLS attiva | 🟢 |
 | V2 | `private.gmail_sync_lock` e `private.gmail_push_watch_state` hanno RLS disattivata; `anon` e `authenticated` non hanno USAGE sullo schema `private` né privilegi sulle tabelle | 🟢 |
 | V3 | `private.gmail_oauth_tokens`, `private.gmail_oauth_states`, `private.gmail_sync_state` hanno RLS attiva e nessuna policy; inaccessibili ai ruoli client | 🟢 |
-| V4 | `nmre_auto_archive_private_candidate` è SECURITY INVOKER, eseguibile solo da `authenticated`, usa `auth.uid()` e `owner_id` | 🟢 |
+| V4 | `nmre_auto_archive_private_candidate` è SECURITY INVOKER; EXECUTE concesso ad `authenticated` **e a `service_role`**; per gli utenti verifica `owner_id = auth.uid()`; gestisce esplicitamente il caso `service_role` con `auth.uid()` nullo | 🟢 (seconda verifica) |
 | V5 | `nmre-ai-assistant` è attiva in produzione alla versione 14 e verifica `NMRE_ALLOWED_USER_ID`; il codice non è nel repository | 🟢 + ✅ |
 | V6 | `nmre-push-send`, `nmre-search-engine`, `nmre-candidate-enrich` verificano il token utente ma non `NMRE_ALLOWED_USER_ID` | 🟢 + ✅ |
 | V7 | Il job `nmre-gmail-hourly-sync` gira **ogni minuto**; 48 ore: 2.086 esecuzioni cron, nessuna fallita, intervallo mediano ~1 minuto | 🟢 |
@@ -31,6 +32,10 @@ Legenda delle fonti:
 | V9 | Protezione contro le password compromesse **disattivata** | 🟢 |
 | V10 | Supabase Storage: nessun bucket | 🟢 |
 | V11 | Impostazione **"Allow new users to sign up": non ancora verificata** | 🔎 |
+| V12 | 15 dei 16 errori Gmail sono **consecutivi**, di categoria database, con lo stesso messaggio generico, tra le 05:10 e le 07:20 UTC del 24/11; ciascuno con una risposta HTTP 500 della **versione 49** di `nmre-gmail-scheduled` | 🟢 |
+| V13 | Il 25/11 le versioni 65, 66 e 67 di `nmre-gmail-scheduled` presentano solo risposte 200 e 202 nei log analizzati | 🟢 |
+| V14 | Nello stesso intervallo compaiono due errori PostgreSQL SQLSTATE 42703 (colonna inesistente); la corrispondenza con i 15 eventi **non è dimostrata** | 🟢 |
+| V15 | Motore di acquisizione, 48 ore: 671 annunci rilevati, 508 da verificare (59 inseriti + 449 aggiornati), **0 privati riconosciuti automaticamente, 0 archiviazioni automatiche** | 🟢 · analisi nel piano di sviluppo, modulo A.0-bis |
 
 ---
 
@@ -63,19 +68,30 @@ Legenda delle fonti:
 - RLS sulle tabelle `public`: attiva ovunque (V1). Resta da revisionare il **contenuto** delle policy (`owner_id = auth.uid()`), con la query Q3 che restituisce solo indicatori.
 - Funzioni critiche non eseguibili da `anon` (V4 per l'archiviazione automatica; da completare con Q5b per tutte).
 - Storage: nessun bucket, quindi nessuna esposizione di file oggi (V10).
+- **Permessi dell'archiviazione automatica (V4): chiuso.** `service_role` può
+  eseguire la funzione e il caso `auth.uid()` nullo è gestito; per gli utenti il
+  proprietario è verificato. Il punto non è più un problema aperto.
+  - Distinzione importante: questa è una verifica **dei permessi e del codice**.
+    La verifica **end-to-end** dell'archiviazione automatica dal backend non è
+    ancora avvenuta, perché nelle ultime 48 ore non c'è stato alcun privato
+    riconosciuto automaticamente (V15): il ramo che chiama la funzione
+    (`nmre-gmail-scheduled/index.ts:858-862`) non è stato esercitato. La prova
+    end-to-end è prevista nei test (§2.3) e nell'audit di acquisizione (piano,
+    A.0-bis), non come problema di sicurezza.
 
 ### 1.4 Punti ancora aperti
 
 | ID | Punto | Come verificarlo |
 |---|---|---|
 | O1 | "Allow new users to sign up" | Dashboard → Authentication → Sign In / Providers |
-| O2 | `nmre_auto_archive_private_candidate` è chiamata anche dal backend con la service role (`nmre-gmail-scheduled/index.ts:860`). Risulta "eseguibile solo da authenticated" e usa `auth.uid()`, che con la service role è nullo. ⚠️ Se la service role non ha EXECUTE o la funzione non gestisce `auth.uid()` nullo, l'archiviazione automatica dal backend fallisce e l'intera sincronizzazione va in errore | Q5 (`esegue_service_role`, `distingue_ruolo`) e Q11 (categoria `archiviazione_privato`). I dati attuali (2.207 successi) indicano che, se il problema esiste, si manifesta raramente, cioè solo quando arriva un privato con prova esplicita |
+| O2 | ~~Permessi di `nmre_auto_archive_private_candidate`~~ | **Chiuso** (V4). Resta solo la prova end-to-end, trattata come test funzionale (§2.3) |
 | O3 | Contenuto delle policy RLS | Q3 |
 | O4 | "Enforce JWT" per ciascuna Edge Function | Dashboard → Edge Functions → Details |
 | O5 | Gmail Push attivo o no | Logs di `nmre-gmail-push` (vedi §4.2) |
 | O6 | Corrispondenza tra codice distribuito e repository per le altre 8 funzioni | `supabase functions download` + confronto (§3.3) |
 | O7 | Utenti esistenti e proprietari distinti | Q13, Q14 |
 | O8 | 2FA su Supabase, GitHub, Google | Impostazioni dei rispettivi account |
+| O9 | Causa originaria dei 15 errori del 24/11 (versione 49) e del sedicesimo errore | §4.3 |
 
 ---
 
@@ -119,6 +135,7 @@ Legenda delle fonti:
 - CI: `deno check` su **tutte** le funzioni, inclusa `nmre-ai-assistant`; esecuzione di `_shared/parser.test.ts`; scansione segreti.
 - Playwright su anteprima: accesso, uscita, recupero password, assenza della registrazione, tutte le sezioni senza errori con la CSP.
 - Produzione, dopo ogni rilascio: accesso del titolare, notifica di prova, inserimento manuale, arricchimento di un candidato, una domanda all'assistente.
+- **Archiviazione automatica end-to-end** (separata dalla verifica dei permessi, già chiusa): in locale, con lo schema di base (§7), una notifica di prova con etichetta esplicita di venditore privato deve produrre, con la service role, un candidato `Privato`, la chiamata a `nmre_auto_archive_private_candidate` e una riga in `annunci` collegata; la stessa chiamata con il token di un altro utente deve essere rifiutata. In produzione si osserva il primo caso reale (contatore `auto_archived_count` > 0 e scheda presente in Archivio).
 
 ---
 
@@ -198,30 +215,66 @@ tutte le funzioni.
   è in `net._http_response` (Q9) e nel registro (Q10).
 - Nessuna sincronizzazione completa nelle 48 ore: il cursore della cronologia
   Gmail è sano.
-- **Errori: 16 su 2.223 (0,72%).** Il cursore viene salvato solo a sincronizzazione
-  riuscita, quindi un errore isolato **non fa perdere messaggi**: vengono riletti
-  al ciclo successivo. Il rischio nasce solo se gli errori sono consecutivi o
-  ricorrenti sullo stesso messaggio.
+- **Errori: 16 su 2.223 (0,72%)**, di cui 15 concentrati in un unico episodio
+  (V12) e 1 isolato. Il cursore viene salvato solo a sincronizzazione riuscita,
+  quindi gli errori **non fanno perdere messaggi**: vengono riletti al primo ciclo
+  riuscito, purché il cursore resti valido per Gmail (di norma almeno una
+  settimana; l'episodio è durato circa 2 ore e 10 minuti).
 - Le sincronizzazioni saltate per blocco già attivo rispondono 202 e **non** sono
   registrate: non sono comprese nei 16 errori.
 
-### 4.3 Analisi dei 16 errori (senza leggere messaggi testuali)
-Lo script v2 riconduce ogni errore a una categoria fissa, con il solo codice
-HTTP quando presente (Q11), e calcola il massimo di errori consecutivi e la
-distribuzione oraria (Q11b).
+### 4.3 Errori Gmail: episodio del 24/11 e stato attuale
 
-| Categoria | Possibile causa ⚠️ | Intervento previsto |
-|---|---|---|
-| `api_gmail` con 429/5xx | limiti o indisponibilità temporanea di Google | ritentativo con attesa crescente nella stessa esecuzione |
-| `token_oauth_o_casella` | rinnovo del token non riuscito | ritentativo; se persistente, notifica "Ricollega Gmail" |
-| `timeout` | richieste lente (anche per la risoluzione dei link, §5) | timeout più brevi e limiti di concorrenza |
-| `database` | conflitti o errori transitori | ritentativo mirato; analisi dei vincoli coinvolti |
-| `archiviazione_privato` | caso O2 | correzione della funzione o del suo permesso, dopo verifica |
-| `blocco_sincronizzazione` | errore della RPC di blocco | analisi del lease |
-| `altro` | — | analisi caso per caso dai log della funzione, senza riportare testi in chat |
+**Fatti verificati (V12–V14)**
+- 15 errori consecutivi, categoria database, stesso messaggio generico,
+  05:10–07:20 UTC del 24/11, ciascuno con HTTP 500 della **versione 49**.
+- Il 25/11 le versioni **65, 66, 67** hanno solo risposte 200/202 nei log analizzati.
+- Due errori SQLSTATE **42703** ("colonna inesistente") nello stesso intervallo,
+  **senza** prova che corrispondano ai 15 eventi.
+
+**Conclusione**: problema storico **probabilmente superato** dalle versioni
+successive, ma **causa originaria non ancora accertata**. Non viene riaperto
+come problema attivo; resta il punto O9 per chiudere l'analisi.
+
+**Ipotesi da verificare ⚠️ (non conclusioni)**
+- *Disallineamento tra codice distribuito e schema.* Il codice usa colonne
+  introdotte da migrazioni successive (per esempio `listing_key`,
+  `deduplication_version`, `data_extraction_version`,
+  `explicit_price_reduction` escluso dall'inserimento con un commento esplicito a
+  `index.ts:758-759`). Una versione distribuita prima della relativa migrazione
+  produrrebbe proprio un errore 42703 e un messaggio generico ("… non riuscito"),
+  perché la funzione sostituisce l'errore PostgreSQL con un testo fisso.
+- *Frequenza del cron in quel momento.* 15 errori in circa 130 minuti
+  corrispondono a un'esecuzione ogni ~10 minuti, cioè alla pianificazione
+  `*/10` presente nel repository, e non a quella attuale di un minuto. Se
+  confermato, la frequenza è stata portata a un minuto dopo l'episodio.
+- Il messaggio generico impedisce oggi di distinguere le cause: è un limite di
+  osservabilità del codice, non dei dati.
+
+**Come chiudere O9 (sola lettura)**
+1. Confrontare l'ora di distribuzione delle versioni 49 e 50+ con l'ora di
+   applicazione delle migrazioni (`supabase_migrations.schema_migrations`, solo
+   nomi e date) e con la cronologia dei commit di `nmre-gmail-scheduled`.
+2. Leggere nei log Postgres la colonna citata dai due errori 42703 (la colonna è
+   un nome di schema, non un dato personale) e verificare se compare nel codice
+   della versione 49.
+3. Verificare con `cron.job_run_details` la pianificazione attiva il 24/11 (Q8,
+   esteso a quella data).
+4. Classificare il sedicesimo errore con Q11.
+
+**Interventi preventivi proposti (dopo approvazione)**
+- Nei log della funzione, registrare **codice SQLSTATE e nome dell'operazione**
+  (mai valori o testi delle email) accanto al messaggio generico, così che
+  `error_message` diventi diagnostico senza esporre dati.
+- Regola di rilascio: **prima la migrazione, poi la funzione**; test in CI della
+  funzione contro lo schema locale (`supabase start` + schema di base, §7), che
+  fallisce se il codice usa una colonna inesistente.
+- Registro delle distribuzioni (§3.3) per collegare ogni versione Supabase
+  (49, 65, 66, 67…) a un commit.
 
 **Criterio di accettazione**: nessuna sequenza di 3 o più errori consecutivi e
-tasso di errore sotto lo 0,5% su 7 giorni.
+tasso di errore sotto lo 0,5% su 7 giorni, misurati dopo il rilascio delle
+modifiche di osservabilità.
 
 ### 4.4 Proposta sulla frequenza (decisione dopo Q9–Q11b e O5)
 - **Se Gmail Push è attivo e affidabile**: Push come canale principale (latenza di

@@ -24,7 +24,14 @@
 -- Esiti già verificati dal titolare (25/11/2026), riportati per
 -- confronto: RLS attiva su tutte le tabelle public; tabelle private
 -- inaccessibili ai ruoli client; nmre_auto_archive_private_candidate
--- SECURITY INVOKER; job Gmail ogni minuto; nessun bucket Storage.
+-- SECURITY INVOKER con EXECUTE per authenticated e service_role e
+-- gestione esplicita di auth.uid() nullo; job Gmail ogni minuto;
+-- 15 errori consecutivi del 24/11 sulla versione 49; nessun bucket.
+--
+-- Versione 3: aggiunte le query Q17–Q18 (episodio Gmail del 24/11) e la
+-- sezione "Audit acquisizione" AQ1–AQ9. AQ8 è l'unica query che
+-- restituisce identificativi e URL pubblici di annunci: è per uso
+-- personale durante la revisione manuale e NON va condivisa.
 -- =====================================================================
 
 
@@ -108,12 +115,9 @@ select p.proname as funzione,
    and p.prokind = 'f'
    and p.proname like 'nmre%'
  order by p.prosecdef desc, p.proname;
--- Da osservare in particolare per nmre_auto_archive_private_candidate:
--- la funzione è chiamata anche dal backend con la service role
--- (nmre-gmail-scheduled/index.ts:860). Servono entrambe le condizioni:
---   esegue_service_role = true
---   distingue_ruolo = true   (cioè gestisce il caso auth.uid() nullo)
--- altrimenti l'archiviazione automatica dal backend fallisce.
+-- nmre_auto_archive_private_candidate: verificata dal titolare
+-- (esegue_service_role = true, caso auth.uid() nullo gestito). La query
+-- resta utile come controllo di regressione dopo future migrazioni.
 
 -- Q5b · ALLARME: SECURITY DEFINER esposte o senza search_path ----------
 select p.proname,
@@ -304,3 +308,241 @@ select extname, extversion from pg_extension
 select id, public, file_size_limit, allowed_mime_types from storage.buckets order by id;
 select count(*) as policy_storage_objects from pg_policies
  where schemaname = 'storage' and tablename = 'objects';
+
+
+-- =====================================================================
+-- EPISODIO GMAIL DEL 24/11 (punto aperto O9)
+-- =====================================================================
+
+-- Q17 · Migrazioni applicate: solo versione e nome ----------------------
+-- Da confrontare con l'ora di distribuzione delle versioni 49 e 50+ di
+-- nmre-gmail-scheduled (Dashboard → Edge Functions → Deployments).
+select version, name
+  from supabase_migrations.schema_migrations
+ order by version desc
+ limit 30;
+
+-- Q18 · Pianificazione effettiva durante l'episodio -------------------
+-- Se l'intervallo mediano è ~10 minuti, il 24/11 era attiva la
+-- pianificazione */10 e non quella attuale di un minuto.
+with r as (
+  select d.jobid, d.start_time, d.status,
+         d.start_time - lag(d.start_time) over (partition by d.jobid order by d.start_time) as intervallo
+    from cron.job_run_details d
+   where d.start_time between timestamptz '2026-11-24 04:00:00+00' and timestamptz '2026-11-24 08:30:00+00'
+)
+select j.jobname, count(*) as esecuzioni,
+       round((percentile_cont(0.5) within group (order by extract(epoch from r.intervallo)) / 60)::numeric, 2) as intervallo_mediano_minuti,
+       count(*) filter (where r.status <> 'succeeded') as non_riuscite
+  from r join cron.job j on j.jobid = r.jobid
+ group by j.jobname;
+
+
+-- =====================================================================
+-- AUDIT ACQUISIZIONE (piano di sviluppo, modulo A.0-bis)
+-- Percorsi di scarto del codice: D1 sincronizzazione, D2 scarto
+-- automatico in interfaccia per URL già scartato, D3 classificazione
+-- manuale Agenzia, D4 scarto manuale, D5 storico/fuori codice.
+-- =====================================================================
+
+-- AQ1 · Distribuzione dei candidati -------------------------------------
+select coalesce(tipo_venditore, 'n/d') as tipo_venditore,
+       stato,
+       seller_manual_override as override_manuale,
+       coalesce(portale, 'n/d') as portale,
+       count(*) as candidati,
+       count(*) filter (where created_at > now() - interval '48 hours') as creati_48h,
+       min(created_at) as primo, max(created_at) as ultimo
+  from public.annunci_candidati
+ group by 1, 2, 3, 4
+ order by candidati desc;
+
+
+-- AQ2 · Percorso di scarto INFERITO per ogni candidato scartato --------
+-- Inferenza, non certezza: D1 azzera mittente e oggetto; D2 e D4 non
+-- lasciano segni distinti, ma D2 richiede un altro scartato precedente
+-- con lo stesso URL canonico (host + percorso, senza parametri).
+with c as (
+  select id, owner_id, stato, tipo_venditore, seller_manual_override,
+         notification_sender, email_subject, created_at, updated_at,
+         rtrim(lower(regexp_replace(url, '^https?://(www\.)?([^/?#]+)([^?#]*).*$', '\2\3')), '/') as chiave_url
+    from public.annunci_candidati
+)
+select case
+         when s.tipo_venditore = 'Agenzia' and s.seller_manual_override then 'D3_manuale_agenzia'
+         when s.tipo_venditore = 'Agenzia' then 'agenzia_senza_override_storico'
+         when not s.seller_manual_override
+              and s.notification_sender is null and s.email_subject is null then 'D1_sincronizzazione_probabile'
+         when s.chiave_url is not null and exists (
+                select 1 from c o
+                 where o.owner_id = s.owner_id and o.id <> s.id and o.stato = 'scartato'
+                   and o.chiave_url = s.chiave_url and o.updated_at < s.updated_at)
+              then 'D2_o_D4_stesso_url_gia_scartato'
+         else 'D4_manuale_o_D5_storico'
+       end as percorso_inferito,
+       coalesce(s.tipo_venditore, 'n/d') as tipo_venditore,
+       count(*) as scartati,
+       count(*) filter (where s.created_at > now() - interval '48 hours') as creati_48h
+  from c s
+ where s.stato = 'scartato'
+ group by 1, 2
+ order by scartati desc;
+
+
+-- AQ3 · Regola del classificatore ricondotta alle etichette fisse -------
+-- seller_evidence non viene mostrato: viene solo confrontato con le
+-- etichette scritte nel codice (_shared/parser.ts e index.ts).
+select stato, coalesce(tipo_venditore, 'n/d') as tipo_venditore,
+       case
+         when seller_manual_override then 'manuale'
+         when seller_evidence is null then 'assente'
+         when seller_evidence like 'Nessuna indicazione affidabile%' then 'nessuna_indicazione'
+         when seller_evidence like 'Segnali contrastanti%' then 'segnali_contrastanti'
+         when seller_evidence like 'Segnali discordanti tra annuncio e registro%' then 'discordanza_annuncio_registro'
+         when seller_evidence like 'Identificativi presenti nel registro con classificazioni discordanti%' then 'discordanza_interna_registro'
+         when seller_evidence like 'Corrispondenza esatta con il registro%' then 'registro_venditori'
+         when seller_evidence ~ '^(Etichetta esplicita|Annuncio o vendita tra privati|Assenza dichiarata|Vendita dichiarata|Vendita indicata)' then 'regola_privato'
+         when seller_evidence ~ '^(Venditore indicato come agenzia|Indicazione di contatto|Inserzionista riconducibile|Società immobiliare|Inserzionista identificato)' then 'regola_agenzia'
+         else 'altro'
+       end as regola,
+       coalesce(seller_classification_version, 0) as versione_classificatore,
+       coalesce(data_extraction_version, 0) as versione_estrazione,
+       count(*) as candidati
+  from public.annunci_candidati
+ group by 1, 2, 3, 4, 5
+ order by candidati desc;
+
+
+-- AQ4 · Segnali nel testo conservato: solo CONTEGGI -------------------
+-- Indicatori, non prove: "da privato" può comparire anche nei testi
+-- standard dei portali (es. "pubblica il tuo annuncio da privato").
+-- Per questo il risultato va confermato con la revisione AQ8.
+with t as (
+  select stato, coalesce(tipo_venditore, 'n/d') as tipo_venditore,
+         coalesce(portale, 'n/d') as portale,
+         coalesce(dati_fonte->>'body_text', '') || ' ' ||
+         coalesce(email_subject, '') || ' ' || coalesce(titolo, '') as testo
+    from public.annunci_candidati
+)
+select stato, tipo_venditore, portale,
+       count(*) as candidati,
+       count(*) filter (where length(testo) > 40)                                   as con_testo,
+       count(*) filter (where testo ~* '\mda (un )?privat[oa]\M')                     as da_privato_singolare,
+       count(*) filter (where testo ~* '\mprivat[oi]\M')                              as parola_privato,
+       count(*) filter (where testo ~* '\mproprietari[oa]\M')                         as parola_proprietario,
+       count(*) filter (where testo ~* '\m(senza|no|nessuna) (agenzi|intermediar)')   as senza_agenzia,
+       count(*) filter (where testo ~* '\magenzi[ae]\M')                              as parola_agenzia,
+       count(*) filter (where testo ~* '(tecnocasa|tempocasa|gabetti|re/?max|engel|professionecasa)') as marchio_agenzia,
+       count(*) filter (where testo ~* '\m(s\.?r\.?l|s\.?a\.?s|s\.?n\.?c|s\.?p\.?a)\M')  as forma_societaria
+  from t
+ group by 1, 2, 3
+ order by candidati desc;
+
+
+-- AQ5 · Conservazione di URL, testo e storico notifiche ---------------
+select c.stato, coalesce(c.tipo_venditore, 'n/d') as tipo_venditore,
+       count(*) as candidati,
+       count(*) filter (where c.url is not null)            as con_url,
+       count(*) filter (where c.url_originale is not null)  as con_url_originale,
+       count(*) filter (where c.listing_key is not null)    as con_listing_key,
+       count(*) filter (where c.source_email_id is not null) as con_id_email,
+       count(*) filter (where c.dati_fonte ? 'body_text')   as con_testo_sorgente,
+       count(*) filter (where n.notifiche > 0)              as con_notifiche,
+       coalesce(sum(n.notifiche), 0)                        as notifiche_totali
+  from public.annunci_candidati c
+  left join lateral (
+    select count(*) as notifiche
+      from public.annunci_candidati_notifiche x
+     where x.owner_id = c.owner_id and x.candidate_id = c.id
+  ) n on true
+ group by 1, 2
+ order by candidati desc;
+
+-- AQ5b · Gruppi di duplicati per listing_key ---------------------------
+select count(*) as gruppi_duplicati,
+       sum(n) as candidati_coinvolti,
+       count(*) filter (where stati > 1) as gruppi_con_stati_diversi,
+       count(*) filter (where ha_scartato and ha_coda) as gruppi_scartato_e_in_coda
+  from (
+    select listing_key, count(*) as n, count(distinct stato) as stati,
+           bool_or(stato = 'scartato') as ha_scartato,
+           bool_or(stato = 'da_verificare') as ha_coda
+      from public.annunci_candidati
+     where listing_key is not null
+     group by listing_key
+    having count(*) > 1
+  ) g;
+
+
+-- AQ6 · Candidati idonei alla rielaborazione a ogni ciclo ---------------
+-- Replica il filtro di nmre-gmail-scheduled/index.ts:486-506. Se
+-- "idonei_con_gemello" è > 0 e stabile nel tempo, quei candidati
+-- vengono riletti da Gmail a ogni esecuzione (vedi piano, A.0-bis).
+select count(*) as idonei_rielaborazione,
+       count(*) filter (where exists (
+         select 1 from public.annunci_candidati o
+          where o.owner_id = c.owner_id and o.id <> c.id
+            and o.listing_key is not null and o.listing_key = c.listing_key)) as idonei_con_gemello,
+       count(*) > 200 as oltre_limite_200
+  from public.annunci_candidati c
+ where c.stato = 'da_verificare'
+   and c.source_email_id is not null and c.source_email_id <> ''
+   and c.seller_manual_override is not true
+   and (coalesce(c.deduplication_version, 0) < 1
+        or coalesce(c.seller_classification_version, 0) < 3
+        or coalesce(c.data_extraction_version, 0) < 6);
+
+
+-- AQ7 · Tempo tra creazione e scarto ------------------------------------
+-- Pochi minuti indicano un percorso automatico (D1/D2); tempi lunghi
+-- sono compatibili con una decisione manuale. updated_at può essere
+-- toccato anche dopo lo scarto: il dato è indicativo.
+select case
+         when updated_at - created_at < interval '5 minutes'  then '1_meno_5_minuti'
+         when updated_at - created_at < interval '1 hour'     then '2_5_60_minuti'
+         when updated_at - created_at < interval '24 hours'   then '3_1_24_ore'
+         else '4_oltre_24_ore'
+       end as tempo_allo_scarto,
+       count(*) as scartati,
+       count(*) filter (where created_at > now() - interval '48 hours') as creati_48h
+  from public.annunci_candidati
+ where stato = 'scartato'
+ group by 1
+ order by 1;
+
+
+-- AQ8 · CAMPIONE PER LA REVISIONE MANUALE (USO PERSONALE, NON CONDIVIDERE)
+-- Restituisce identificativo interno, portale e URL pubblico dell'annuncio.
+-- Nessun testo di email, mittente o recapito. Annotare l'esito reale
+-- (Privato / Agenzia / Non più online / Non determinabile) su un foglio
+-- personale, non nel repository.
+(select 'A_da_verificare_scartato' as gruppo, id, portale, coalesce(url, url_originale) as link
+   from public.annunci_candidati
+  where stato = 'scartato' and tipo_venditore = 'Da verificare'
+  order by random() limit 40)
+union all
+(select 'B_agenzia_scartato', id, portale, coalesce(url, url_originale)
+   from public.annunci_candidati
+  where stato = 'scartato' and tipo_venditore = 'Agenzia')
+union all
+(select 'C_da_verificare_in_coda', id, portale, coalesce(url, url_originale)
+   from public.annunci_candidati
+  where stato = 'da_verificare'
+  order by random() limit 40);
+
+
+-- AQ9 · Somme dei contatori di sincronizzazione (48 ore) ---------------
+-- Conferma l'interpretazione dei 671 rilevati: la differenza tra
+-- notifiche immobiliari e righe classificate corrisponde alle
+-- esclusioni come agenzia, che oggi non vengono salvate.
+select sum(property_notifications_count) as notifiche_immobiliari,
+       sum(excluded_agencies_count)      as escluse_come_agenzia,
+       sum(needs_user_review_count)      as da_verificare,
+       sum(private_recognized_count)     as privati_riconosciuti,
+       sum(inserted_count)               as inseriti,
+       sum(updated_count)                as aggiornati,
+       sum(discarded_existing_count)     as scartati_in_sincronizzazione,
+       sum(auto_archived_count)          as archiviati_automaticamente,
+       count(*) filter (where coalesce(property_notifications_count, 0) > 0) as esecuzioni_con_notifiche
+  from public.nmre_gmail_sync_runs
+ where status = 'success' and started_at > now() - interval '48 hours';
