@@ -93,7 +93,7 @@ Still required after local dependency installation:
 - Cross-owner RLS isolation remains an M4 staging integration test and has not been inferred from client-side route protection.
 
 
-## 10. M4.2 candidate queue tests
+## 11. M4.2 candidate queue tests
 - Run npm run test:candidates and npm test. Candidate unit tests cover private-confirmation rules, agency/unverified labels, explicit candidate-state labels, HTTPS URL validation and euro formatting.
 - Run npm run typecheck and npm run lint.
 - On the signed-in iPhone, verify the default unverified queue, pull-to-refresh, municipality filtering, confirmed/discarded filters, load-more behavior and source-link handoff.

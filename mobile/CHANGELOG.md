@@ -1,5 +1,3 @@
-# NMRE Mobile — Changelog
-
 ## 2026-11-25 — M4.2 coda opportunità read-only
 - Collegata la schermata Opportunità alla tabella esistente annunci_candidati con RLS e filtro aggiuntivo sull'utente autenticato.
 - Aggiunti filtri per stato, ricerca per comune, paginazione di 25 righe, aggiornamento manuale e apertura esplicita del link HTTPS originale.
@@ -7,10 +5,7 @@
 - La query usa una lista ristretta di campi e non legge recapiti, metadati email o JSON grezzi della fonte/estrazione.
 - Nessuna modifica automatica della classificazione, promozione in archivio o altra scrittura su Supabase.
 
-## 2026-11-25 — M4.1 dashboard read-only
-- Connected dashboard metrics to owner-scoped Supabase counts for pending opportunities, listings to contact, due callbacks and acquired mandates.
-- Added refresh, loading and connection-error UI.
-- Kept this milestone read-only; no schema, production data, edge function or PWA changes.
+# NMRE Mobile — Changelog
 
 ## 2026-11-25 — M3 authentication foundation (in progress)
 - Added Supabase JS v2 client configuration using only the project URL and public publishable key.
@@ -22,15 +17,15 @@
 
 ## 2026-11-25 — NOVA native Expo shell
 - Added the NOVA tab to the Expo app and a native text chat screen, visually aligned with NMRE's navy/gold mobile theme.
-- Added a pure typed engine porting the PWA decision rules for candidate priority, data quality, possible duplicates, municipal filtering, action planning, callbacks, private classification, incomplete CRM qualification and documented price reductions.
+- Added a pure typed TypeScript engine porting the PWA decision rules for candidate priority, data quality, possible duplicates, municipal filtering, action planning, callbacks, private classification, incomplete CRM qualification and documented price reductions.
 - The mobile screen intentionally uses a not_connected context until authentication and owner-scoped read-only repositories are implemented. Data-dependent commands therefore explain the limitation instead of returning invented records. Generic help and a reusable call script work locally.
 - Added a Node built-in test suite and npm run test:nova. The suite is committed but has not yet been executed in a local mobile workspace; no result is claimed.
-- No OpenAI/API requests, Supabase client, database write, migration, Edge Function deployment, production secret or PWA change was made. Voice and persistent/shared conversation memory are deferred.
+- No OpenAI/API requests, Supabase client, database write, migration, Edge Function deployment, production secret or PWA change was made. Voice and persistent/shared conversation memory remain deferred.
 
 ## 2026-11-25 — NOVA phase 1 (responsive PWA)
 - Renamed the existing web assistant to NOVA and replaced its OpenAI Edge Function invocation with deterministic browser-side command handling.
-- NOVA now uses the already-loaded candidate/archive caches and the existing commercial-priority score to summarize acquisition priorities, rank opportunities, show confirmed private sellers separately from unverified sellers, filter by known municipality, list due/overdue follow-ups, report seller-classification counts, summarize the archive and prepare a standard owner-call script. Opportunity results also include the existing data-completeness score, missing fields and possible duplicates.
-- Expanded NOVA with a read-only daily action plan: overdue callbacks, appointments within three days, interested owners without follow-up, repeated unanswered calls, documented recent price drops, incomplete CRM qualification and candidate leads are consolidated and ranked.
+- NOVA now uses the already-loaded candidate/archive caches and the existing commercial-priority score to summarize acquisition priorities, rank opportunities, show confirmed private sellers separately from unverified sellers, filter by known municipality, list due/overdue follow-ups, report seller-classification counts, summarize the archive and prepare a standard owner-call script. Opportunity results also include the existing completeness score, missing fields and possible duplicates.
+- Expanded NOVA with a read-only daily action plan: overdue callbacks, appointments within three days, interested owners without follow-up, repeated unanswered calls, documented recent price drops, incomplete CRM qualification and candidate leads are consolidated and ranked. Up to six recommendations include direct buttons to open the existing record.
 - Added commands for acquisition priorities, municipality-scoped action plans, incomplete records and documented price reductions. Opening a record does not change it; no call, message, email or CRM update is sent automatically.
 - User messages are not sent to OpenAI; the phase-1 assistant makes no AI API request and introduces no database table, Edge Function, secret or paid service.
 - The score remains a work-order aid, not a prediction of mandate acquisition or proof of seller identity. Conversation history is session-only; voice and free-form generative chat are deferred.
@@ -50,6 +45,12 @@
 ## 2026-11-24 — M1 documentation baseline
 - Named the app NMRE Mobile.
 - Defined source directory mobile/ and dedicated branch mobile-expo-foundation.
-- Recorded audit of the existing PWA, Supabase schema/RLS, deployed functions, Gmail cron and repository drift.
+- Recorded audit of the existing PWA, Supabase schema/RLS, deployed functions, Gmail job and repository drift.
 - Added roadmap, architecture, database inventory, API specification, security policy and test plan.
-- No production database, deployed function, secret or PWA change was made.
+- No production database, deployed function, secret, PWA file or deployment workflow changed.
+
+
+## 2026-11-25 — M4.1 dashboard read-only
+- Connected dashboard metrics to owner-scoped Supabase counts for pending opportunities, listings to contact, due callbacks and acquired mandates.
+- Added refresh, loading and connection-error UI.
+- Kept this milestone read-only; no schema, production data, edge function or PWA changes.
