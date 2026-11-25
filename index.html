@@ -374,6 +374,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .nmre-ai-compose textarea{flex:1;min-width:0;max-height:100px;min-height:42px;resize:vertical;border:1px solid #d9dfe8;border-radius:10px;padding:10px;font:inherit;font-size:12px}
 .nmre-ai-compose button{padding:11px 13px}
 .nmre-ai-typing{font-size:11px;color:#687386;padding:0 14px 8px}
+.nmre-ai-action-links{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}.nmre-ai-action-links button{font-size:10px;padding:7px 9px}
 @media(max-width:560px){.nmre-ai-launcher{right:14px;bottom:14px;padding:11px 14px}.nmre-ai-panel{right:8px;bottom:72px;width:calc(100vw - 16px);height:min(650px,calc(100dvh - 90px))}}
 
 
@@ -3399,6 +3400,238 @@ function novaFollowupText(row,index){
   return (index+1)+". "+property+"\n   "+[kind,when,date,details].filter(Boolean).join(" · ");
 }
 
+let novaLastActionItems=[];
+
+function novaBuildActionPlan(town=null){
+  const today=new Date();
+  today.setHours(0,0,0,0);
+  const actions=new Map();
+  const matchesTown=item=>!town||normalizedMatchText(item.comune)===normalizedMatchText(town);
+  const active=item=>matchesTown(item)
+    &&!["incarico_acquisito","non_interessato"].includes(item.stato_contatto||"da_contattare")
+    &&item.altre_agenzie!=="esclusiva";
+  const dateGap=value=>{
+    const date=novaParseDate(value);
+    return date?Math.round((date.getTime()-today.getTime())/86400000):null;
+  };
+  const put=(row)=>{
+    const key=row.kind+":"+String(row.item.id);
+    const current=actions.get(key);
+    if(!current||row.score>current.score)actions.set(key,row);
+  };
+
+  const events=Array.isArray(nmreListingInteractions)?nmreListingInteractions:[];
+  const eventsByListing=new Map();
+  events.forEach(event=>{
+    const key=String(event.annuncio_id||"");
+    if(!key||!event.created_at||!Number.isFinite(Date.parse(event.created_at)))return;
+    if(!eventsByListing.has(key))eventsByListing.set(key,[]);
+    eventsByListing.get(key).push(event);
+  });
+  eventsByListing.forEach(rows=>rows.sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)));
+
+  (Array.isArray(listingCache)?listingCache:[]).filter(active).forEach(item=>{
+    const status=item.stato_contatto||"da_contattare";
+    const dueGap=dateGap(item.prossimo_contatto_il);
+    const own=eventsByListing.get(String(item.id))||[];
+    const recentCalls=own.filter(event=>event.tipo==="telefonata"&&event.outcome_code).slice(0,2);
+    const title=String(item.titolo||"Proprietario in archivio");
+    const location=item.comune||"Comune non indicato";
+    const meta=[location,Number(item.prezzo)>0?euro(item.prezzo):null].filter(Boolean).join(" · ");
+
+    if(status==="appuntamento"&&dueGap!==null){
+      if(dueGap<0){
+        put({kind:"archive",item,score:104+Math.min(10,Math.abs(dueGap)),tag:"ESITO APPUNTAMENTO DA AGGIORNARE",
+          next:"Verificare com'è andato l'incontro e registrare l'esito nella scheda.",
+          detail:[meta,"Data prevista "+novaParseDate(item.prossimo_contatto_il).toLocaleDateString("it-IT")].filter(Boolean).join(" · ")});
+      }else if(dueGap<=3){
+        put({kind:"archive",item,score:100-dueGap,tag:dueGap===0?"APPUNTAMENTO OGGI":"APPUNTAMENTO IN ARRIVO",
+          next:"Preparare l'incontro, rivedere la valutazione e confermare l'orario con il proprietario.",
+          detail:[meta,"Data "+novaParseDate(item.prossimo_contatto_il).toLocaleDateString("it-IT")].filter(Boolean).join(" · ")});
+      }
+    }else if(dueGap!==null&&dueGap<=0){
+      put({kind:"archive",item,score:110+Math.min(12,Math.abs(dueGap)),tag:dueGap<0?"RICHIAMO IN RITARDO":"RICHIAMO DA FARE OGGI",
+        next:dueGap<0?"Richiamare e aggiornare il prossimo passo concordato.":"Effettuare il richiamo previsto e registrare l'esito.",
+        detail:[meta,dueGap<0?"Scaduto da "+Math.abs(dueGap)+" giorni":"Scadenza oggi"].filter(Boolean).join(" · ")});
+    }
+
+    if(status==="interessato"&&!item.prossimo_contatto_il){
+      put({kind:"archive",item,score:94,tag:"INTERESSE SENZA FOLLOW-UP",
+        next:"Contattare il proprietario e concordare una data precisa per il prossimo aggiornamento.",
+        detail:[meta,"Interesse già registrato, nessuna prossima attività programmata"].filter(Boolean).join(" · ")});
+    }
+
+    if(recentCalls.length===2&&recentCalls.every(event=>event.outcome_code==="nessuna_risposta")){
+      put({kind:"archive",item,score:78,tag:"DUE TENTATIVI SENZA RISPOSTA",
+        next:"Evitare chiamate ravvicinate: provare un diverso orario o un canale appropriato e consentito.",
+        detail:[meta,"Le ultime due telefonate risultano senza risposta"].filter(Boolean).join(" · ")});
+    }
+
+    const history=priceHistoryAnalysis(item);
+    const lastDrop=history.drops[history.drops.length-1];
+    if(lastDrop){
+      const age=Math.floor((today-new Date(lastDrop.date).setHours(0,0,0,0))/86400000);
+      if(age>=0&&age<=30){
+        put({kind:"archive",item,score:84,tag:"RIBASSO DOCUMENTATO",
+          next:"Chiedere come sta procedendo la vendita dopo la modifica della richiesta, senza dare per scontata una disponibilità all'incarico.",
+          detail:[meta,formatCurrency(Number(lastDrop.entry.previous_price))+" → "+formatCurrency(Number(lastDrop.entry.listing_price)),
+            "−"+Number(lastDrop.entry.price_drop_percent).toLocaleString("it-IT")+"% · "+(age===0?"oggi":age+" giorni fa")].filter(Boolean).join(" · ")});
+      }
+    }
+
+    if(["interessato","primo_contatto"].includes(status)&&!item.prossimo_contatto_il){
+      const last=own[0]?.created_at||item.ultimo_contatto_il;
+      const lastDate=novaParseDate(last);
+      if(lastDate){
+        const days=Math.floor((today-new Date(lastDate.getFullYear(),lastDate.getMonth(),lastDate.getDate()))/86400000);
+        if(days>=7){
+          put({kind:"archive",item,score:82,tag:"CONTINUITÀ DA RECUPERARE",
+            next:"Riprendere la conversazione e verificare se la vendita è ancora attuale.",
+            detail:[meta,"Ultimo contatto circa "+days+" giorni fa, nessun richiamo programmato"].filter(Boolean).join(" · ")});
+        }
+      }
+    }
+
+    const gaps=[];
+    if(!String(item.contatto||"").trim())gaps.push("recapito");
+    if(!String(item.vendita_motivazione||"").trim())gaps.push("motivazione");
+    if(!String(item.tempistiche_vendita||"").trim())gaps.push("tempistiche");
+    if(!item.altre_agenzie||item.altre_agenzie==="da_verificare")gaps.push("situazione agenzie");
+    if(!item.prezzo_trattabile||item.prezzo_trattabile==="da_verificare")gaps.push("margine sul prezzo");
+    if(gaps.length&&![ "interessato" ].includes(status)){
+      const qualification=sellerQualification(item);
+      put({kind:"archive",item,score:58+Math.min(12,qualification.score/5),tag:"SCHEDA PROPRIETARIO DA COMPLETARE",
+        next:"Completare durante il prossimo contatto: "+gaps.slice(0,3).join(", ")+".",
+        detail:[meta,gaps.length+" informazioni mancanti"].filter(Boolean).join(" · ")});
+    }
+  });
+
+  const archiveRows=Array.isArray(listingCache)?listingCache:[];
+  (Array.isArray(candidateCache)?candidateCache:[]).filter(item=>matchesTown(item)&&item.tipo_venditore!=="Agenzia")
+    .forEach(item=>{
+      const priority=candidatePriority(item);
+      const quality=candidateQuality(item,candidateCache,archiveRows);
+      const history=priceHistoryAnalysis(item);
+      const lastDrop=history.drops[history.drops.length-1];
+      let score=item.tipo_venditore==="Privato"?72:57;
+      score+=Math.round(priority.score*0.16);
+      if(lastDrop)score+=10;
+      if(quality.duplicate)score-=14;
+      if(!quality.specificLink)score-=5;
+      score=Math.max(35,Math.min(96,score));
+      let tag=item.tipo_venditore==="Privato"?"PRIVATO RICONOSCIUTO · DA CONTATTARE":"VENDITORE DA VERIFICARE";
+      let next=item.tipo_venditore==="Privato"
+        ?"Verificare che l'annuncio sia ancora attivo e contattare il proprietario per qualificare motivazione e tempistiche."
+        :"Prima verificare l'identità del venditore: non trattare questo annuncio come privato confermato.";
+      if(!quality.specificLink)next="Recuperare e verificare il link specifico dell'annuncio prima di procedere.";
+      if(!String(item.contatto||"").trim()&&item.tipo_venditore==="Privato")next="Reperire il recapito sul canale consentito e verificare che l'annuncio sia ancora attivo.";
+      if(quality.duplicate)next="Verificare il possibile duplicato nell'archivio prima di avviare un nuovo contatto.";
+      if(lastDrop)next="Verificare il ribasso documentato e chiedere come sta procedendo la vendita.";
+      const detail=[item.comune,Number(item.prezzo)>0?euro(item.prezzo):"Prezzo non indicato",
+        "priorità "+priority.score+"/100","completezza "+quality.qualityScore+"/100"].filter(Boolean).join(" · ");
+      put({kind:"candidate",item,score,tag,next,detail});
+    });
+
+  return [...actions.values()].sort((a,b)=>b.score-a.score
+    ||(Date.parse(a.item.prossimo_contatto_il||a.item.created_at||"")||0)
+     -(Date.parse(b.item.prossimo_contatto_il||b.item.created_at||"")||0));
+}
+
+function novaReplyActionPlan(town=null){
+  const rows=novaBuildActionPlan(town);
+  const chosen=rows.slice(0,6);
+  novaLastActionItems=chosen.map(row=>({kind:row.kind,id:String(row.item.id),label:row.kind==="candidate"?"Apri opportunità":"Apri scheda proprietario"}));
+  if(!chosen.length){
+    novaLastActionItems=[];
+    return (town?"Non ho individuato attività operative prioritarie a "+town: "Non ho individuato attività operative prioritarie")
+      +" nei dati attualmente caricati. Può chiedermi di analizzare le opportunità o i dati mancanti.";
+  }
+  const urgent=rows.filter(row=>row.score>=100).length;
+  const today=rows.filter(row=>row.tag==="RICHIAMO DA FARE OGGI"||row.tag==="APPUNTAMENTO OGGI").length;
+  const leads=rows.filter(row=>row.kind==="candidate").length;
+  let answer=(town?"PIANO D'AZIONE · "+town.toLocaleUpperCase("it"):"PIANO D'AZIONE · OGGI")+"\n";
+  answer+=rows.length+" azioni individuate · "+urgent+" urgenti · "+today+" da fare oggi · "+leads+" opportunità da qualificare.\n\n";
+  answer+=chosen.map((row,index)=>{
+    const item=row.item;
+    const details=[row.detail,row.tag].filter(Boolean).join(" · ");
+    return (index+1)+". "+String(item.titolo||item.tipologia_immobile||"Immobile senza titolo")
+      +"\n   "+details
+      +"\n   Prossima mossa: "+row.next;
+  }).join("\n\n");
+  answer+="\n\nL'ordine è un supporto operativo basato su scadenze, stato CRM, segnali documentati e qualità dei dati. Non è una previsione di acquisizione. Se un venditore è da verificare, NOVA lo segnala prima del contatto.";
+  answer+="\n\nPuò aprire direttamente le schede con i pulsanti qui sotto.";
+  return answer;
+}
+
+function novaReplyDataGaps(town=null){
+  const rows=[];
+  const archive=Array.isArray(listingCache)?listingCache:[];
+  const candidates=Array.isArray(candidateCache)?candidateCache:[];
+  archive.filter(item=>matchesTown(item.comune,town)
+      &&!["incarico_acquisito","non_interessato"].includes(item.stato_contatto||"da_contattare"))
+    .forEach(item=>{
+      const gaps=[];
+      if(!String(item.contatto||"").trim())gaps.push("recapito");
+      if(!String(item.vendita_motivazione||"").trim())gaps.push("motivazione vendita");
+      if(!String(item.tempistiche_vendita||"").trim())gaps.push("tempistiche");
+      if(!item.altre_agenzie||item.altre_agenzie==="da_verificare")gaps.push("altre agenzie");
+      if(!item.prezzo_trattabile||item.prezzo_trattabile==="da_verificare")gaps.push("trattabilità prezzo");
+      if(gaps.length)rows.push({kind:"archive",item,gaps,score:gaps.length});
+    });
+  candidates.filter(item=>matchesTown(item.comune,town)&&item.tipo_venditore!=="Agenzia").forEach(item=>{
+    const quality=candidateQuality(item,candidates,archive);
+    const gaps=[...quality.missing,...quality.recommendedMissing];
+    if(quality.duplicate)gaps.push("possibile duplicato");
+    if(gaps.length)rows.push({kind:"candidate",item,gaps,score:gaps.length});
+  });
+  rows.sort((a,b)=>b.score-a.score);
+  const chosen=rows.slice(0,8);
+  novaLastActionItems=chosen.map(row=>({kind:row.kind,id:String(row.item.id),label:row.kind==="candidate"?"Apri opportunità":"Apri scheda proprietario"}));
+  if(!chosen.length){novaLastActionItems=[];return "Non risultano lacune informative rilevanti nelle schede attive"+(town?" a "+town:"")+". Le informazioni presenti vanno comunque confermate con il proprietario.";}
+  return "Ho individuato "+rows.length+" schede da completare"+(town?" a "+town:"")+".\n\n"
+    +chosen.map((row,index)=>(index+1)+". "+String(row.item.titolo||"Immobile senza titolo")
+      +" · "+(row.item.comune||"Comune non indicato")
+      +"\n   Da completare: "+[...new Set(row.gaps)].join(", ")
+      +"\n   "+(row.kind==="candidate"?"Opportunità da verificare":"Scheda CRM")).join("\n\n")
+    +"\n\nLe lacune sono ricavate dai campi vuoti o non verificati: non vengono compilate automaticamente.";
+}
+
+function novaReplyPriceDrops(town=null){
+  const rows=[],seen=new Set();
+  const add=(item,kind)=>{
+    if(!matchesTown(item.comune,town))return;
+    const history=priceHistoryAnalysis(item);
+    const drop=history.drops[history.drops.length-1];
+    if(!drop)return;
+    const date=new Date(drop.date);
+    const age=Math.floor((new Date().setHours(0,0,0,0)-new Date(date).setHours(0,0,0,0))/86400000);
+    if(age<0||age>30)return;
+    const key=canonicalCandidateUrl(item.url||item.url_originale)||kind+":"+String(item.id);
+    if(seen.has(key))return;
+    seen.add(key);
+    rows.push({item,kind,drop,age});
+  };
+  (Array.isArray(listingCache)?listingCache:[]).filter(item=>!["incarico_acquisito","non_interessato"].includes(item.stato_contatto||"da_contattare")).forEach(item=>add(item,"archive"));
+  (Array.isArray(candidateCache)?candidateCache:[]).filter(item=>item.tipo_venditore!=="Agenzia").forEach(item=>add(item,"candidate"));
+  rows.sort((a,b)=>a.age-b.age);
+  const chosen=rows.slice(0,8);
+  novaLastActionItems=chosen.map(row=>({kind:row.kind==="candidate"?"candidate":"archive",id:String(row.item.id),label:row.kind==="candidate"?"Apri opportunità":"Apri scheda proprietario"}));
+  if(!chosen.length){novaLastActionItems=[];return "Non risultano ribassi documentati negli ultimi 30 giorni"+(town?" a "+town:"")+". Non considero ribassi le semplici differenze tra annunci: servono osservazioni storiche registrate da NMRE.";}
+  return "Ho trovato "+rows.length+" immobili con ribassi documentati negli ultimi 30 giorni"+(town?" a "+town:"")+".\n\n"
+    +chosen.map((row,index)=>{
+      const item=row.item,entry=row.drop.entry;
+      return (index+1)+". "+String(item.titolo||"Immobile senza titolo")+" · "+(item.comune||"Comune non indicato")
+        +"\n   "+formatCurrency(Number(entry.previous_price))+" → "+formatCurrency(Number(entry.listing_price))
+        +" · −"+Number(entry.price_drop_percent).toLocaleString("it-IT")+"% · "+(row.age===0?"oggi":row.age+" giorni fa")
+        +"\n   Venditore: "+(item.tipo_venditore==="Privato"?"Privato riconosciuto":item.tipo_venditore==="Agenzia"?"Agenzia":"Da verificare");
+    }).join("\n\n")
+    +"\n\nUn ribasso è un segnale per approfondire l'andamento della vendita, non una prova di difficoltà o di disponibilità a incaricare un'agenzia.";
+}
+
+function matchesTown(value,town){
+  return !town||normalizedMatchText(value)===normalizedMatchText(town);
+}
+
 function novaReplyOpportunities(message,town,privateOnly=false){
   const ranked=novaRankCandidates(town,privateOnly);
   if(!ranked.length){
@@ -3431,25 +3664,7 @@ function novaReplyFollowups(town){
     +(rows.length>8?"\n\nVisualizzate le prime 8 attività in ordine di scadenza.":"");
 }
 
-function novaReplyPriorities(town){
-  const followups=novaGetFollowups(7,town);
-  const overdue=followups.filter(row=>row.days<0).length;
-  const today=followups.filter(row=>row.days===0).length;
-  const candidates=novaRankCandidates(town).slice(0,3);
-  let answer="Ecco le priorità operative ricavate dai dati attualmente caricati";
-  if(town)answer+=" per "+town;
-  answer+=".\n\n";
-  answer+="RICHIAMI E APPUNTAMENTI\n";
-  answer+=followups.length
-    ?overdue+" in ritardo · "+today+" da fare oggi · "+followups.length+" entro sette giorni.\n"+followups.slice(0,3).map(novaFollowupText).join("\n\n")
-    :"Nessuna scadenza registrata entro i prossimi sette giorni.";
-  answer+="\n\nOPPORTUNITÀ DA LAVORARE\n";
-  answer+=candidates.length
-    ?candidates.map(novaOpportunityText).join("\n\n")
-    :"Nessuna opportunità da verificare presente nella coda.";
-  answer+="\n\nIl punteggio è un ordine di lavorazione basato su venditore, tempestività, territorio e completezza dei dati: non è una previsione di acquisizione.";
-  return answer;
-}
+function novaReplyPriorities(town){return novaReplyActionPlan(town);}
 
 function novaReplyPrivateCounts(town=null){
   const matchesTown=item=>!town||normalizedMatchText(item.comune)===normalizedMatchText(town);
@@ -3488,13 +3703,15 @@ function novaReplyCall(town){
 }
 
 function novaHelp(){
-  return "Per ora lavoro come assistente operativo basato su regole verificabili, senza generazione AI esterna. Può chiedermi:\n\n"
-    +"• «Quali sono le mie priorità di oggi?»\n"
-    +"• «Mostrami le migliori 5 opportunità a Osimo»\n"
+  return "Sono il Suo assistente operativo basato su regole verificabili, senza generazione AI esterna. Può chiedermi:\n\n"
+    +"• «Chi devo contattare per primo?»\n"
+    +"• «Quali sono le mie priorità di oggi a Osimo?»\n"
+    +"• «Mostrami le migliori 5 opportunità»\n"
     +"• «Quali richiami sto trascurando?»\n"
+    +"• «Mostrami le schede incomplete»\n"
+    +"• «Quali immobili hanno avuto un ribasso?»\n"
     +"• «Quanti privati ho?»\n"
-    +"• «Preparami una telefonata per un proprietario»\n"
-    +"• «Fammi il riepilogo dell'archivio»\n\n"
+    +"• «Preparami una telefonata per un proprietario»\n\n"
     +"Posso usare solo i dati effettivamente caricati in NMRE. Non invento informazioni mancanti e non eseguo modifiche ai record.";
 }
 
@@ -3503,10 +3720,13 @@ function novaRespond(message){
   const town=novaFindTown(message);
   if(town)novaLastTown=town;
 
+  novaLastActionItems=[];
   let intent=null;
   if(query.includes("telefon")||query.includes("copion")||query.includes("script")||query.includes("prepara")||query.includes("contattare un proprietario")||query.includes(" chiama "))intent="call";
+  else if(query.includes("ribass")||query.includes("riduzion")||query.includes("prezzo sceso"))intent="price-drops";
+  else if(query.includes("incomplet")||query.includes("dati mancanti")||query.includes("da completare")||query.includes("schede vuote"))intent="data-gaps";
+  else if(query.includes("chi contattare")||query.includes("chi devo chiamare")||query.includes("contattare per primo")||query.includes("piano")||query.includes("cosa devo fare")||query.includes("cosa dovrei fare")||query.includes("da dove comincio")||query.includes("priorit")||query.includes("oggi"))intent="action-plan";
   else if(query.includes("richiam")||query.includes("scadenz")||query.includes("appuntament")||query.includes("agenda"))intent="followups";
-  else if(query.includes("priorit")||query.includes("oggi")||query.includes("cosa devo fare")||query.includes("cosa dovrei fare")||query.includes("da dove comincio"))intent="priorities";
   else if(query.includes("privat")||query.includes("venditor")){
     const asksCount=query.includes("quanti")||query.includes("conta")||query.includes("numero");
     const asksList=!!town||query.includes("mostra")||query.includes("miglior")||query.includes("elenca")||query.includes("lista")||query.includes("opportunit");
@@ -3524,6 +3744,9 @@ function novaRespond(message){
 
   const scope=town||(query.length<=35?novaLastTown:null);
   if(intent==="call")return novaReplyCall(scope);
+  if(intent==="action-plan")return novaReplyActionPlan(scope);
+  if(intent==="price-drops")return novaReplyPriceDrops(scope);
+  if(intent==="data-gaps")return novaReplyDataGaps(scope);
   if(intent==="followups")return novaReplyFollowups(scope);
   if(intent==="priorities")return novaReplyPriorities(scope);
   if(intent==="private")return novaReplyPrivateCounts(scope);
@@ -3536,7 +3759,25 @@ function novaRespond(message){
 function nmreAiAppend(role,text,type=""){
  const box=$("nmreAiMessages"),item=document.createElement("div");
  item.className="nmre-ai-msg "+role+(type?" "+type:"");
- item.textContent=text;
+ const message=document.createElement("div");
+ message.textContent=text;
+ item.appendChild(message);
+ if(role==="assistant"&&!type&&novaLastActionItems.length){
+  const actions=document.createElement("div");
+  actions.className="nmre-ai-action-links";
+  novaLastActionItems.forEach(action=>{
+   const button=document.createElement("button");
+   button.type="button";
+   button.className="secondary";
+   button.textContent=action.label;
+   button.addEventListener("click",()=>{
+    if(action.kind==="candidate")openDashboardCandidate(action.id);
+    else openCallCrm(action.id);
+   });
+   actions.appendChild(button);
+  });
+  item.appendChild(actions);
+ }
  box.appendChild(item);box.scrollTop=box.scrollHeight;
 }
 function nmreAiOpen(){
