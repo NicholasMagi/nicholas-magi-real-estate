@@ -2272,7 +2272,9 @@ function renderCandidates(){
         +(history.length>20?'<small>Mostrate le 20 notifiche più recenti.</small>':"")
         +'</details>'
       :'';
-    const duplicateTarget=c.possible_duplicate_target||null;
+    const duplicateMatch=quality.duplicate;
+    const hasDatabaseDuplicate=!!c.possible_duplicate_of;
+    const duplicateTarget=c.possible_duplicate_target||duplicateMatch?.item||null;
     const duplicateTargetVisible=!!duplicateTarget&&data.some(item=>String(item.id)===String(duplicateTarget.id));
     const duplicateTargetSummary=duplicateTarget
       ?[duplicateTarget.titolo,duplicateTarget.comune,duplicateTarget.portale,
@@ -2286,15 +2288,16 @@ function renderCandidates(){
       ?'<a href="#candidate-'+safe(duplicateTarget.id)+'">Vai alla scheda collegata</a>'
       :(duplicateTargetUrl?'<a href="'+safe(duplicateTargetUrl)+'" target="_blank" rel="noopener noreferrer">Apri annuncio corrispondente</a>':"");
     const duplicateScore=Number(c.possible_duplicate_confidence);
-    const duplicateScoreText=c.possible_duplicate_confidence!==null&&c.possible_duplicate_confidence!==undefined&&Number.isFinite(duplicateScore)
+    const duplicateScoreText=hasDatabaseDuplicate&&c.possible_duplicate_confidence!==null&&c.possible_duplicate_confidence!==undefined&&Number.isFinite(duplicateScore)
       ?"Indice di corrispondenza: "+duplicateScore+"/100 (punteggio euristico, non probabilità)."
-      :"Indice di corrispondenza non disponibile.";
-    const possibleDuplicateHtml=c.possible_duplicate_of
+      :"Segnalazione preliminare basata su link, comune, prezzo e caratteristiche; non è una conferma.";
+    const duplicateReason=c.possible_duplicate_reason||duplicateMatch?.reason||"Possibile corrispondenza rilevata dai controlli interni.";
+    const possibleDuplicateHtml=duplicateMatch||hasDatabaseDuplicate
       ?'<aside class="candidate-duplicate-warning" role="note" aria-label="Possibile duplicato da verificare">'
         +'<strong>Possibile duplicato — verifica manuale richiesta</strong>'
-        +'<p>Questo annuncio potrebbe riferirsi allo stesso immobile di un’altra opportunità già registrata. Confronti i dati prima di contattare il venditore.</p>'
+        +'<p>Questo annuncio potrebbe riferirsi allo stesso immobile di un’altra opportunità o di una scheda in archivio. Confronti i dati prima di contattare il venditore.</p>'
         +'<div class="duplicate-target"><b>Altra scheda:</b> '+safe(duplicateTargetSummary)+'</div>'
-        +(c.possible_duplicate_reason?'<div class="duplicate-score"><b>Motivo:</b> '+safe(c.possible_duplicate_reason)+'</div>':"")
+        +'<div class="duplicate-score"><b>Motivo:</b> '+safe(duplicateReason)+'</div>'
         +'<div class="duplicate-score">'+safe(duplicateScoreText)+'</div>'
         +(duplicateTargetLink?'<div>'+duplicateTargetLink+'</div>':"")
         +'<div class="duplicate-score">Le schede restano separate: nessun dato viene unito automaticamente.</div>'
