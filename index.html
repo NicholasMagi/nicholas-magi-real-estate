@@ -4970,12 +4970,30 @@ async function saveCandidateSeller(id,button){
   }
 
   await loadSellerRegistry();
+  let privateArchiveMessage="";
+  if(seller==="Privato"){
+    const {data:archiveResult,error:archiveError}=await supabase.rpc("nmre_auto_archive_private_candidate",{p_candidate_id:id});
+    if(archiveError){
+      msg("candidateMsg","Verifica del privato salvata, ma archiviazione automatica non riuscita: "+archiveError.message,"error");
+      button.disabled=false;
+      await loadCandidates();
+      return;
+    }
+    if(archiveResult?.archived===true){
+      privateArchiveMessage=" Il privato è stato inserito automaticamente nell’Archivio annunci.";
+      await loadListings();
+    }else{
+      privateArchiveMessage=" Il riconoscimento è salvato; per archiviarlo mancano: "+(archiveResult?.reason==="missing_required_property_data"?"titolo o comune":"un dato necessario alla conferma")+". Completi la scheda e scelga Tieni nell’archivio.";
+    }
+  }
   msg("candidateMsg",isAgency
     ?"Annuncio classificato come agenzia e rimosso dalle opportunità da acquisire. "+(registryRows.length?"La sua identità è stata memorizzata.":"")
-    :"Verifica del venditore salvata. "+(registryRows.length
-      ?"NMRE potrà riconoscere nuove notifiche che riportano gli stessi identificativi."
-      :"Per insegnare a NMRE a riconoscere questo venditore in futuro, inserisca anche nome, telefono o email verificati."),
-    "success");
+    :seller==="Privato"
+      ?"Venditore verificato come privato."+privateArchiveMessage
+      :"Verifica del venditore salvata. "+(registryRows.length
+        ?"NMRE potrà riconoscere nuove notifiche che riportano gli stessi identificativi."
+        :"Per insegnare a NMRE a riconoscere questo venditore in futuro, inserisca anche nome, telefono o email verificati."),
+    seller==="Privato"&&privateArchiveMessage.includes("non riuscita")?"error":"success");
   await loadCandidates();
 }
 async function confirmCandidate(id,button){
