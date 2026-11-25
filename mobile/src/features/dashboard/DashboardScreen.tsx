@@ -14,15 +14,16 @@ type SummaryState =
 export function DashboardScreen() {
   const router = useRouter();
   const { signOut, user } = useAuth();
+  const userId = user?.id;
   const [signingOut, setSigningOut] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [summaryState, setSummaryState] = useState<SummaryState>({ status: "loading" });
 
   const refreshSummary = useCallback(async (manual = false) => {
-    if (!user?.id) return;
+    if (!userId) return;
     if (manual) setRefreshing(true);
     try {
-      const data = await loadDashboardSummary(user.id);
+      const data = await loadDashboardSummary(userId);
       setSummaryState({ status: "ready", data, updatedAt: new Date() });
     } catch {
       setSummaryState({
@@ -32,10 +33,16 @@ export function DashboardScreen() {
     } finally {
       if (manual) setRefreshing(false);
     }
-  }, [user?.id]);
+  }, [userId]);
 
   useEffect(() => {
-    void refreshSummary();
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (!cancelled) void refreshSummary();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [refreshSummary]);
 
   async function handleSignOut() {
