@@ -1426,7 +1426,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-contact-sync-3");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-candidate-archive-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1501,7 +1501,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261125-contact-sync-3");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261125-candidate-archive-1");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -4161,7 +4161,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-contact-sync-3");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-candidate-archive-1");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);
@@ -4866,7 +4866,7 @@ function renderCandidates(){
       +'<div><label>Nome del proprietario o ragione sociale dell\'agenzia (facoltativo)</label><input data-field="seller_identity" value="'+safe(c.seller_identity||"")+'" placeholder="Es. Mario Rossi oppure Agenzia XYZ"></div>'
       +'<div class="row"><div><label>Verifica tipo venditore</label><select data-field="venditore"><option value="Da verificare" '+(c.tipo_venditore==="Da verificare"?"selected":"")+'>Da verificare</option><option value="Privato" '+(c.tipo_venditore==="Privato"?"selected":"")+'>Privato</option><option value="Agenzia" '+(c.tipo_venditore==="Agenzia"?"selected":"")+'>Agente / Agenzia</option></select></div></div>'
       +'<p class="candidate-verification-hint">Se conferma <strong>Privato</strong>, NMRE salva la verifica e prova a trasferire subito l’immobile nell’Archivio. Se seleziona <strong>Agenzia</strong>, l’email viene esclusa. Se non è certo, lasci <strong>Da verificare</strong>: resterà in questa coda.</p>'
-      +'<div class="candidate-actions candidate-detail-actions"><button class="secondary" type="button" data-enrich="'+safe(c.id)+'">Analizza pagina originale</button><button class="gold" type="button" data-save-seller="'+safe(c.id)+'">Conferma verifica</button>'+(isPrivate?'<button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta</button>':"")+'</div>'
+      +'<div class="candidate-actions candidate-detail-actions"><button class="secondary" type="button" data-enrich="'+safe(c.id)+'">Analizza pagina originale</button><button class="gold" type="button" data-confirm="'+safe(c.id)+'">Archivia nell’Archivio</button><button class="secondary" type="button" data-save-seller="'+safe(c.id)+'">Salva verifica venditore</button>'+(isPrivate?'<button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta</button>':"")+'</div>'
       +'<div class="candidate-enrichment-result" data-enrichment-result="'+safe(c.id)+'"></div>'
       +'</div></details>'
       +'</article>';
