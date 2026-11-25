@@ -3533,6 +3533,23 @@ function nmreCrmRender(){
  $("nmreCrmStatAgenda").textContent=nmreCrmAppointments.filter(x=>x.status==="programmato").length;
  nmreCrmRenderContacts();nmreCrmRenderProperties();nmreCrmRenderAgenda();
 }
+function nmreIdentityKey(value){return String(value||"").normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLocaleLowerCase("it").replace(/[^a-z0-9@.]+/g," ").trim().replace(/\\s+/g," ");}
+function nmrePhoneKey(value){return String(value||"").replace(/\\D/g,"");}
+function nmreMatchContactForListing(item){
+ const contacts=nmreCrmContacts||[],identity=[item?.contatto,item?.seller_identity].map(nmreIdentityKey).filter(Boolean),sender=String(item?.notification_sender||"").trim().toLowerCase(),phones=identity.map(nmrePhoneKey).filter(x=>x.length>=7);
+ const matches=contacts.filter(contact=>{const name=nmreIdentityKey(contact.full_name),email=String(contact.email||"").trim().toLowerCase(),phone=nmrePhoneKey(contact.phone);return(sender&&email&&sender===email)||(phone&&phones.includes(phone))||(name&&identity.includes(name));});
+ const ids=[...new Set(matches.map(x=>String(x.id)))];return ids.length===1?matches.find(x=>String(x.id)===ids[0]):null;
+}
+async function nmreSyncArchiveContactLinks(){
+ if(!currentUser||!supabase||!Array.isArray(listingCache)||!nmreCrmContacts?.length)return;
+ const pending=listingCache.filter(x=>!x.contact_id&&!x.deleted_at).map(item=>({item,contact:nmreMatchContactForListing(item)})).filter(x=>x.contact);
+ for(const row of pending){const {error}=await supabase.from("annunci").update({contact_id:row.contact.id}).eq("id",row.item.id).eq("owner_id",currentUser.id).is("contact_id",null).is("deleted_at",null);if(!error)row.item.contact_id=row.contact.id;}
+}
+async function nmreSetArchiveContact(listingId,contactId){
+ const {error}=await supabase.from("annunci").update({contact_id:contactId||null}).eq("id",listingId).eq("owner_id",currentUser.id);if(error)throw error;
+ const row=(listingCache||[]).find(x=>String(x.id)===String(listingId));if(row)row.contact_id=contactId||null;
+ await loadCrmWorkspace();renderListings();
+}
 async function loadCrmWorkspace(){
  if(!currentUser||!supabase)return;
  const interactionSince=new Date(Date.now()-90*86400000).toISOString();
@@ -3546,6 +3563,7 @@ async function loadCrmWorkspace(){
  ]);
  const err=c.error||p.error||pc.error||a.error||i.error||l.error;if(err){$("nmreCrmError").textContent="Caricamento CRM non riuscito: "+err.message;return;}
  nmreCrmContacts=c.data||[];nmreCrmProperties=p.data||[];nmreCrmPropertyContacts=pc.data||[];nmreCrmAppointments=a.data||[];nmreCrmInteractions=i.data||[];nmreListingInteractions=l.data||[];
+ await nmreSyncArchiveContactLinks();
  renderDailyActionPlan(listingCache,candidateCache,new Date(new Date().setHours(0,0,0,0)));
  renderSellerRelationshipScore();
  await loadSalesGoals();
@@ -3999,6 +4017,9 @@ function nmreCrmRenderAgenda(){
 }
 $("nmreCrmContactForm").addEventListener("submit",async e=>{
  e.preventDefault();const v=id=>$(id).value.trim();
+ const phoneKey=nmrePhoneKey(v("nmreCrmContactPhone")),emailKey=v("nmreCrmContactEmail").toLowerCase();
+ const duplicate=(nmreCrmContacts||[]).find(x=>(emailKey&&String(x.email||"").trim().toLowerCase()===emailKey)||(phoneKey.length>=7&&nmrePhoneKey(x.phone)===phoneKey));
+ if(duplicate){$("nmreCrmContactMsg").textContent="Contatto già presente in Rubrica: "+duplicate.full_name+". Nessun doppione creato.";return;}
  const {error}=await supabase.from("nmre_contacts").insert({owner_id:currentUser.id,full_name:v("nmreCrmContactName"),contact_type:v("nmreCrmContactType"),phone:v("nmreCrmContactPhone")||null,email:v("nmreCrmContactEmail")||null,municipality:v("nmreCrmContactTown")||null,address:v("nmreCrmContactAddress")||null,status:v("nmreCrmContactStatus"),notes:v("nmreCrmContactNotes")||null});
  if(error){$("nmreCrmContactMsg").textContent=error.message;return;}
  e.target.reset();$("nmreCrmContactMsg").textContent="Contatto salvato.";await loadCrmWorkspace();
@@ -5550,6 +5571,7 @@ function renderListings(){
       +linkHtml
       +'<details class="crm" data-crm-id="'+safe(item.id)+'">'
       +'<summary>Gestione contatto, note e telefonate</summary>'
+      +'<label>Contatto in Rubrica</label><select data-archive-contact data-listing-id="'+safe(item.id)+'"><option value="">Nessun contatto collegato</option>'+(nmreCrmContacts||[]).map(contact=>'<option value="'+safe(contact.id)+'" '+(String(item.contact_id||"")===String(contact.id)?"selected":"")+'>'+safe(contact.full_name)+'</option>').join("")+'</select>'
       +'<label>Stato del contatto</label><select data-crm-field="stato_contatto"><option value="da_contattare">Da contattare</option><option value="primo_contatto">Primo contatto</option><option value="interessato">Interessato</option><option value="appuntamento">Appuntamento</option><option value="incarico_acquisito">Incarico acquisito</option><option value="non_interessato">Non interessato</option></select>'
       +'<label>Note personali</label><textarea data-crm-field="note_personali" maxlength="10000">'+safe(item.note_personali||"")+'</textarea>'
       +'<label>Prossimo contatto</label><input type="date" data-crm-field="prossimo_contatto_il" value="'+safe(item.prossimo_contatto_il||"")+'">'
@@ -5572,6 +5594,7 @@ function renderListings(){
   }).join("");
 
   $("listingList").querySelectorAll("[data-delete]").forEach(btn=>{btn.addEventListener("click",()=>deleteListing(btn.dataset.delete));});
+  $("listingList").querySelectorAll("[data-archive-contact]").forEach(select=>select.addEventListener("change",async()=>{try{select.disabled=true;await nmreSetArchiveContact(select.dataset.listingId,select.value);msg("listMsg","Contatto aggiornato nella Rubrica.","success");}catch(error){msg("listMsg","Collegamento non salvato: "+(error.message||"errore"),"error");select.disabled=false;}}));
   $("listingList").querySelectorAll("[data-crm-id]").forEach(details=>{
     const id=details.dataset.crmId, item=data.find(row=>row.id===id);
     details.querySelector('[data-crm-field="stato_contatto"]').value=item?.stato_contatto||"da_contattare";
@@ -5617,6 +5640,7 @@ async function loadListings(){
     if(history)Object.assign(item,history);
   });
   listingCache=data;
+  await nmreSyncArchiveContactLinks();
   renderDashboard();
   renderListings();
 }
