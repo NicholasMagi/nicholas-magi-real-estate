@@ -857,9 +857,11 @@ export default {
           // Keep it on row for price-history processing, but omit it from the candidate INSERT.
           const { explicit_price_reduction: _explicitPriceReduction, ...candidateInsert } = row;
           if (possibleDuplicate) {
-            candidateInsert.possible_duplicate_of = possibleDuplicate.id;
-            candidateInsert.possible_duplicate_confidence = possibleDuplicateMatch.confidence;
-            candidateInsert.possible_duplicate_reason = possibleDuplicateReason;
+            Object.assign(candidateInsert, {
+              possible_duplicate_of: possibleDuplicate.id,
+              possible_duplicate_confidence: possibleDuplicateMatch.confidence,
+              possible_duplicate_reason: possibleDuplicateReason
+            });
             possibleDuplicateCount++;
           }
           const { data: saved, error: insertError } = await ctx.supabaseAdmin
