@@ -3451,28 +3451,31 @@ function novaReplyPriorities(town){
   return answer;
 }
 
-function novaReplyPrivateCounts(){
-  const archive=Array.isArray(listingCache)?listingCache:[];
-  const candidates=Array.isArray(candidateCache)?candidateCache:[];
+function novaReplyPrivateCounts(town=null){
+  const matchesTown=item=>!town||normalizedMatchText(item.comune)===normalizedMatchText(town);
+  const archive=(Array.isArray(listingCache)?listingCache:[]).filter(matchesTown);
+  const candidates=(Array.isArray(candidateCache)?candidateCache:[]).filter(matchesTown);
   const archivePrivate=archive.filter(item=>item.tipo_venditore==="Privato").length;
   const candidatePrivate=candidates.filter(item=>item.tipo_venditore==="Privato").length;
   const candidateUnknown=candidates.filter(item=>item.tipo_venditore==="Da verificare"||!item.tipo_venditore).length;
-  return "Classificazione attualmente registrata:\n\n"
+  return (town?"Classificazione registrata a "+town:"Classificazione attualmente registrata")+":\n\n"
     +"ARCHIVIO: "+archivePrivate+" immobili con venditore classificato come privato su "+archive.length+" annunci.\n"
     +"CODA OPPORTUNITÀ: "+candidatePrivate+" privati riconosciuti e "+candidateUnknown+" venditori ancora da verificare su "+candidates.length+" candidati.\n\n"
     +"Non considero un venditore privato solo perché l'annuncio sembra pubblicato da una persona: riporto esclusivamente la classificazione già presente nel gestionale. I due gruppi non vengono sommati per evitare doppi conteggi.";
 }
 
-function novaReplyArchive(){
-  const rows=Array.isArray(listingCache)?listingCache:[];
+function novaReplyArchive(town=null){
+  const matchesTown=item=>!town||normalizedMatchText(item.comune)===normalizedMatchText(town);
+  const rows=(Array.isArray(listingCache)?listingCache:[]).filter(matchesTown);
+  const candidates=(Array.isArray(candidateCache)?candidateCache:[]).filter(matchesTown);
   const count=status=>rows.filter(item=>(item.stato_contatto||"da_contattare")===status).length;
-  return "Riepilogo dell'archivio caricato:\n\n"
+  return (town?"Riepilogo dell'archivio a "+town:"Riepilogo dell'archivio caricato")+":\n\n"
     +rows.length+" annunci complessivi.\n"
     +rows.filter(item=>item.tipo_venditore==="Privato").length+" venditori classificati come privati.\n"
     +count("da_contattare")+" da contattare · "+count("primo_contatto")+" al primo contatto · "
     +count("interessato")+" interessati · "+count("appuntamento")+" con appuntamento · "
     +count("incarico_acquisito")+" incarichi acquisiti.\n\n"
-    +"Nella coda opportunità risultano "+(Array.isArray(candidateCache)?candidateCache.length:0)+" annunci da verificare.";
+    +"Nella coda opportunità risultano "+candidates.length+" annunci da verificare.";
 }
 
 function novaReplyCall(town){
@@ -3523,10 +3526,10 @@ function novaRespond(message){
   if(intent==="call")return novaReplyCall(scope);
   if(intent==="followups")return novaReplyFollowups(scope);
   if(intent==="priorities")return novaReplyPriorities(scope);
-  if(intent==="private")return novaReplyPrivateCounts();
+  if(intent==="private")return novaReplyPrivateCounts(scope);
   if(intent==="private-opportunities")return novaReplyOpportunities(message,scope,true);
   if(intent==="opportunities")return novaReplyOpportunities(message,scope);
-  if(intent==="archive")return novaReplyArchive();
+  if(intent==="archive")return novaReplyArchive(scope);
   return novaHelp();
 }
 
