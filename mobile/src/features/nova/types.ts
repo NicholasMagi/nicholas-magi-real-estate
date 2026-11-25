@@ -48,6 +48,10 @@ export interface NovaListing {
   municipality: string | null;
   askingPrice: number | null;
   sellerClass: NovaSellerClass;
+  listingUrl: string | null;
+  propertyType: string | null;
+  surfaceSqm: number | null;
+  rooms: number | null;
   status: NovaListingStatus;
   nextContactDate: string | null;
   lastContactAt: string | null;
