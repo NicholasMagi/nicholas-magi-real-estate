@@ -4820,8 +4820,8 @@ async function prepareCandidateForArchive(candidate,fields={}){
     return updates;
   };
   const persist=async updates=>{
-    const {error}=await supabase.from("annunci_candidati").update(updates).eq("id",candidate.id);
-    if(error)return {persisted:false,error:"Impossibile salvare i dati prima dell’archiviazione: "+error.message};
+    const {data,error}=await supabase.from("annunci_candidati").update(updates).eq("id",candidate.id).select("id").maybeSingle();
+    if(error||!data)return {persisted:false,error:"Impossibile salvare i dati prima dell’archiviazione: "+(error?.message||"record non aggiornato")};
     Object.assign(merged,updates);
     return {persisted:true};
   };
