@@ -233,7 +233,7 @@ export async function archiveCandidate(
 
   const { data: sourceRecord, error: sourceError } = await supabase
     .from("annunci_candidati")
-    .select("contatto,dati_estratti")
+    .select("contatto,dati_estratti,url_originale")
     .eq("owner_id", ownerId)
     .eq("id", candidate.id)
     .eq("stato", "da_verificare")
@@ -246,6 +246,7 @@ export async function archiveCandidate(
 
   const source = sourceRecord as unknown as Record<string, unknown>;
   const sourceUrl = safeCandidateHttpsUrl(candidate.listingUrl);
+  const originalUrl = nullableText(source.url_originale) ?? sourceUrl;
   let finalUrl = sourceUrl;
   let title = candidate.title?.trim() ?? "";
   let municipality = candidate.municipality?.trim() ?? "";
@@ -303,7 +304,7 @@ export async function archiveCandidate(
         ...extracted,
         pagina_pubblica: {
           ...existingPage,
-          url_originale: sourceUrl,
+          url_originale: originalUrl,
           url_finale: finalUrl,
           portale: candidate.portal,
           recuperato_il: nullableText(enrichmentData.retrieved_at) ?? new Date().toISOString(),
@@ -323,7 +324,7 @@ export async function archiveCandidate(
         camere: validInteger(bedrooms, 0, 100),
         bagni: validInteger(bathrooms, 0, 100),
         url: finalUrl,
-        url_originale: sourceUrl,
+        url_originale: originalUrl,
         dati_estratti: nextExtracted,
         data_extraction_version: 2,
         updated_at: new Date().toISOString()
