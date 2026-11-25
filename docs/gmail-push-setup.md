@@ -41,9 +41,11 @@ Send a new test email to the connected Gmail mailbox. Check the Supabase Edge Fu
 - Prima del deploy è obbligatorio applicare la migration additiva che introduce i tre campi possible_duplicate_*; schema e funzione non vengono distribuiti in produzione in questa fase.
 
 
-## Archivio su scelta esplicita (sorgente in revisione, non distribuita)
-- Il worker Gmail non chiama più nmre_auto_archive_private_candidate: il riconoscimento automatico del venditore privato non trasferisce annunci nell'archivio.
-- auto_archived_count resta nella tabella di monitoraggio per compatibilità storica, ma da questa versione è sempre 0.
-- La classificazione manuale del venditore nella PWA salva soltanto la verifica e lascia l'opportunità nella coda. Il comando esplicito Inserisci nell'archivio continua a usare nmre_confirm_annuncio_candidato.
-- Anche la app mobile archivia esclusivamente dopo la pressione esplicita di Archivia in archivio. Scarta non crea record nella tabella annunci.
+## Regola di archiviazione dei privati
+- Il worker Gmail può chiamare nmre_auto_archive_private_candidate per i candidati classificati Privato; la funzione SQL è il gate che decide se la prova è sufficiente.
+- L'archiviazione automatica è consentita solo con etichetta esplicita del venditore privato (confidence almeno 99 e prova allowlistata) oppure dopo verifica manuale esplicita del privato.
+- Segnali più deboli (ad esempio “annuncio tra privati”, “senza agenzia” o vendita dichiarata dal proprietario con confidenza sotto soglia) restano nelle Opportunità.
+- Sono inoltre obbligatori titolo e comune. Se mancano, l'annuncio resta da completare e può essere inserito manualmente dopo verifica.
+- auto_archived_count registra esclusivamente gli inserimenti avvenuti grazie a queste condizioni.
+- La app mobile archivia inoltre su azione esplicita Archivia in archivio. Scarta non crea record nella tabella annunci.
 - Nessuna riga già presente nell'archivio viene rimossa o modificata da questa modifica.

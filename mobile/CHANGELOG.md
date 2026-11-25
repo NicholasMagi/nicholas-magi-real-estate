@@ -1,3 +1,9 @@
+## 2026-11-25 — Archiviazione automatica solo con prova forte
+- Ripristinata l'archiviazione automatica Gmail, ma solo dietro al gate della funzione SQL nmre_auto_archive_private_candidate.
+- La funzione consente l'inserimento soltanto per etichetta esplicita di venditore privato con confidence almeno 99 o verifica manuale esplicita, e richiede titolo e comune.
+- I segnali deboli o incerti restano in Opportunità; il monitor conta solo archiviazioni effettivamente riuscite.
+- La verifica manuale di un privato nella PWA torna a invocare l'archiviazione protetta, dopo aver salvato e arricchito i dati disponibili.
+
 ## 2026-11-25 — Archivio solo su scelta esplicita
 - Rimossa dal worker Gmail l'archiviazione automatica dei candidati riconosciuti come privati.
 - La classificazione automatica o manuale del venditore non trasferisce più l'immobile nell'archivio; resta un'opportunità fino al comando esplicito dell'utente.

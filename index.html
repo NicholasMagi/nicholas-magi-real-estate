@@ -1382,7 +1382,7 @@ async function loadGmailSyncStatus(){
   let activity="";
   if(success&&Number(latest.read_count||0)===0)activity="Nessun nuovo messaggio Gmail da elaborare in questo controllo.";
   else if(success&&Number(latest.property_notifications_count||0)===0)activity="Messaggi controllati, ma nessuna nuova notifica immobiliare riconosciuta.";
-  else if(success)activity=Number(latest.auto_archived_count||0)+" archiviazioni automatiche; tutti gli annunci restano nelle Opportunità finché non sceglie Lei di inserirli nell’Archivio. "+Number(latest.needs_user_review_count||0)+" annunci da verificare." ;
+  else if(success)activity=Number(latest.auto_archived_count||0)+" privati archiviati automaticamente solo con prova forte o verifica manuale; gli altri restano nelle Opportunità. "+Number(latest.needs_user_review_count||0)+" annunci da verificare." ;
   details.textContent="Modalità: "+mode+" · Durata: "+duration+" · Ultime 24 ore: "+successes+" esecuzioni riuscite e "+failures+" errori. "+activity
     +(stale?" Controllo oltre 20 minuti fa: verifichi il job pianificato.":"")
     +(!success?" Dettaglio: "+(latest.error_message||"Errore non specificato"):"");
@@ -4835,12 +4835,51 @@ async function saveCandidateSeller(id,button){
   }
 
   await loadSellerRegistry();
+  let privateArchiveMessage="";
+  if(seller==="Privato"){
+    const candidate=(candidateCache||[]).find(item=>String(item.id)===String(id));
+    const archiveFields={
+      titolo:card.querySelector('[data-field="titolo"]')?.value.trim()||candidate?.titolo,
+      comune:card.querySelector('[data-field="comune"]')?.value.trim()||candidate?.comune,
+      prezzo:card.querySelector('[data-field="prezzo"]')?.value.trim()||candidate?.prezzo,
+      tipologia_immobile:card.querySelector('[data-field="tipologia_immobile"]')?.value.trim()||candidate?.tipologia_immobile,
+      superficie_mq:card.querySelector('[data-field="superficie_mq"]')?.value.trim()||candidate?.superficie_mq,
+      locali:card.querySelector('[data-field="locali"]')?.value.trim()||candidate?.locali,
+      camere:card.querySelector('[data-field="camere"]')?.value.trim()||candidate?.camere,
+      bagni:card.querySelector('[data-field="bagni"]')?.value.trim()||candidate?.bagni,
+      contatto:contact
+    };
+    if(candidate){
+      const prepared=await prepareCandidateForArchive(candidate,archiveFields);
+      if(!prepared.persisted){
+        msg("candidateMsg",prepared.persistError||prepared.error||"Impossibile salvare i dati dell’annuncio prima dell’archiviazione.","error");
+        button.disabled=false;return;
+      }
+      if(prepared.enriched)privateArchiveMessage+=" Dati pubblici dell’annuncio recuperati automaticamente.";
+      else if(prepared.error)privateArchiveMessage+=" Alcuni dati non sono stati recuperati automaticamente: "+prepared.error;
+    }
+    const {data:archiveResult,error:archiveError}=await supabase.rpc("nmre_auto_archive_private_candidate",{p_candidate_id:id});
+    if(archiveError){
+      msg("candidateMsg","Verifica del privato salvata, ma archiviazione automatica non riuscita: "+archiveError.message,"error");
+      button.disabled=false;
+      await loadCandidates();
+      return;
+    }
+    if(archiveResult?.archived===true){
+      privateArchiveMessage=" Il privato è stato inserito automaticamente nell’Archivio annunci.";
+      await loadListings();
+    }else{
+      privateArchiveMessage=" Il sistema non lo ha archiviato perché manca: "+(archiveResult?.reason==="missing_required_property_data"?"il titolo o il comune":"un requisito di verifica").". Può completare la scheda e inserirlo manualmente nell’Archivio."
+    }
+  }
   msg("candidateMsg",isAgency
     ?"Annuncio classificato come agenzia e rimosso dalle opportunità da acquisire. "+(registryRows.length?"La sua identità è stata memorizzata.":"")
-    :"Verifica del venditore salvata. L'annuncio resta nelle Opportunità: viene inserito nell'Archivio soltanto quando sceglie esplicitamente \"Inserisci nell'archivio\". "+(registryRows.length
-      ?"NMRE potrà riconoscere nuove notifiche che riportano gli stessi identificativi."
-      :"Per insegnare a NMRE a riconoscere questo venditore in futuro, inserisca anche nome, telefono o email verificati."),
-    "success");
+    :seller==="Privato"
+      ?"Venditore verificato come privato."+privateArchiveMessage
+      :"Verifica del venditore salvata. "+(registryRows.length
+        ?"NMRE potrà riconoscere nuove notifiche che riportano gli stessi identificativi."
+        :"Per insegnare a NMRE a riconoscere questo venditore in futuro, inserisca anche nome, telefono o email verificati."),
+    seller==="Privato"&&privateArchiveMessage.includes("non riuscita")?"error":"success");
   await loadCandidates();
 }
 async function confirmCandidate(id,button){

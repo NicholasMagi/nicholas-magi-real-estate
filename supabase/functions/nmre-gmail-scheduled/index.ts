@@ -669,8 +669,7 @@ export default {
       let inserted = 0;
       let updated = 0;
       let notificationEventsLinked = 0;
-      // Colonna mantenuta per compatibilità con lo storico del monitor: da questa versione vale sempre zero.
-      const autoArchived = 0;
+      let autoArchived = 0;
       let possibleDuplicateCount = 0;
       for (const row of rows) {
         const { data: currentCandidate, error: currentError } = await ctx.supabaseAdmin
@@ -961,6 +960,15 @@ export default {
           }, { onConflict: "owner_id,source_email_id" });
         if (notificationError) throw new Error("Salvataggio dello storico notifiche non riuscito");
         notificationEventsLinked++;
+
+        // La funzione SQL archivia esclusivamente prove forti: etichetta esplicita di privato o verifica manuale.
+        // Segnali meno affidabili (es. annuncio tra privati / senza agenzia) restano in Opportunità.
+        if (row.tipo_venditore === "Privato") {
+          const { data: archiveResult, error: archiveError } = await ctx.supabaseAdmin
+            .rpc("nmre_auto_archive_private_candidate", { p_candidate_id: candidateId });
+          if (archiveError) throw new Error("Archiviazione automatica del privato verificato non riuscita");
+          if (archiveResult?.archived === true) autoArchived++;
+        }
 
       }
 
