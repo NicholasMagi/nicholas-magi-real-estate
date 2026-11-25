@@ -77,9 +77,10 @@ async function getInsightsToken(
     throw new Error("La risposta di autenticazione Insights non contiene un access token.");
   }
 
-  cachedToken = tokenData.access_token;
+  const accessToken: string = tokenData.access_token;
+  cachedToken = accessToken;
   cachedTokenExpiresAt = Date.now() + Math.max(60, Number(tokenData.expires_in || 14400)) * 1000;
-  return cachedToken;
+  return accessToken;
 }
 
 async function fetchComparableDetail(baseUrl: string, token: string, uuid: string) {

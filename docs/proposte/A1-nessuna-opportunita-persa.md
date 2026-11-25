@@ -6,9 +6,11 @@ Rapporto tecnico e proposta · 25/11/2026 · branch `claude/confident-knuth-yvuj
 > che un solo proprietario privato perso per un errore dell'algoritmo. Prima si
 > protegge ogni opportunità, poi si migliora l'intelligenza del classificatore.
 
-**Stato:** Fase 1 completata e Fase 2 preparata sul branch, con test. **Nulla è
-distribuito:** nessun deploy, merge, migrazione applicata o modifica alla
-produzione. Le regole del classificatore e del filtro avvisi sono **invariate**.
+**Stato:** Fase 1 completata e Fase 2 preparata, in revisione nella Pull Request
+Draft [NicholasMagi/nicholas-magi-real-estate#68](https://github.com/NicholasMagi/nicholas-magi-real-estate/pull/68).
+**Nulla è distribuito:** nessun merge, deploy, migrazione applicata o modifica ai
+dati di produzione. Le regole del classificatore e del filtro avvisi sono
+**invariate**.
 
 Legenda delle fonti:
 - ✅ **Codice**: verificato leggendo il repository.
@@ -71,6 +73,7 @@ lasciava **alcuna traccia** in NMRE; resta in Gmail, che è in sola lettura.
 | L18 | Candidati senza ID email non mostrati | `index.html:4959` | ✅▶️ |
 | L21 | **Notifiche push per le agenzie** (nuovo, AQ12) | trigger `private.nmre_notify_candidate_insert` | Conservando le agenzie, ognuna avrebbe generato "Nuove opportunità" 🟢 |
 | L22 | **Provenienza delle agenzie non distinta** (nuovo) | pannello di recupero, prima versione | Ogni agenzia scartata veniva etichettata come "manuale", anche se decisa da una versione automatica precedente ✅ |
+| L23 | **Scarto automatico nel connettore Insights** (trovato nella revisione finale) | `nmre-insights-sync/index.ts:381-398` | I candidati "da verificare" che l'API indicava come professionisti diventavano `scartato`. Oggi inattivo (importazione bloccata in attesa dell'autorizzazione scritta), ma contrario alla regola ✅ |
 
 ### 2.4 Classificatore (nessuna regola modificata)
 Non riconosce come privato ▶️: "Annuncio da privato" (singolare), "Privato"
@@ -111,6 +114,8 @@ trigger delle notifiche (§3.2), da applicare **prima** della funzione.
 | 11 | **Agenzie senza notifiche push** (nuovo) | Migrazione del trigger (§3.2) | L21 |
 | 12 | Misurare le esclusioni | `propertyEmailDecision()` con nome della regola; conteggi nei log; comportamento identico | misura L1–L4, L7 |
 | 13 | Nessuna rielaborazione inutile | Copie storiche marcate come elaborate; rielaborazione dalla più vecchia | L16 |
+| 14 | Nessuno scarto nel connettore Insights (revisione finale) | Il candidato resta "Da verificare" con l'evidenza "Immobiliare.it Insights indica un professionista: conferma manuale necessaria" | L23 |
+| 15 | Ribasso su un'agenzia scartata (revisione finale) | L'agenzia riaperta per ribasso è evidenziata come "Ribasso dopo lo scarto" e conteggiata nell'avviso in cima alla coda | L13 |
 
 ### 3.2 Migrazione del trigger delle notifiche (AQ12)
 File: `supabase/migrations/20261125200000_guard_agency_candidate_notifications.sql`
@@ -266,47 +271,66 @@ L'eliminazione della tabella è solo commentata, facoltativa e da approvare.
 | L18 Candidati senza ID email | Sì | Invariato | Gli avvisi promossi hanno l'ID | **Aperto** |
 | L21 Notifiche push per le agenzie | — (introdotto dalla conservazione) | **Risolto** con la migrazione del trigger | — | Da applicare prima della funzione |
 | L22 Provenienza delle agenzie | — | **Risolto** | — | — |
+| L23 Scarto nel connettore Insights | Sì (inattivo) | **Risolto** | — | — |
 | L19–L20 Classificatore | Prudente, falsi agenzia possibili | Errori recuperabili | — | **Aperto**: corpus e misure |
 
 ---
 
-## 6. Test eseguiti su questo branch
+## 6. Test
 
+### 6.1 Test superati in locale (ultimo stato del branch)
 | Suite | Esito |
 |---|---|
 | Deno esistenti (`parser_test.ts`, `history_test.ts`, `_shared/parser.test.ts`) | 18 superati |
-| `retention_test.ts` (conservazione, riapertura, **notifiche dopo lo scarto**) | 16 superati |
+| `retention_test.ts` (conservazione, riapertura, notifiche dopo lo scarto) | 16 superati |
 | `property_filter_test.ts` (diagnostica e falsi negativi noti documentati) | 7 superati |
-| `dubious_test.ts` (**rete di sicurezza**, mittente/portale, promozione, interruttore) | 10 superati |
+| `dubious_test.ts` (rete di sicurezza, mittente e portale, promozione, interruttore) | 10 superati |
 | `nmre-insights-sync/provider_test.ts` | 6 superati |
 | `deno check` di `nmre-gmail-scheduled` e `nmre-gmail-push` | superato |
-| `tests/frontend/recovery_test.mjs` (**provenienza delle agenzie**, data dello scarto, notifiche dopo lo scarto, presa visione, scarti storici) | 20 superati |
+| `tests/frontend/recovery_test.mjs` (provenienza delle agenzie, data dello scarto, notifiche dopo lo scarto, presa visione, scarti storici, agenzia riaperta per ribasso) | 24 superati |
 | `supabase/tests/run_migration_tests.sh` su PostgreSQL 16 (trigger e avvisi dubbi, rollback inclusi) | 28 superati |
 | Sintassi JavaScript, 362 ID univoci, analisi SQL (42 `SELECT` nell'audit; migrazioni e rollback validi) | superati |
-| Browser Chromium con Supabase simulato: etichette di provenienza, contrassegno e avviso "Nuova notifica dopo lo scarto", presa visione, sezione avvisi dubbi con link Gmail e richiesta di promozione, sezione nascosta senza tabella, nessun errore di pagina | superato |
+| Browser Chromium con Supabase simulato e dati sintetici: etichette di provenienza, contrassegno e avviso "Nuova notifica dopo lo scarto", presa visione, avvisi dubbi con link Gmail e richiesta di promozione, sezione nascosta senza tabella, nessun errore di pagina | superato |
 
-Il CI esegue ora anche i nuovi test Deno, il test del frontend e, in un job
-separato con PostgreSQL di servizio, i test delle migrazioni. Non eseguibile qui:
-`deno check` di `nmre-search-engine` (`esm.sh` non raggiungibile da questo
-ambiente; file non modificato).
+### 6.2 GitHub Actions sulla Pull Request
+Vedi §13 per l'esito dettagliato, con i link alle esecuzioni.
 
----
+### 6.3 Test NON eseguiti (e perché)
+| Test | Motivo | Come coprirlo |
+|---|---|---|
+| Esecuzione delle Edge Functions contro il database **reale** | Vietato modificare la produzione; nessun progetto Supabase di prova disponibile | Progetto di prova o `supabase start` con lo schema di base (P0 §7) |
+| Migrazione del trigger con il **codice reale** di `private.nmre_notify_candidate_insert` | Il codice non è nel repository; il test usa uno stub che riproduce il comportamento osservato (AQ12) | La migrazione verifica forma e nome prima di agire e si ferma se non corrispondono; dopo l'applicazione: AQ12 e un controllo del trigger |
+| Lettura reale di Gmail e Pub/Sub | Richiede credenziali e casella reali | Osservazione in produzione dopo la distribuzione (§7) |
+| Interfaccia contro Supabase reale | Nessun ambiente di prova | Verifica manuale dopo il passo 3 di §7 |
+| `deno check` di `nmre-search-engine` e `nmre-insights-sync` **in locale** | `esm.sh` non è raggiungibile da questo ambiente | Eseguito dal CI (§13) |
+| Test automatici dell'interfaccia nel CI (Playwright) | Prova eseguita solo in locale con Supabase simulato | Proposto per una fase successiva |
 
 ## 7. Distribuzione (solo dopo approvazione)
 
-| Passo | Azione | Verifica | Ritorno indietro |
+### 7.1 Ordine esatto
+| Passo | Azione | Come | Verifica | Se qualcosa non va |
+|---|---|---|---|---|
+| 0 | Controlli finali in sola lettura | AQ12, Q6 (trigger), AQ6 (base delle rielaborazioni), AQ10 (base delle esclusioni) | Trigger unico AFTER INSERT con la funzione attesa | Fermarsi |
+| 1 | **Migrazione del trigger** `20261125200000_guard_agency_candidate_notifications.sql` | SQL Editor di Supabase, **solo questo file**. Non usare `supabase db push`: la cronologia delle migrazioni di produzione non è allineata al repository (P0 §7) e il comando potrebbe tentare di applicare altri file | Messaggio "Trigger … protetto"; `pg_get_triggerdef` contiene `WHEN ((new.tipo_venditore IS DISTINCT FROM 'Agenzia'::text))`; una riga in `private.nmre_trigger_definition_backups` | Rollback 7.2-A |
+| 2 | **Funzione `nmre-gmail-scheduled`** dal commit approvato | `supabase functions deploy nmre-gmail-scheduled`; `NMRE_CAPTURE_DUBIOUS_ALERTS` **non impostato**; `NMRE_KEEP_AGENCY_CANDIDATES` non impostato (conserva le agenzie) | Risposte 200 con `keptForReview`, `reopenedOnPriceDrop`, `notificationsAfterDiscard`, `propertyFilterRules`; registro senza errori per 24 ore; nessuna notifica "Nuove opportunità" per agenzie | Rollback 7.2-B |
+| 3 | **Frontend** | Merge della PR su `main` (GitHub Pages); service worker `20261125-no-lost-opportunity-2` | Coda, contrassegni, pannello "Annunci fuori dalla coda" | Rollback 7.2-C |
+| 4 | (Facoltativo) funzione `nmre-insights-sync` | `supabase functions deploy nmre-insights-sync` | Il connettore resta bloccato senza autorizzazione | Versione precedente |
+| 5 | Recupero guidato degli 88 (§8), uno alla volta | Pannello dell'app | AQ13 | Ogni decisione è reversibile dal pannello |
+| 6 | **Fase 2**: migrazione `20261125201000_gmail_dubious_alerts.sql` | SQL Editor, solo questo file | Tabella con RLS attiva; Q2/Q3: solo policy di select e update per il proprietario | Rollback 7.2-D |
+| 7 | Attivazione della Fase 2 | Secret `NMRE_CAPTURE_DUBIOUS_ALERTS=true` | Sezione "Avvisi dubbi" visibile; AQ15 dopo 48 ore; nessun errore di sincronizzazione | Rollback 7.2-D |
+
+Se il passo 1 non viene approvato: distribuire il passo 2 con
+`NMRE_KEEP_AGENCY_CANDIDATES=false`, per non generare notifiche per le agenzie.
+
+### 7.2 Rollback
+| Codice | Cosa annullare | Procedura | Dati |
 |---|---|---|---|
-| 0 | AQ11 (confermare), AQ12 e Q6 (forma del trigger), AQ6 (base) | — | — |
-| 1 | **Migrazione del trigger** `20261125200000` | AQ12: trigger con condizione WHEN; inserimento di prova non necessario | Script di rollback |
-| 2 | Funzione `nmre-gmail-scheduled` (Fase 1; `NMRE_CAPTURE_DUBIOUS_ALERTS` **non impostato**) | Risposta 200 con `keptForReview`, `reopenedOnPriceDrop`, `notificationsAfterDiscard`, `propertyFilterRules`; nessun errore per 24 ore | Versione precedente dalla Dashboard; `NMRE_KEEP_AGENCY_CANDIDATES=false` |
-| 3 | Frontend (merge su `main` → GitHub Pages; service worker `20261125-no-lost-opportunity-2`) | Coda, contrassegni, pannello | Revert del commit |
-| 4 | Recupero guidato degli 88 (§8) | AQ13 | Ogni decisione è reversibile |
-| 5 | **Fase 2**: migrazione `20261125201000`, poi `NMRE_CAPTURE_DUBIOUS_ALERTS=true` | AQ15 dopo 48 ore; sezione visibile | Flag spento, poi rollback (dati conservati) |
+| A | Migrazione del trigger | Eseguire `supabase/rollback/20261125200000_guard_agency_candidate_notifications.rollback.sql`: ripristina la definizione originale salvata e lo stato di abilitazione; si ferma se il backup manca | Nessun dato toccato; il backup resta |
+| B | Funzione di sincronizzazione | Dashboard → Edge Functions → `nmre-gmail-scheduled` → ridistribuire la versione precedente (o il commit precedente). In alternativa parziale: `NMRE_KEEP_AGENCY_CANDIDATES=false` | Le righe e lo storico scritti nel frattempo restano: non vanno rimossi |
+| C | Frontend | Revert del commit di merge su `main` | Nessuno |
+| D | Fase 2 | 1) rimuovere `NMRE_CAPTURE_DUBIOUS_ALERTS`; 2) eseguire `supabase/rollback/20261125201000_gmail_dubious_alerts.rollback.sql` (ritira l'accesso dall'app) | Gli avvisi raccolti restano; l'eliminazione della tabella è facoltativa, irreversibile e da approvare |
 
-L'ordine 1 → 2 evita notifiche push per le agenzie. Se il passo 1 non viene
-approvato, il passo 2 si distribuisce con `NMRE_KEEP_AGENCY_CANDIDATES=false`.
-
----
+Tutti e quattro i rollback del database sono coperti dai test (§3.2, §4.2, §13).
 
 ## 8. Recupero degli 88 "Da verificare" scartati
 
@@ -377,6 +401,7 @@ revoke all on table private.backup_candidati_scartati_20261125 from public, anon
 | `.../_shared/dubious.ts` | **Nuovo**: rete di sicurezza degli avvisi dubbi |
 | `.../_shared/parser.ts` | `propertyEmailDecision()`, `specificPortalListingUrl()` (nessuna regola cambiata) |
 | `.../retention_test.ts`, `property_filter_test.ts`, `dubious_test.ts` | Test |
+| `supabase/functions/nmre-insights-sync/index.ts` | Nessuno scarto automatico dei professionisti (L23) |
 | `supabase/migrations/20261125200000_guard_agency_candidate_notifications.sql` | **Nuovo** (non applicato) |
 | `supabase/migrations/20261125201000_gmail_dubious_alerts.sql` | **Nuovo** (non applicato) |
 | `supabase/rollback/*.rollback.sql` | **Nuovi** |
