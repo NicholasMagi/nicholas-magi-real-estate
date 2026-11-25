@@ -3745,6 +3745,11 @@ function nmreCrmRenderContacts(){
    }
    const {error:linkError}=await supabase.from("nmre_property_contacts").upsert({owner_id:currentUser.id,property_id:propertyId,contact_id:contactId,relation_role:relationRole},{onConflict:"owner_id,property_id,contact_id",ignoreDuplicates:true});
    if(linkError)throw linkError;
+   if(sourceId){
+    const {error:archiveLinkError}=await supabase.from("annunci").update({contact_id:contactId}).eq("id",sourceId).eq("owner_id",currentUser.id);
+    if(archiveLinkError)throw archiveLinkError;
+    const sourceListing=(listingCache||[]).find(a=>String(a.id)===String(sourceId));if(sourceListing)sourceListing.contact_id=contactId;
+   }
    const property=nmreCrmProperties.find(p=>String(p.id)===String(propertyId));
    if(property&&!property.contact_id){
     const {error:primaryError}=await supabase.from("nmre_properties").update({contact_id:contactId,updated_at:new Date().toISOString()}).eq("id",propertyId).eq("owner_id",currentUser.id);
