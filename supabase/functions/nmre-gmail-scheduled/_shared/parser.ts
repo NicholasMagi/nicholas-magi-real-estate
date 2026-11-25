@@ -350,3 +350,128 @@ export function canonicalListingKey(value:string|null|undefined):string|null {
     return null;
   }
 }
+
+
+export interface ListingIdentitySnapshot {
+  id?: string | null; listing_key?: string | null; url?: string | null; url_originale?: string | null;
+  titolo?: string | null; title?: string | null; comune?: string | null; municipality?: string | null;
+  prezzo?: number | string | null; price?: number | string | null;
+  tipologia_immobile?: string | null; property_type?: string | null;
+  superficie_mq?: number | string | null; surface_sqm?: number | string | null;
+  locali?: number | string | null; rooms?: number | string | null;
+  camere?: number | string | null; bedrooms?: number | string | null;
+  bagni?: number | string | null; bathrooms?: number | string | null;
+  dati_estratti?: unknown; extracted_data?: unknown; indirizzo?: string | null;
+}
+export interface ListingIdentityMatch { kind: "strong" | "possible" | "none"; confidence: number; reason: string | null; }
+const IDENTITY_STOP_WORDS = new Set([
+  "appartamento","immobile","immobiliare","casa","vendita","vendesi","affitto","nuovo","nuova",
+  "privato","annuncio","annunci","mq","zona","centro","proposta","offerta","splendido","ottimo",
+  "ampio","luminoso","panoramico","con","per","in","da","di","del","della","delle","dei","degli",
+  "alla","alle","allo","un","una","uno","the"
+]);
+function identityValue(record:ListingIdentitySnapshot,italian:keyof ListingIdentitySnapshot,english?:keyof ListingIdentitySnapshot):unknown {
+  const primary=record[italian];
+  return primary!==null&&primary!==undefined&&primary!==""?primary:english?record[english]:null;
+}
+function identityObject(value:unknown):Record<string,unknown> {
+  return value&&typeof value==="object"&&!Array.isArray(value)?value as Record<string,unknown>:{};
+}
+function normalizeIdentityText(value:unknown):string {
+  return normalizePropertyText(String(value??"")).normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLocaleLowerCase("it-IT").replace(/[^a-z0-9]+/g," ").trim().replace(/\s+/g," ");
+}
+function identityTokens(value:unknown):Set<string> {
+  return new Set(normalizeIdentityText(value).split(" ").filter(token=>token.length>2&&!IDENTITY_STOP_WORDS.has(token)));
+}
+function tokenJaccard(left:Set<string>,right:Set<string>):number {
+  if(!left.size||!right.size)return 0;
+  let common=0;left.forEach(token=>{if(right.has(token))common++;});
+  return common/(left.size+right.size-common);
+}
+function listingAddress(record:ListingIdentitySnapshot):string|null {
+  if(typeof record.indirizzo==="string"&&record.indirizzo.trim())return record.indirizzo.trim();
+  const extracted=identityObject(record.dati_estratti??record.extracted_data);
+  const page=identityObject(extracted.pagina_pubblica);
+  const suggestions=identityObject(page.suggestions);
+  const value=extracted.indirizzo_rilevato??extracted.indirizzo??suggestions.indirizzo;
+  return typeof value==="string"&&value.trim()?value.trim():null;
+}
+function addressParts(value:string|null):{street:Set<string>;numbers:Set<string>} {
+  if(!value)return {street:new Set(),numbers:new Set()};
+  const normalized=normalizeIdentityText(value).replace(/\bviale\b|\bv le\b|\bvle\b/g," viale ")
+    .replace(/\bv\b/g," via ").replace(/\bp zza\b|\bpiazza\b/g," piazza ")
+    .replace(/\bc so\b|\bcorso\b/g," corso ").replace(/\bstr\b/g," strada ");
+  const tokens=normalized.split(" ").filter(Boolean);
+  const numbers=new Set(tokens.filter(token=>/^\d+[a-z]?(?:\/\d+[a-z]?)?$/.test(token)));
+  const streetWords=tokens.filter(token=>!/^\d+[a-z]?(?:\/\d+[a-z]?)?$/.test(token)&&token.length>1&&
+    !["via","viale","piazza","corso","strada","contrada","localita","loc","di","del","della","dei","delle","degli"].includes(token));
+  return {street:new Set(streetWords),numbers};
+}
+function propertyTypeGroup(value:unknown):string|null {
+  const text=normalizeIdentityText(value);
+  if(!text)return null;
+  if(/\b(terreno|lotto)\b/.test(text))return "terreno";
+  if(/\b(garage|box|posto auto|cantina)\b/.test(text))return "pertinenza";
+  if(/\b(negozio|ufficio|commerciale|capannone|magazzino|laboratorio)\b/.test(text))return "commerciale";
+  if(/\b(appartamento|monolocale|bilocale|trilocale|quadrilocale|attico|mansarda|loft|duplex)\b/.test(text))return "appartamento";
+  if(/\b(villa|villetta|bifamiliare|casa indipendente|terratetto|rustico|casale|colonica|podere)\b/.test(text))return "casa";
+  return null;
+}
+function closeNumber(left:unknown,right:unknown,absolute:number,relative:number):boolean {
+  const a=Number(left),b=Number(right);
+  return Number.isFinite(a)&&Number.isFinite(b)&&a>0&&b>0&&Math.abs(a-b)<=Math.max(absolute,Math.min(a,b)*relative);
+}
+function closeInteger(left:unknown,right:unknown,tolerance:number):boolean {
+  const a=Number(left),b=Number(right);return Number.isFinite(a)&&Number.isFinite(b)&&Math.abs(a-b)<=tolerance;
+}
+
+/** Conservative cross-portal match: exact civic address or several independent listing attributes. */
+export function compareListingIdentity(incoming:ListingIdentitySnapshot,existing:ListingIdentitySnapshot):ListingIdentityMatch {
+  const incomingUrlKey=canonicalListingKey(incoming.url??incoming.url_originale);
+  const existingUrlKey=canonicalListingKey(existing.url??existing.url_originale);
+  if(incomingUrlKey&&existingUrlKey&&incomingUrlKey===existingUrlKey)return {kind:"strong",confidence:100,reason:"Stesso collegamento canonico all'annuncio."};
+  const incomingTown=normalizeIdentityText(identityValue(incoming,"comune","municipality"));
+  const existingTown=normalizeIdentityText(identityValue(existing,"comune","municipality"));
+  if(!incomingTown||!existingTown||incomingTown!==existingTown)return {kind:"none",confidence:0,reason:null};
+  const incomingType=propertyTypeGroup(identityValue(incoming,"tipologia_immobile","property_type"));
+  const existingType=propertyTypeGroup(identityValue(existing,"tipologia_immobile","property_type"));
+  if(incomingType&&existingType&&incomingType!==existingType)return {kind:"none",confidence:0,reason:null};
+  const incomingSurface=identityValue(incoming,"superficie_mq","surface_sqm");
+  const existingSurface=identityValue(existing,"superficie_mq","surface_sqm");
+  const surfaceClose=closeNumber(incomingSurface,existingSurface,5,0.06);
+  const surfaceConflict=Number(incomingSurface)>0&&Number(existingSurface)>0&&!surfaceClose&&
+    Math.abs(Number(incomingSurface)-Number(existingSurface))/Math.min(Number(incomingSurface),Number(existingSurface))>0.2;
+  const roomsClose=closeInteger(identityValue(incoming,"locali","rooms"),identityValue(existing,"locali","rooms"),0.5);
+  const bedroomsClose=closeInteger(identityValue(incoming,"camere","bedrooms"),identityValue(existing,"camere","bedrooms"),1);
+  const bathroomsClose=closeInteger(identityValue(incoming,"bagni","bathrooms"),identityValue(existing,"bagni","bathrooms"),1);
+  const priceClose=closeNumber(identityValue(incoming,"prezzo","price"),identityValue(existing,"prezzo","price"),6000,0.08);
+  const leftAddress=addressParts(listingAddress(incoming)),rightAddress=addressParts(listingAddress(existing));
+  const addressSimilarity=tokenJaccard(leftAddress.street,rightAddress.street);
+  const bothAddresses=leftAddress.street.size>0&&rightAddress.street.size>0;
+  const differentCivicNumbers=leftAddress.numbers.size>0&&rightAddress.numbers.size>0&&
+    ![...leftAddress.numbers].some(number=>rightAddress.numbers.has(number));
+  const addressConflict=bothAddresses&&((differentCivicNumbers&&addressSimilarity>=0.65)||addressSimilarity<0.25);
+  if(addressConflict||surfaceConflict)return {kind:"none",confidence:0,reason:null};
+  const addressWithCivicNumber=bothAddresses&&addressSimilarity>=0.8&&leftAddress.numbers.size>0&&
+    [...leftAddress.numbers].some(number=>rightAddress.numbers.has(number));
+  const addressPartial=bothAddresses&&addressSimilarity>=0.65;
+  const titleTokens=tokenJaccard(identityTokens(identityValue(incoming,"titolo","title")),identityTokens(identityValue(existing,"titolo","title")));
+  const typeClose=!!incomingType&&!!existingType&&incomingType===existingType;
+  let score=10;
+  if(typeClose)score+=15;if(surfaceClose)score+=22;if(roomsClose)score+=10;if(bedroomsClose)score+=7;
+  if(bathroomsClose)score+=4;if(priceClose)score+=16;score+=Math.round(titleTokens*16);
+  if(addressPartial)score+=10;if(addressWithCivicNumber)score+=24;
+  const confidence=Math.min(100,Math.round(score/120*100));
+  if(addressWithCivicNumber&&(!incomingType||!existingType||typeClose))
+    return {kind:"strong",confidence:Math.max(95,confidence),reason:"Comune e indirizzo con numero civico coincidono; tipologia compatibile."};
+  const strongProfile=typeClose&&surfaceClose&&priceClose&&(
+    (roomsClose&&titleTokens>=0.62)||(titleTokens>=0.82&&(roomsClose||bedroomsClose))||
+    (roomsClose&&bedroomsClose&&bathroomsClose&&titleTokens>=0.4)
+  );
+  if(strongProfile)return {kind:"strong",confidence:Math.max(88,confidence),reason:"Comune, tipologia, metratura e prezzo coincidono; anche titolo o distribuzione dei locali sono molto simili."};
+  const supporting=[typeClose,surfaceClose,roomsClose,bedroomsClose,bathroomsClose,priceClose,titleTokens>=0.55,addressPartial].filter(Boolean).length;
+  if(supporting>=2&&(typeClose||addressPartial)&&(surfaceClose||priceClose||titleTokens>=0.55||addressPartial)&&confidence>=50)
+    return {kind:"possible",confidence,reason:"Alcuni dati coincidono, ma non sono sufficienti per unire automaticamente i due annunci."};
+  return {kind:"none",confidence:0,reason:null};
+}

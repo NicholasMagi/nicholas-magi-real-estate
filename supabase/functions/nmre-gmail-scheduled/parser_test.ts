@@ -1,6 +1,6 @@
 import {
   municipality,price,listingPrice,priceReduction,listingUrl,propertyEmail,propertyType,surface,rooms,
-  bedrooms,bathrooms,sellerClassification,resolveListingUrl,canonicalListingKey
+  bedrooms,bathrooms,sellerClassification,resolveListingUrl,canonicalListingKey,compareListingIdentity
 } from "./_shared/parser.ts";
 
 function assertEquals<T>(actual:T,expected:T,message:string){
@@ -115,4 +115,31 @@ Deno.test("chiave canonica stabile solo per URL di schede specifiche",()=>{
   assertEquals(canonicalListingKey("https://www.immobiliare.it/"),null,"rifiuta la homepage");
   assertEquals(canonicalListingKey("https://www.immobiliare.it/ricerca/"),null,"rifiuta la ricerca generica");
   assertEquals(canonicalListingKey("https://example.com/annunci/987654321/"),null,"rifiuta host non riconosciuti");
+});
+
+
+Deno.test("deduplica cross-portale quando comune, indirizzo e civico coincidono",()=>{
+  const a={url:"https://www.casa.it/immobili/99112233/",titolo:"Appartamento luminoso in Via Roma",comune:"Osimo",tipologia_immobile:"Trilocale",superficie_mq:92,locali:3,prezzo:198000,dati_estratti:{indirizzo_rilevato:"Via Roma 14"}};
+  const b={url:"https://www.immobiliare.it/annunci/88776655/",titolo:"Trilocale ristrutturato, centro",comune:"Osimo",tipologia_immobile:"Appartamento",superficie_mq:93,locali:3,prezzo:205000,dati_estratti:{indirizzo_rilevato:"V. Roma, 14"}};
+  const result=compareListingIdentity(a,b);
+  if(result.kind!=="strong"||result.confidence<95)throw new Error("Indirizzo cross-portale certo non riconosciuto: "+JSON.stringify(result));
+});
+Deno.test("annunci simili senza indirizzo certo restano possibili duplicati",()=>{
+  const a={titolo:"Trilocale ristrutturato con garage",comune:"Osimo",tipologia_immobile:"Trilocale",superficie_mq:90,locali:3,prezzo:200000};
+  const b={titolo:"Appartamento luminoso con terrazzo",comune:"Osimo",tipologia_immobile:"Appartamento",superficie_mq:91,locali:3,prezzo:204000};
+  const result=compareListingIdentity(a,b);
+  if(result.kind!=="possible")throw new Error("Caso incerto unito automaticamente: "+JSON.stringify(result));
+});
+Deno.test("non associa immobili con civici diversi sulla stessa via",()=>{
+  const a={titolo:"Appartamento Via Roma",comune:"Osimo",tipologia_immobile:"Appartamento",superficie_mq:90,locali:3,prezzo:200000,dati_estratti:{indirizzo_rilevato:"Via Roma 14"}};
+  const b={titolo:"Appartamento Via Roma",comune:"Osimo",tipologia_immobile:"Appartamento",superficie_mq:90,locali:3,prezzo:200000,dati_estratti:{indirizzo_rilevato:"Via Roma 16"}};
+  const result=compareListingIdentity(a,b);
+  if(result.kind!=="none")throw new Error("Civici diversi associati: "+JSON.stringify(result));
+});
+Deno.test("non associa automaticamente immobili in comuni diversi",()=>{
+  const result=compareListingIdentity(
+    {titolo:"Trilocale",comune:"Osimo",tipologia_immobile:"Appartamento",superficie_mq:90,locali:3,prezzo:200000},
+    {titolo:"Trilocale",comune:"Ancona",tipologia_immobile:"Appartamento",superficie_mq:90,locali:3,prezzo:200000}
+  );
+  assertEquals(result.kind,"none","il comune deve coincidere");
 });
