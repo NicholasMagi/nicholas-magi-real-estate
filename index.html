@@ -4869,7 +4869,7 @@ async function saveCandidateSeller(id,button){
       privateArchiveMessage=" Il privato è stato inserito automaticamente nell’Archivio annunci.";
       await loadListings();
     }else{
-      privateArchiveMessage=" Il sistema non lo ha archiviato perché manca: "+(archiveResult?.reason==="missing_required_property_data"?"il titolo o il comune":"un requisito di verifica").". Può completare la scheda e inserirlo manualmente nell’Archivio."
+      privateArchiveMessage=" Il sistema non lo ha archiviato perché manca: "+(archiveResult?.reason==="missing_required_property_data"?"il titolo o il comune":"un requisito di verifica")+". Può completare la scheda e inserirlo manualmente nell’Archivio.";
     }
   }
   msg("candidateMsg",isAgency
