@@ -86,3 +86,11 @@ Rollback: disable adapter; keep Supabase core unchanged.
 
 ## Global gates
 No production migration without explicit approval and rollback. No merge to main without review. No undocumented integration or scraping. No completion claim without evidence. Isolated staging is required before write-capable development; only one Supabase project was verified.
+
+
+### M4.1 — Dashboard read-only (source implemented; device verification pending)
+- Added an authenticated, owner-filtered dashboard summary using exact-count SELECT queries against `annunci_candidati` and `annunci`.
+- The candidate count includes only records still in `da_verificare` and not already promoted to an archived listing; discarded and promoted candidates are not counted as new opportunities.
+- Dashboard shows loading/error states and supports pull-to-refresh. No persistent application-data cache is introduced.
+- No INSERT, UPDATE, DELETE, Edge Function, schema, migration or production deployment is used.
+- Remaining: run local quality checks and verify the real counts on the signed-in iPhone before marking M4.1 complete.

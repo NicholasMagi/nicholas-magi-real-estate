@@ -138,3 +138,12 @@ Platform boundary:
 - No listing, candidate, CRM or other application table is queried in this milestone. No Supabase database, Auth setting, Edge Function, production secret, PWA file or deployment is changed.
 - The local environment file must contain only the project URL and modern publishable key and must remain untracked. Dependency installation, npm lockfile, static checks and physical-device validation remain release gates; committed source is not evidence that those checks passed.
 - Future user-scoped query caches must be cleared on sign-out. No persistent application-data cache exists yet; only the Auth session is persisted.
+
+
+## 17. M4.1 — Read-only dashboard repository (2026-11-25)
+- Added a typed dashboard repository under `src/shared/data/`; screens do not issue ad-hoc database queries.
+- Queries use the current Auth user's id as an additional owner filter and remain protected by the deployed RLS policies (`auth.uid() = owner_id`). Authorization never relies on the client filter alone.
+- Summary values use PostgREST exact counts with `head: true`; the app does not download listing records for the dashboard.
+- Opportunity count means unreviewed candidates with `stato = da_verificare` and no linked archived listing. Discarded and already-promoted candidates are excluded.
+- Dashboard refresh is user initiated. Application data stays in memory only; only the Auth session is persisted in SecureStore.
+- This slice contains SELECT requests only and cannot write to application tables.

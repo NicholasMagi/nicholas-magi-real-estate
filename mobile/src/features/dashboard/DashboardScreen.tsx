@@ -1,21 +1,42 @@
 import { useRouter } from "expo-router";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useState } from "react";
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { theme } from "@/shared/theme";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { loadDashboardSummary, type DashboardSummary } from "@/shared/data/dashboardRepository";
 
-const metrics = [
-  { label: "OPPORTUNITÀ", hint: "In attesa del collegamento" },
-  { label: "DA CONTATTARE", hint: "Dati non ancora caricati" },
-  { label: "RICHIAMI", hint: "Agenda non collegata" },
-  { label: "INCARICHI", hint: "CRM non collegato" }
-];
+type SummaryState =
+  | { status: "loading" }
+  | { status: "ready"; data: DashboardSummary; updatedAt: Date }
+  | { status: "error"; message: string };
 
 export function DashboardScreen() {
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [summaryState, setSummaryState] = useState<SummaryState>({ status: "loading" });
+
+  const refreshSummary = useCallback(async (manual = false) => {
+    if (!user?.id) return;
+    if (manual) setRefreshing(true);
+    try {
+      const data = await loadDashboardSummary(user.id);
+      setSummaryState({ status: "ready", data, updatedAt: new Date() });
+    } catch {
+      setSummaryState({
+        status: "error",
+        message: "Non riesco a leggere i dati del gestionale. Verifichi la connessione e riprovi."
+      });
+    } finally {
+      if (manual) setRefreshing(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    void refreshSummary();
+  }, [refreshSummary]);
 
   async function handleSignOut() {
     if (signingOut) return;
@@ -31,7 +52,11 @@ export function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refreshSummary(true)} />}
+      >
         <View style={styles.header}>
           <View>
             <Text style={styles.brand}>NICHOLAS MAGI</Text>
@@ -55,11 +80,11 @@ export function DashboardScreen() {
         <View style={styles.hero}>
           <View style={styles.heroTop}>
             <Text style={styles.heroLabel}>NMRE MOBILE</Text>
-            <View style={styles.statusPill}><View style={styles.statusDot} /><Text style={styles.statusText}>ANTEPRIMA</Text></View>
+            <View style={styles.statusPill}><View style={styles.statusDot} /><Text style={styles.statusText}>{summaryState.status === "ready" ? "SOLA LETTURA" : summaryState.status === "error" ? "NON DISPONIBILE" : "COLLEGAMENTO"}</Text></View>
           </View>
           <Text style={styles.heroTitle}>Un nuovo modo di lavorare.</Text>
           <Text style={styles.heroBody}>
-            Stiamo preparando il collegamento sicuro al Suo gestionale. L&apos;archivio attuale resta invariato.
+            I dati vengono letti dal gestionale con la Sua sessione protetta. Questa schermata non modifica annunci o contatti.
           </Text>
           <View style={styles.heroBottom}>
             <Text style={styles.heroFoot}>FASE 02 · STRUTTURA MOBILE</Text>
@@ -69,13 +94,18 @@ export function DashboardScreen() {
 
         <View style={styles.sectionHeading}>
           <Text style={styles.sectionTitle}>La Sua attività</Text>
-          <Text style={styles.sectionHint}>Dati non collegati</Text>
+          <Text style={styles.sectionHint}>{summaryState.status === "ready" ? "Aggiornato alle " + summaryState.updatedAt.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) : summaryState.status === "error" ? "Connessione da verificare" : "Caricamento dati…"}</Text>
         </View>
         <View style={styles.metrics}>
-          {metrics.map(item => (
+          {[
+            { label: "OPPORTUNITÀ", value: summaryState.status === "ready" ? summaryState.data.opportunities : "—", hint: "Da verificare" },
+            { label: "DA CONTATTARE", value: summaryState.status === "ready" ? summaryState.data.toContact : "—", hint: "Annunci in archivio" },
+            { label: "RICHIAMI", value: summaryState.status === "ready" ? summaryState.data.dueCallbacks : "—", hint: "In scadenza o in ritardo" },
+            { label: "INCARICHI", value: summaryState.status === "ready" ? summaryState.data.mandates : "—", hint: "Acquisiti" }
+          ].map(item => (
             <View key={item.label} style={styles.metric}>
               <Text style={styles.metricLabel}>{item.label}</Text>
-              <Text style={styles.metricValue}>—</Text>
+              <Text style={styles.metricValue}>{item.value}</Text>
               <Text style={styles.metricHint}>{item.hint}</Text>
             </View>
           ))}
@@ -92,13 +122,15 @@ export function DashboardScreen() {
         </View>
 
         <View style={styles.notice}>
-          <Text style={styles.noticeLabel}>PROSSIMA TAPPA</Text>
-          <Text style={styles.noticeTitle}>Collegamento sicuro a Supabase</Text>
+          <Text style={styles.noticeLabel}>COLLEGAMENTO SUPABASE</Text>
+          <Text style={styles.noticeTitle}>{summaryState.status === "ready" ? "Connessione attiva · sola lettura" : summaryState.status === "error" ? "Dati temporaneamente non disponibili" : "Lettura dei dati in corso"}</Text>
           <Text style={styles.noticeBody}>
-            Dopo l&apos;autenticazione vedrà gli annunci e i contatti già presenti, senza creare un secondo archivio.
+            {summaryState.status === "error"
+              ? summaryState.message
+              : "Il riepilogo usa conteggi del Suo account. Scorra verso il basso per aggiornare; nessun dato viene scritto o modificato."}
           </Text>
         </View>
-        <Text style={styles.footer}>NMRE MOBILE · VERSIONE 0.1.0 · DATI NON COLLEGATI</Text>
+        <Text style={styles.footer}>NMRE MOBILE · VERSIONE 0.1.0 · DATI IN SOLA LETTURA</Text>
       </ScrollView>
     </SafeAreaView>
   );

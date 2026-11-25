@@ -41,3 +41,9 @@
 - Recorded audit of the existing PWA, Supabase schema/RLS, deployed functions, Gmail job and repository drift.
 - Added roadmap, architecture, database inventory, API specification, security policy and test plan.
 - No production database, deployed function, secret, PWA file or deployment workflow changed.
+
+
+## 2026-11-25 — M4.1 dashboard read-only
+- Connected dashboard metrics to owner-scoped Supabase counts for pending opportunities, listings to contact, due callbacks and acquired mandates.
+- Added refresh, loading and connection-error UI.
+- Kept this milestone read-only; no schema, production data, edge function or PWA changes.
