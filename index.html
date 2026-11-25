@@ -4691,9 +4691,8 @@ function renderCandidates(){
       '<span class="candidate-quick-tag">Qualità dati '+quality.qualityScore+'/100</span>',
       latestPriceDrop?'<span class="candidate-quick-tag candidate-quick-tag-price">Ribasso documentato</span>':""
     ].filter(Boolean).join("");
-    const verifyAction=isPrivate
-      ?'<button class="gold" type="button" data-confirm="'+safe(c.id)+'">Inserisci nell’archivio</button>'
-      :'<button class="gold" type="button" data-open-candidate-details="'+safe(c.id)+'">Verifica venditore</button>';
+    const verifyAction='<button class="gold" type="button" data-confirm="'+safe(c.id)+'">'+(isPrivate?"Inserisci nell’archivio":"Tieni nell’archivio")+'</button>';
+    const reviewAction='<button class="secondary" type="button" data-open-candidate-details="'+safe(c.id)+'">Verifica venditore / modifica dati</button>';
     return '<article class="candidate" data-candidate="'+safe(c.id)+'" data-url="'+safe(c.url||"")+'" data-url-originale="'+safe(c.url_originale||"")+'" data-portal="'+safe(c.portale||"Portale non indicato")+'">'
       +'<div class="candidate-priority candidate-priority-'+priority.level+'" aria-label="Priorità commerciale '+priority.score+' su 100">'
       +'<div class="candidate-priority-score"><strong>'+priority.score+'</strong><span>/100</span></div>'
@@ -4705,7 +4704,7 @@ function renderCandidates(){
       +'<p class="candidate-quick-facts">'+safe(quickFacts||"Caratteristiche dell’immobile da completare")+'</p>'
       +'<div class="candidate-quick-tags">'+quickTags+'</div>'
       +'</div>'
-      +'<div class="candidate-actions candidate-actions-primary">'+verifyAction+(!isPrivate?'<button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta</button>':"")+linkHtml+'</div>'
+      +'<div class="candidate-actions candidate-actions-primary">'+verifyAction+reviewAction+'<button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta</button>'+linkHtml+'</div>'
       +'<details class="candidate-detail-panel" data-candidate-details>'
       +'<summary>Dettagli, verifica e modifica della scheda</summary>'
       +'<div class="candidate-detail-content">'
@@ -4984,7 +4983,7 @@ async function confirmCandidate(id,button){
   const value=name=>card.querySelector('[data-field="'+name+'"]').value.trim();
   const title=value("titolo"), municipality=value("comune"), price=value("prezzo");
   const seller=value("venditore");
-  if(seller!=="Privato"){msg("candidateMsg","Prima di inserire l'immobile, verifichi e salvi la classificazione come Privato.","error");return;}
+  if(!["Privato","Agenzia","Da verificare"].includes(seller)){msg("candidateMsg","Selezioni una classificazione valida del venditore.","error");return;}
   const contact=value("contatto")||null;
   const sourceUrl=card.dataset.url||null;
   const sourcePortal=card.dataset.portal||"Portale non indicato";
