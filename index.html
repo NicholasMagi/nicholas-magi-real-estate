@@ -102,6 +102,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .candidate-duplicate-warning .duplicate-target{padding:8px 10px;background:#fff;border:1px solid #efe3cf;border-radius:8px;margin-top:7px;overflow-wrap:anywhere}
 .candidate-duplicate-warning .duplicate-reason{font-size:11px;color:#76634a;margin-top:7px}
 .candidate-duplicate-warning small{display:block;font-size:10px;color:#76634a;margin-top:7px}
+.candidate-duplicate-warning a{display:inline-block;margin-top:7px;color:#765a2e;font-weight:700}
 .candidate-price-drop{border-left:4px solid #4c8a62;background:#f5faf6;color:#315b3d}.candidate-price-drop strong{color:#285638}
 
 .candidate-enrichment-result{margin-top:8px}.candidate-enrichment-result .candidate-quality{margin:8px 0}.candidate-enrichment-result .crm-entry{display:flex;justify-content:space-between;gap:12px}.candidate-enrichment-result .crm-entry strong{flex:0 0 115px}.candidate-enrichment-result .crm-entry span{text-align:right;overflow-wrap:anywhere}.candidate-enrichment-result .hint{margin:8px 0}
@@ -4530,6 +4531,10 @@ function renderCandidates(){
     const tone=quality.duplicate||!quality.specificLink||quality.oldNotification?"warning":quality.incomplete||!quality.hasNotificationDate?"review":"ok";
     const qualityHtml='<div class="candidate-quality candidate-quality-'+tone+'"><strong>Controllo qualità:</strong> '+safe(linkText)+' · '+safe(ageText)+' · '+safe(missingText)+'<br>'+safe(recommendedText)+'<br>'+safe(duplicateText)+'</div>';
     const duplicateTarget=quality.duplicate?.item||null;
+    const duplicateTargetVisible=!!duplicateTarget&&data.some(entry=>String(entry.id)===String(duplicateTarget.id));
+    const duplicateTargetLink=duplicateTargetVisible
+      ?'<a href="#candidate-'+safe(duplicateTarget.id)+'">Vai alla scheda collegata</a>'
+      :'';
     const duplicateTargetFacts=duplicateTarget
       ?[duplicateTarget.comune,duplicateTarget.portale,
         Number(duplicateTarget.prezzo)>0?formatCurrency(duplicateTarget.prezzo):null,
@@ -4542,6 +4547,7 @@ function renderCandidates(){
         +'<p>Questo annuncio potrebbe riferirsi allo stesso immobile presente in '+safe(quality.duplicate.scope==="archivio"?"archivio":"un’altra opportunità")+'. Confronti la scheda prima di contattare il venditore.</p>'
         +'<div class="duplicate-target"><b>Scheda da confrontare:</b> '+safe(duplicateTarget?.titolo||"annuncio simile")+(duplicateTargetFacts?" · "+safe(duplicateTargetFacts):"")+'</div>'
         +'<div class="duplicate-reason"><b>Motivo:</b> '+safe(quality.duplicate.reason||"Caratteristiche simili")+'</div>'
+        +(duplicateTargetLink?'<div>'+duplicateTargetLink+'</div>':'')
         +'<small>Le schede restano separate: nessun dato viene unito o eliminato automaticamente.</small>'
         +'</aside>'
       :'';
@@ -4598,7 +4604,7 @@ function renderCandidates(){
     const reviewAction='<button class="secondary" type="button" data-open-candidate-details="'+safe(c.id)+'">Verifica venditore / modifica dati</button>';
     const sourceTheme=candidateSourceTheme(c.portale);
     const sourceLabel=sourceTheme==="idealista"?"Idealista":sourceTheme==="immobiliare"?"Immobiliare.it":sourceTheme==="subito"?"Subito":(c.portale||"Portale non indicato");
-    return '<article class="candidate candidate-source-'+sourceTheme+'" data-candidate="'+safe(c.id)+'" data-url="'+safe(c.url||"")+'" data-url-originale="'+safe(c.url_originale||"")+'" data-portal="'+safe(c.portale||"Portale non indicato")+'">'
+    return '<article id="candidate-'+safe(c.id)+'" class="candidate candidate-source-'+sourceTheme+'" data-candidate="'+safe(c.id)+'" data-url="'+safe(c.url||"")+'" data-url-originale="'+safe(c.url_originale||"")+'" data-portal="'+safe(c.portale||"Portale non indicato")+'">'
       +'<div class="candidate-priority candidate-priority-'+priority.level+'" aria-label="Priorità commerciale '+priority.score+' su 100">'
       +'<div class="candidate-priority-score"><strong>'+priority.score+'</strong><span>/100</span></div>'
       +'<div class="candidate-priority-info"><strong>Priorità acquisizione '+safe(priority.label)+'</strong><span>'+safe(priority.description)+'</span><small>'+safe(priority.reasons.join(" · "))+'</small></div>'
