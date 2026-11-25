@@ -190,6 +190,9 @@ button:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:380px){.dash-quick-action-icon{width:30px;height:30px;flex-basis:30px}.dash-quick-action-copy strong{font-size:11px}}
 
 .dash-metric{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 17px;min-width:0;position:relative;overflow:hidden}
+.dash-metric[data-dashboard-nav],.dash-overview-item[role="button"],.dash-pipeline-row[role="button"],.call-center-stat[role="button"],.sales-performance-metric[role="button"],.sales-performance-step[role="button"],.sales-goal[role="button"]{cursor:pointer;transition:border-color .15s,background .15s,transform .15s}
+.dash-metric[data-dashboard-nav]:hover,.dash-overview-item[role="button"]:hover,.dash-pipeline-row[role="button"]:hover,.call-center-stat[role="button"]:hover,.sales-performance-metric[role="button"]:hover,.sales-performance-step[role="button"]:hover,.sales-goal[role="button"]:hover{border-color:#c9a96e;background:#fffdf8;transform:translateY(-1px)}
+.dash-metric[data-dashboard-nav]:focus-visible,.dash-overview-item[role="button"]:focus-visible,.dash-pipeline-row[role="button"]:focus-visible,.call-center-stat[role="button"]:focus-visible,.sales-performance-metric[role="button"]:focus-visible,.sales-performance-step[role="button"]:focus-visible,.sales-goal[role="button"]:focus-visible{outline:3px solid #c9a96e;outline-offset:2px}
 .dash-metric:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--gold)}
 .dash-metric-label{font-size:11px;letter-spacing:.4px;color:var(--muted);font-weight:700;text-transform:uppercase}
 .dash-metric-value{font-family:Georgia,serif;font-size:30px;line-height:1.1;margin:11px 0 5px;color:var(--ink);font-variant-numeric:tabular-nums}
@@ -885,22 +888,22 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
   </div>
 
   <div class="dash-metrics">
-    <article class="dash-metric">
+    <article class="dash-metric" role="button" tabindex="0" data-dashboard-nav="candidateSection">
       <div class="dash-metric-label">Nuove opportunità</div>
       <div class="dash-metric-value" id="dashCandidates">0</div>
       <div class="dash-metric-note" id="dashCandidatesNote">Annunci in attesa di valutazione</div>
     </article>
-    <article class="dash-metric">
+    <article class="dash-metric" role="button" tabindex="0" data-dashboard-nav="archiveSection" data-dashboard-contact-filter="da_contattare">
       <div class="dash-metric-label">Da contattare</div>
       <div class="dash-metric-value" id="dashToCall">0</div>
       <div class="dash-metric-note">Proprietari nell'archivio senza primo contatto</div>
     </article>
-    <article class="dash-metric">
+    <article class="dash-metric" role="button" tabindex="0" data-dashboard-nav="followupSection">
       <div class="dash-metric-label">Richiami in scadenza</div>
       <div class="dash-metric-value" id="dashDue">0</div>
       <div class="dash-metric-note" id="dashDueNote">Scaduti o previsti per oggi</div>
     </article>
-    <article class="dash-metric">
+    <article class="dash-metric" role="button" tabindex="0" data-dashboard-nav="nmreCrm" data-dashboard-crm-tab="immobili">
       <div class="dash-metric-label">Incarichi acquisiti</div>
       <div class="dash-metric-value" id="dashMandates">0</div>
       <div class="dash-metric-note">Incarichi registrati nel CRM</div>
@@ -932,12 +935,12 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
       <button class="dash-link" id="callCenterOpenArchive">Apri archivio CRM</button>
     </div>
     <div class="call-center-metrics">
-      <div class="call-center-stat"><strong id="callStatOverdue">0</strong><span>Richiami scaduti</span></div>
-      <div class="call-center-stat"><strong id="callStatToday">0</strong><span>Da fare oggi</span></div>
-      <div class="call-center-stat"><strong id="callStatUpcoming">0</strong><span>Richiami nei prossimi 7 giorni</span></div>
-      <div class="call-center-stat"><strong id="callStatNew">0</strong><span>Nuovi proprietari</span></div>
-      <div class="call-center-stat"><strong id="callStatAppointments">0</strong><span>Appuntamenti in pipeline</span></div>
-      <div class="call-center-stat"><strong id="callStatReachable">0</strong><span>Con recapito telefonico</span></div>
+      <div class="call-center-stat" role="button" tabindex="0" data-dashboard-call-filter="overdue"><strong id="callStatOverdue">0</strong><span>Richiami scaduti</span></div>
+      <div class="call-center-stat" role="button" tabindex="0" data-dashboard-call-filter="today"><strong id="callStatToday">0</strong><span>Da fare oggi</span></div>
+      <div class="call-center-stat" role="button" tabindex="0" data-dashboard-call-filter="upcoming"><strong id="callStatUpcoming">0</strong><span>Richiami nei prossimi 7 giorni</span></div>
+      <div class="call-center-stat" role="button" tabindex="0" data-dashboard-call-filter="new"><strong id="callStatNew">0</strong><span>Nuovi proprietari</span></div>
+      <div class="call-center-stat" role="button" tabindex="0" data-dashboard-call-filter="appointment"><strong id="callStatAppointments">0</strong><span>Appuntamenti in pipeline</span></div>
+      <div class="call-center-stat" role="button" tabindex="0" data-dashboard-call-filter="reachable"><strong id="callStatReachable">0</strong><span>Con recapito telefonico</span></div>
     </div>
     <div class="call-center-toolbar">
       <span id="callQueueCount" class="call-center-count">Preparazione della lista...</span>
@@ -950,6 +953,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
         <option value="appointment">Appuntamenti in pipeline</option>
         <option value="plan">Da pianificare</option>
         <option value="stale">Da riprendere · oltre 7 giorni</option>
+        <option value="reachable">Con recapito telefonico</option>
       </select>
       <select id="callWhatsappTemplate" aria-label="Modello del messaggio WhatsApp">
         <option value="auto">WhatsApp · automatico per stato</option>
@@ -997,11 +1001,11 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
     </div>
     <p class="sales-performance-sub">I numeri derivano dalle telefonate e dagli esiti registrati nel CRM, dagli appuntamenti in agenda e dalle valutazioni completate. Le attività non registrate non vengono stimate.</p>
     <div class="sales-performance-metrics">
-      <div class="sales-performance-metric"><strong id="salesPerfCalls">0</strong><span>Telefonate registrate</span></div>
-      <div class="sales-performance-metric"><strong id="salesPerfResponses">0</strong><span>Conversazioni effettive</span></div>
-      <div class="sales-performance-metric"><strong id="salesPerfAppointments">0</strong><span>Appuntamenti e visite fissati</span></div>
-      <div class="sales-performance-metric"><strong id="salesPerfValuations">0</strong><span>Valutazioni completate</span></div>
-      <div class="sales-performance-metric"><strong id="salesPerfMandates">0</strong><span>Incarichi acquisiti registrati</span></div>
+      <div class="sales-performance-metric" role="button" tabindex="0" data-dashboard-nav="callCenter"><strong id="salesPerfCalls">0</strong><span>Telefonate registrate</span></div>
+      <div class="sales-performance-metric" role="button" tabindex="0" data-dashboard-nav="callCenter"><strong id="salesPerfResponses">0</strong><span>Conversazioni effettive</span></div>
+      <div class="sales-performance-metric" role="button" tabindex="0" data-dashboard-nav="nmreCrm" data-dashboard-crm-tab="agenda"><strong id="salesPerfAppointments">0</strong><span>Appuntamenti e visite fissati</span></div>
+      <div class="sales-performance-metric" role="button" tabindex="0" data-dashboard-nav="nmreCrm" data-dashboard-crm-tab="agenda"><strong id="salesPerfValuations">0</strong><span>Valutazioni completate</span></div>
+      <div class="sales-performance-metric" role="button" tabindex="0" data-dashboard-nav="nmreCrm" data-dashboard-crm-tab="immobili"><strong id="salesPerfMandates">0</strong><span>Incarichi acquisiti registrati</span></div>
     </div>
     <div class="sales-performance-funnel" id="salesPerformanceFunnel"></div>
     <div class="sales-performance-note" id="salesPerformanceNote" aria-live="polite">Registri l'esito delle telefonate nello storico del contatto per iniziare a misurare i tassi di conversione.</div>
@@ -2514,6 +2518,55 @@ $("callWhatsappTemplate").addEventListener("change",renderCallCenter);
 $("callCenterOpenArchive").addEventListener("click",()=>dashboardScroll("archiveSection"));
 $("dashOpenArchive").addEventListener("click",()=>dashboardScroll("archiveSection"));
 $("dashOpenCandidates").addEventListener("click",()=>dashboardScroll("candidateSection"));
+async function nmreOpenDashboardTile(tile){
+  if(!tile)return;
+  const callFilter=tile.dataset.dashboardCallFilter;
+  if(callFilter){
+    dashboardScroll("callCenter");
+    const filter=$("callQueueFilter");
+    if(filter){filter.value=callFilter;renderCallCenter();}
+    $("callQueueList")?.scrollIntoView({behavior:"smooth",block:"start"});
+    return;
+  }
+  const target=tile.dataset.dashboardNav;
+  if(!target)return;
+  if(target==="archiveSection"){
+    ["listingSearch","listingTownFilter","listingTypeFilter","listingPortalFilter","sellerFilter","contactFilter","listingPriceMin","listingPriceMax","listingSurfaceMin","listingSurfaceMax","listingRoomsMin","listingRoomsMax"].forEach(id=>{const field=$(id);if(field)field.value="";});
+    if(tile.dataset.dashboardContactFilter)$("contactFilter").value=tile.dataset.dashboardContactFilter;
+    if(tile.dataset.dashboardSellerFilter)$("sellerFilter").value=tile.dataset.dashboardSellerFilter;
+    dashboardScroll("archiveSection");
+    await loadListings();
+    return;
+  }
+  if(target==="candidateSection"){
+    if(tile.dataset.dashboardCandidateSellerFilter){
+      ["candidateSearch","candidateTownFilter","candidateTypeFilter","candidatePortalFilter","candidateSellerFilter","candidateQualityFilter","candidatePriceMin","candidatePriceMax","candidateSurfaceMin","candidateSurfaceMax","candidateFromFilter","candidateToFilter"].forEach(id=>{const field=$(id);if(field)field.value="";});
+      if($("candidateSellerFilter"))$("candidateSellerFilter").value=tile.dataset.dashboardCandidateSellerFilter;
+      renderCandidates();
+    }
+    dashboardScroll("candidateSection");
+    return;
+  }
+  if(target==="nmreCrm"){
+    dashboardScroll("nmreCrm");
+    nmreCrmSetTab(tile.dataset.dashboardCrmTab||"contatti");
+    return;
+  }
+  dashboardScroll(target);
+}
+const dashboardTileSelector='[data-dashboard-nav],[data-dashboard-call-filter]';
+$("dashboard").addEventListener("click",event=>{
+  const tile=event.target.closest(dashboardTileSelector);
+  if(!tile||event.target.closest("button,a,input,select,textarea"))return;
+  void nmreOpenDashboardTile(tile);
+});
+$("dashboard").addEventListener("keydown",event=>{
+  if(event.key!=="Enter"&&event.key!==" ")return;
+  const tile=event.target.closest(dashboardTileSelector);
+  if(!tile||tile!==event.target)return;
+  event.preventDefault();
+  void nmreOpenDashboardTile(tile);
+});
 $("dashPriorities").addEventListener("click",event=>{
   const button=event.target.closest("button");
   if(!button)return;
@@ -5903,8 +5956,9 @@ function renderCallCenter(){
   $("callStatReachable").textContent=String(all.filter(entry=>entry.contact.phone).length);
   const filter=$("callQueueFilter").value||"all";
   const visible=filter==="all"?all:filter==="appointment"
-    ?all.filter(entry=>entry.item.stato_contatto==="appuntamento")
-    :all.filter(entry=>entry.kind===filter);
+     ?all.filter(entry=>entry.item.stato_contatto==="appuntamento")
+     :filter==="reachable"?all.filter(entry=>!!entry.contact.phone)
+     :all.filter(entry=>entry.kind===filter);
   $("callQueueCount").textContent=visible.length+" attività visualizzate · "+all.length+" attività da gestire";
   const whatsappTemplate=$("callWhatsappTemplate")?.value||"auto";
   const box=$("callQueueList");
