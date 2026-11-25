@@ -1,14 +1,14 @@
 # NMRE Mobile — Roadmap
 
 ## Product
-**NMRE Mobile** is a separate Expo client for iOS and Android, under `mobile/` on branch `mobile-expo-foundation`. The existing Nicholas Magi Real Estate web/PWA remains unchanged. Both clients reuse the existing Supabase backend; there is no duplicate database or background service.
+**NMRE Mobile** is a separate Expo client for iOS and Android, under mobile/ on branch mobile-expo-foundation. The existing Nicholas Magi Real Estate web/PWA remains unchanged. Both clients reuse the existing Supabase backend; there is no duplicate database or background service.
 
 Target: develop from Windows with Expo and build iOS/Android through EAS. ALBim is a future adapter pending a verified provider contract.
 
 ## M0 — Audit (completed)
-- Inspected repository, PWA, CI, Supabase tables/policies, migrations, deployed functions and Gmail cron.
+- Inspected repository, PWA, CI, Supabase tables/policies, deployed functions and Gmail cron.
 - Confirmed static single-page PWA with inline JS and Supabase JS v2.
-- Confirmed 19 public application tables with RLS enabled and owner-scoped policies observed.
+- Confirmed 19 public application tables with RLS and owner-scoped policies observed.
 - Found 33 applied live migration records vs 7 migration files in repository.
 - Function comparison: search, enrichment, Gmail scheduled worker, Gmail Push, Push Send, OAuth start/callback and retired reader match; Insights differs; AI is deployed but its source is not versioned.
 - Live Gmail cron runs every minute; docs contain conflicting intervals.
@@ -36,13 +36,27 @@ Rollback: revert mobile scaffold commit; no backend rollback.
 - Added a pure TypeScript rules engine ported from the PWA decision logic: candidate priority, data completeness/duplicate checks, municipality filters, action-plan ranking, due/overdue follow-ups, private-seller counts, incomplete qualification and documented price reductions.
 - Added a typed context boundary. Without connected operational repositories, NOVA clearly reports that data are unavailable rather than presenting fake counts; generic help and call-script prompts still work.
 - No OpenAI/API, new Supabase table, Edge Function, migration, production write or secret was introduced.
-- Added `npm run test:nova` based on Node's built-in test runner. Run it locally and record exact output before considering the milestone verified.
+- Added npm run test:nova based on Node's built-in test runner. Run it locally and record exact output before considering the milestone verified.
 - Remaining: M3 Auth/SecureStore; M4 owner-scoped read-only repositories and mapping; detail navigation; install dependencies and run full mobile quality gates.
 - Rollback: revert only the NOVA mobile feature files and tab entry; no backend rollback.
 
-## M3 — Authentication and session
-Deliverables: existing email/password Supabase Auth, SecureStore storage adapter, protected routes, session refresh/expiry UX and generated schema types from a verified live snapshot.
-Acceptance: valid sign-in/out; invalid credentials, expired session, refresh failure and network outage tested; staging proves User A cannot access User B records; no secret in bundle/logs and no PII disk cache.
+## M3 — Authentication and session (in progress)
+Implemented in source on 2026-11-25:
+- Supabase JS v2 client initialized only with the HTTPS project URL and publishable key.
+- Expo SecureStore adapter with chunked session storage and pointer-last updates.
+- Existing-user email/password login, local-device sign-out, auth-state restoration, native foreground/background token refresh and protected tab routes.
+- Dedicated sign-in screen, dashboard sign-out action, and deterministic tests for safe auth error messages.
+- No self-registration flow is exposed.
+
+Remaining gates:
+- Install dependencies on Windows and commit the generated package-lock.json.
+- Configure the local .env with the project URL and publishable key; verify email/password Auth for the existing user.
+- Run auth/NOVA tests, typecheck, lint, Expo Doctor and iOS/Android exports.
+- Test valid/invalid credentials, offline startup, session persistence, token refresh/expiry and local sign-out on physical devices.
+- Confirm SecureStore adapter behavior on iOS and Android and check logs/bundles for leaked tokens.
+- M4 read-only repositories and live listing access remain separate and are not implemented.
+
+Acceptance: valid sign-in/out, invalid credentials, expired session, refresh failure and network outage tested; staging proves User A cannot access User B records; no secret in bundle/logs and no PII disk cache. Source implementation exists, but integration/device gates are NOT YET VERIFIED.
 Rollback: revert mobile auth code; leave Auth/backend untouched.
 
 ## M4 — Dashboard and real listings
@@ -57,18 +71,18 @@ Rollback: disable feature and retain user data unless explicitly approved otherw
 
 ## M6 — CRM productivity and device behavior
 Deliverables: contacts, properties, interactions and appointments using current schema; native push registration design/implementation; phone/WhatsApp/share-sheet handoff; offline read-only mode only after encryption/retention design.
-Acceptance: owner-scoped CRUD; timezone/date/DST tests; native tokens distinct from browser VAPID; preference/unregister tests; cached data visibly stale; no silent offline writes.
-Rollback: disable individual mobile features; preserve server records.
+Acceptance: owner-scoped CRUD; timezone/date/DST tests; push permission denied and unregister tests; native tokens distinct from browser VAPID; cached data visibly stale; no silent offline writes.
+Rollback: disable individual features; preserve server records.
 
 ## M7 — Stabilization and release
 Deliverables: test plan, dependency audit, secret scan, accessibility review, EAS preview builds and physical-device checks.
-Acceptance: release-blocking checks pass; high/critical risks fixed or accepted; iPhone and Android device tests; EAS build IDs/environment recorded; production profile explicit.
+Acceptance: release-blocking checks pass; high/critical risks fixed or formally accepted; iPhone and Android device tests; EAS build IDs/environment recorded; production profile explicit.
 Rollback: stop rollout and issue corrected build; database rollback separate and approved.
 
 ## M8 — ALBim compatibility (future)
 Verify product identity, official API contract, auth, ownership and provider permissions; define adapter, mapping, idempotency and conflict handling.
-Acceptance: approved provider contract, sandbox and contract tests; core NMRE works with adapter disabled.
+Acceptance: approved provider contract, sandbox and contract tests; core app works with adapter disabled.
 Rollback: disable adapter; keep Supabase core unchanged.
 
 ## Global gates
-No production migration without explicit approval and rollback. No merge to main without review. No undocumented integration or scraping. No completion claim without evidence. Isolated staging is required before write-capable development; only one Supabase project was verified in this audit.
+No production migration without explicit approval and rollback. No merge to main without review. No undocumented integration or scraping. No completion claim without evidence. Isolated staging is required before write-capable development; only one Supabase project was verified.
