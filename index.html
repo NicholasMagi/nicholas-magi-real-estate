@@ -1238,6 +1238,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
     <input id="candidateToFilter" type="date">
     <p id="candidatePrioritySummary"></p>
   </div>
+  <div id="candidateRecoveryAlert" class="candidate-quality candidate-quality-warning" hidden></div>
   <div id="candidateList"><p class="hint">Nessuna email da verificare.</p></div>
   <div id="candidateMsg" class="status"></div>
   <details class="crm candidate-recovery" id="candidateRecoveryPanel">
@@ -1246,13 +1247,28 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
     <label for="candidateRecoveryFilter">Mostra</label>
     <select id="candidateRecoveryFilter">
       <option value="all">Tutti</option>
-      <option value="agency">Classificati automaticamente come agenzia</option>
+      <option value="with_new">Con nuove notifiche dopo lo scarto</option>
+      <option value="agency_auto">Agenzia · classificazione automatica (in attesa)</option>
+      <option value="agency_manual">Agenzia · classificazione manuale</option>
+      <option value="agency_auto_legacy">Agenzia · classificazione automatica storica, scartata</option>
       <option value="sync">Scartati dalla sincronizzazione (probabile)</option>
       <option value="same_url">Scartati con lo stesso link di uno scarto precedente</option>
-      <option value="manual_agency">Classificati manualmente come agenzia</option>
       <option value="manual">Scartati manualmente o storici</option>
     </select>
     <div id="candidateRecoveryList"><p class="hint">Nessun annuncio fuori dalla coda.</p></div>
+  </details>
+  <details class="crm candidate-recovery" id="candidateDubiousPanel" hidden>
+    <summary>Avvisi dubbi da verificare <span id="candidateDubiousSummary" class="small">Caricamento…</span></summary>
+    <p class="hint">Email escluse dal filtro automatico che contengono la scheda di un annuncio o provengono da un portale immobiliare. Nessuna email viene cancellata: può aprirla in Gmail, crearne un candidato o ignorarla. NMRE non salva il testo del messaggio.</p>
+    <label for="candidateDubiousFilter">Mostra</label>
+    <select id="candidateDubiousFilter">
+      <option value="da_verificare">Da verificare</option>
+      <option value="da_promuovere">In creazione del candidato</option>
+      <option value="ignorato">Ignorati</option>
+      <option value="promosso">Promossi in coda</option>
+      <option value="all">Tutti</option>
+    </select>
+    <div id="candidateDubiousList"><p class="hint">Nessun avviso dubbio.</p></div>
   </details>
 </section>
 
@@ -1410,6 +1426,7 @@ let trashCache = [];
 let candidateCache = [];
 let candidateAgencyCache = [];
 let candidateDismissedCache = [];
+let candidateDubiousCache = [];
 let sellerRegistryCache = [];
 let insightsCanImport = false;
 let omiQuotationCache = [];
@@ -1446,7 +1463,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-no-lost-opportunity-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-no-lost-opportunity-2");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1521,7 +1538,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-no-lost-opportunity-1");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261125-no-lost-opportunity-2");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -4230,7 +4247,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-no-lost-opportunity-1");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-no-lost-opportunity-2");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);
@@ -5069,12 +5086,30 @@ async function loadCandidates(){
     const key=canonicalCandidateUrl(item.url);
     item.previously_dismissed=!!(key&&dismissedListingUrls.has(key));
   });
+  // Storico notifiche degli scartati: serve a evidenziare gli aggiornamenti
+  // arrivati dopo lo scarto, anche senza ribasso.
+  const dismissedNotifications=new Map();
+  const dismissedIds=dismissed.map(item=>String(item.id));
+  for(let batch=0;batch<dismissedIds.length;batch+=100){
+    const ids=dismissedIds.slice(batch,batch+100);
+    const {data:notifications,error}=await supabase.from("annunci_candidati_notifiche")
+      .select("candidate_id,source_email_id,notified_at,created_at,listing_price,price_drop_percent,listing_title,listing_municipality")
+      .in("candidate_id",ids).order("created_at",{ascending:false}).limit(2000);
+    if(error){msg("candidateMsg","Storico notifiche degli scartati non disponibile: "+error.message,"error");break;}
+    for(const notification of notifications||[]){
+      const key=String(notification.candidate_id);
+      if(!dismissedNotifications.has(key))dismissedNotifications.set(key,[]);
+      dismissedNotifications.get(key).push(notification);
+    }
+  }
+  dismissed.forEach(item=>{item.notification_history=dismissedNotifications.get(String(item.id))||[];});
   candidateDismissedCache=dismissed;
   candidateAgencyCache=data.filter(item=>item.tipo_venditore==="Agenzia");
   candidateCache=data.filter(item=>item.tipo_venditore!=="Agenzia");
   renderDashboard();
   renderCandidates();
   renderCandidateRecovery();
+  loadDubiousAlerts();
 }
 
 // Storico delle decisioni su un candidato, conservato in dati_estratti.storico_stato
@@ -5109,15 +5144,39 @@ async function nmreUpdateCandidateWithHistory(id,entry,fields,guard={}){
 }
 
 const NMRE_RECOVERY_GROUP_LABELS={
-  agency:"Classificato automaticamente come agenzia",
+  agency_auto:"Agenzia · classificazione automatica della sincronizzazione",
+  agency_manual:"Agenzia · classificazione manuale",
+  agency_auto_legacy:"Agenzia · classificazione automatica storica, scartata",
   sync:"Scartato dalla sincronizzazione (probabile)",
   same_url:"Scartato con lo stesso link di uno scarto precedente",
-  manual_agency:"Classificato manualmente come agenzia",
   manual:"Scartato manualmente o storico"
 };
-// Stessa inferenza della query di audit AQ2: è un'indicazione, non una certezza.
-function candidateRecoveryGroup(item,earliestDismissByUrl){
-  if(item.tipo_venditore==="Agenzia")return "manual_agency";
+const NMRE_DISCARD_ACTIONS=["scartato","classificato_agenzia_e_scartato"];
+// Data dello scarto dallo storico delle decisioni; null per gli scarti precedenti
+// alla registrazione dello storico (updated_at non è affidabile: cambia a ogni notifica).
+function nmreDiscardEntry(item){
+  const history=item&&item.dati_estratti&&Array.isArray(item.dati_estratti.storico_stato)?item.dati_estratti.storico_stato:[];
+  for(let index=history.length-1;index>=0;index--){
+    if(NMRE_DISCARD_ACTIONS.includes(history[index]?.azione))return history[index];
+  }
+  return null;
+}
+// Provenienza effettiva della decisione "agenzia".
+function nmreAgencyDecisionOrigin(item){
+  const history=item&&item.dati_estratti&&Array.isArray(item.dati_estratti.storico_stato)?item.dati_estratti.storico_stato:[];
+  if(history.some(entry=>entry&&entry.origine==="utente"&&(entry.a==="Agenzia"||entry.azione==="classificato_agenzia_e_scartato")))return "manuale";
+  if(item&&item.seller_manual_override===true)return "manuale";
+  if(/^Verificato manualmente/i.test(String(item&&item.seller_evidence||"")))return "manuale";
+  return "automatica";
+}
+// Gruppo del pannello: per le agenzie la provenienza è quella reale della
+// decisione; per gli altri scartati è la stessa inferenza della query AQ2.
+function candidateRecoveryGroup(item,earliestDismissByUrl,kind="dismissed"){
+  if(item.tipo_venditore==="Agenzia"){
+    const origin=nmreAgencyDecisionOrigin(item);
+    if(origin==="manuale")return "agency_manual";
+    return kind==="agency"?"agency_auto":"agency_auto_legacy";
+  }
   const last=nmreLastStatusEntry(item);
   if(last&&last.origine==="utente")return "manual";
   if(item.seller_manual_override!==true&&!item.notification_sender&&!item.email_subject)return "sync";
@@ -5125,6 +5184,30 @@ function candidateRecoveryGroup(item,earliestDismissByUrl){
   const earliest=key?earliestDismissByUrl.get(key):null;
   if(earliest&&earliest.id!==String(item.id)&&earliest.updated_at<String(item.updated_at||""))return "same_url";
   return "manual";
+}
+// Notifiche arrivate dopo lo scarto (o dopo l'ultima presa visione), con o senza ribasso.
+// Due fonti: lo storico notifiche confrontato con la data dello scarto registrata,
+// e il contrassegno scritto dalla sincronizzazione (dati_estratti.notifiche_dopo_scarto),
+// che funziona anche per gli scarti storici senza data.
+function nmreNotificationsAfterDiscard(item){
+  const extracted=item&&item.dati_estratti&&typeof item.dati_estratti==="object"?item.dati_estratti:{};
+  const marker=extracted.notifiche_dopo_scarto&&typeof extracted.notifiche_dopo_scarto==="object"?extracted.notifiche_dopo_scarto:null;
+  const discard=nmreDiscardEntry(item);
+  const seen=marker&&marker.visto_il?String(marker.visto_il):null;
+  const reference=[discard?.data,seen].filter(Boolean).sort().pop()||null;
+  const history=Array.isArray(item?.notification_history)?item.notification_history:[];
+  const after=reference?history.filter(entry=>String(entry.created_at||entry.notified_at||"")>reference):[];
+  const markerList=marker&&Array.isArray(marker.elenco)?marker.elenco:[];
+  const markerPending=marker&&marker.da_rivedere===true
+    ?markerList.filter(entry=>!seen||String(entry.data||"")>seen)
+    :[];
+  const fromMarker=markerPending.length?markerPending[markerPending.length-1]:null;
+  const count=Math.max(after.length,markerPending.length||(marker&&marker.da_rivedere===true?1:0));
+  const latest=after[0]||(fromMarker?{
+    notified_at:fromMarker.data,listing_price:fromMarker.prezzo,price_drop_percent:fromMarker.ribasso_percentuale,
+    listing_title:fromMarker.titolo,listing_municipality:fromMarker.comune
+  }:null);
+  return {count,latest,reference,discardKnown:!!discard,totalNotifications:history.length,lastNotification:history[0]||null};
 }
 function renderCandidateRecovery(){
   const box=$("candidateRecoveryList"),summary=$("candidateRecoverySummary");
@@ -5137,31 +5220,166 @@ function renderCandidateRecovery(){
     if(!current||String(item.updated_at||"")<current.updated_at)earliestDismissByUrl.set(key,{id:String(item.id),updated_at:String(item.updated_at||"")});
   }
   const items=[
-    ...candidateAgencyCache.map(item=>({item,kind:"agency",group:"agency"})),
-    ...candidateDismissedCache.map(item=>({item,kind:"dismissed",group:candidateRecoveryGroup(item,earliestDismissByUrl)}))
+    ...candidateAgencyCache.map(item=>({item,kind:"agency",group:candidateRecoveryGroup(item,earliestDismissByUrl,"agency"),updates:{count:0}})),
+    ...candidateDismissedCache.map(item=>({item,kind:"dismissed",group:candidateRecoveryGroup(item,earliestDismissByUrl,"dismissed"),updates:nmreNotificationsAfterDiscard(item)}))
   ];
-  summary.textContent=candidateAgencyCache.length+" classificati come agenzia · "+candidateDismissedCache.length+" scartati";
-  const visible=items.filter(entry=>filter==="all"||entry.group===filter);
+  const withNew=items.filter(entry=>entry.updates.count>0);
+  summary.textContent=candidateAgencyCache.length+" classificati come agenzia · "+candidateDismissedCache.length+" scartati"
+    +(withNew.length?" · "+withNew.length+" con nuove notifiche dopo lo scarto":"");
+  const alert=$("candidateRecoveryAlert");
+  if(alert){
+    alert.hidden=!withNew.length;
+    if(withNew.length){
+      alert.innerHTML='<strong>'+withNew.length+(withNew.length===1?' annuncio scartato ha':' annunci scartati hanno')+' nuove notifiche dopo lo scarto.</strong> '
+        +'<button class="secondary" type="button" id="candidateRecoveryAlertOpen">Mostra</button>';
+      $("candidateRecoveryAlertOpen").addEventListener("click",()=>{
+        $("candidateRecoveryFilter").value="with_new";$("candidateRecoveryPanel").open=true;renderCandidateRecovery();
+        $("candidateRecoveryPanel").scrollIntoView({behavior:"smooth",block:"start"});
+      });
+    }
+  }
+  const visible=items
+    .filter(entry=>filter==="all"||(filter==="with_new"?entry.updates.count>0:entry.group===filter))
+    .sort((a,b)=>(b.updates.count>0)-(a.updates.count>0)
+      ||String(b.updates.latest?.created_at||b.updates.latest?.notified_at||"").localeCompare(String(a.updates.latest?.created_at||a.updates.latest?.notified_at||"")));
   if(!visible.length){box.innerHTML='<p class="hint">Nessun annuncio in questa categoria.</p>';return;}
-  box.innerHTML=visible.slice(0,300).map(({item,kind,group})=>{
+  const formatDate=value=>value&&!Number.isNaN(Date.parse(value))?new Date(value).toLocaleDateString("it-IT"):"data non disponibile";
+  box.innerHTML=visible.slice(0,300).map(({item,kind,group,updates})=>{
     const last=nmreLastStatusEntry(item);
+    const discard=nmreDiscardEntry(item);
     const url=validUrl(item.url||item.url_originale);
-    const when=item.updated_at?new Date(item.updated_at).toLocaleDateString("it-IT"):"data non disponibile";
+    const when=kind==="agency"
+      ?"Classificato il "+formatDate(item.created_at)
+      :(discard?"Scartato il "+formatDate(discard.data):"Data dello scarto non registrata");
     const facts=[item.comune,item.portale,Number(item.prezzo)>0?euro(item.prezzo):null].filter(Boolean).join(" · ");
     const reason=last
       ?(last.motivo||last.azione)+" · "+(last.origine==="utente"?"utente":"automatico")
       :(item.seller_evidence||"Motivo non registrato (scarto precedente alla registrazione dei motivi)");
+    let updatesHtml="";
+    if(updates.count>0){
+      const latest=updates.latest||{};
+      const latestFacts=[
+        "ultima il "+formatDate(latest.created_at||latest.notified_at),
+        Number(latest.listing_price)>0?euro(latest.listing_price):null,
+        Number(latest.price_drop_percent)>0?"ribasso "+Number(latest.price_drop_percent).toLocaleString("it-IT")+"%":null,
+        latest.listing_title||null
+      ].filter(Boolean).join(" · ");
+      updatesHtml='<div class="candidate-quality candidate-quality-warning"><strong>Nuova notifica dopo lo scarto</strong> · '
+        +safe(updates.count+(updates.count===1?" notifica":" notifiche"))+' · '+safe(latestFacts)+'</div>';
+    }else if(kind==="dismissed"&&!updates.discardKnown&&updates.totalNotifications>0){
+      updatesHtml='<p class="small">Notifiche ricevute in totale: '+safe(updates.totalNotifications)+' · ultima il '
+        +safe(formatDate(updates.lastNotification?.created_at||updates.lastNotification?.notified_at))
+        +' (la data dello scarto non è registrata: non è possibile stabilire quali siano successive).</p>';
+    }
     return '<article class="candidate candidate-recovery-item" data-recovery-item="'+safe(item.id)+'">'
-      +'<div class="candidate-email-meta"><span class="candidate-source-badge">'+safe(NMRE_RECOVERY_GROUP_LABELS[group]||group)+'</span><span class="candidate-email-date">'+safe(when)+'</span></div>'
+      +'<div class="candidate-email-meta"><span class="candidate-source-badge">'+safe(NMRE_RECOVERY_GROUP_LABELS[group]||group)+'</span>'
+      +(updates.count>0?'<span class="candidate-email-duplicate">Nuova notifica dopo lo scarto</span>':'')
+      +'<span class="candidate-email-date">'+safe(when)+'</span></div>'
       +'<h3>'+safe(item.titolo||"Annuncio immobiliare")+'</h3>'
       +'<p class="candidate-quick-facts">'+safe(facts||"Dati da completare")+'</p>'
+      +updatesHtml
       +'<p class="small">Motivo: '+safe(reason)+'</p>'
       +'<div class="candidate-actions">'
       +(url?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>':'<span class="candidate-link-warning">Link annuncio non disponibile</span>')
       +'<button class="gold" type="button" data-recover="'+safe(item.id)+'" data-recover-kind="'+safe(kind)+'">Riporta in revisione</button>'
+      +(updates.count>0?'<button class="secondary" type="button" data-recovery-seen="'+safe(item.id)+'">Ho visto: resta scartato</button>':'')
       +'</div></article>';
   }).join("")+(visible.length>300?'<p class="hint">Mostrati i primi 300 annunci su '+visible.length+'. Usi il filtro per restringere.</p>':'');
   box.querySelectorAll("[data-recover]").forEach(btn=>btn.addEventListener("click",()=>recoverCandidate(btn.dataset.recover,btn.dataset.recoverKind,btn)));
+  box.querySelectorAll("[data-recovery-seen]").forEach(btn=>btn.addEventListener("click",()=>markDiscardedNotificationsSeen(btn.dataset.recoverySeen,btn)));
+}
+// Presa visione: l'annuncio resta scartato; una notifica successiva lo evidenzierà di nuovo.
+async function markDiscardedNotificationsSeen(id,button){
+  const item=candidateDismissedCache.find(entry=>String(entry.id)===String(id));
+  if(!item)return;
+  if(button)button.disabled=true;
+  const {data:current,error:readError}=await supabase.from("annunci_candidati")
+    .select("id,dati_estratti").eq("id",id).eq("owner_id",currentUser.id).eq("stato","scartato").maybeSingle();
+  if(readError||!current){
+    msg("candidateMsg",readError?"Impossibile registrare la presa visione: "+readError.message:"L’annuncio non è più scartato. Aggiorni la lista.","error");
+    if(button)button.disabled=false;return;
+  }
+  const now=new Date().toISOString();
+  const base=current.dati_estratti&&typeof current.dati_estratti==="object"&&!Array.isArray(current.dati_estratti)?{...current.dati_estratti}:{};
+  const marker=base.notifiche_dopo_scarto&&typeof base.notifiche_dopo_scarto==="object"?{...base.notifiche_dopo_scarto}:{conteggio:0};
+  base.notifiche_dopo_scarto={...marker,da_rivedere:false,visto_il:now};
+  const {error}=await supabase.from("annunci_candidati").update({
+    dati_estratti:nmreAppendStatusHistory(base,{data:now,origine:"utente",azione:"notifica_dopo_scarto_vista",motivo:"Presa visione: l’annuncio resta scartato"}),
+    updated_at:now
+  }).eq("id",id).eq("owner_id",currentUser.id).eq("stato","scartato");
+  if(error){msg("candidateMsg","Impossibile registrare la presa visione: "+error.message,"error");if(button)button.disabled=false;return;}
+  await loadCandidates();
+  msg("candidateMsg","Presa visione registrata: l’annuncio resta scartato e verrà evidenziato di nuovo alla prossima notifica.","success");
+}
+
+// Avvisi dubbi (Fase 2): email escluse dal filtro ma con una prova di annuncio.
+const NMRE_DUBIOUS_RULE_LABELS={
+  esclusione_nell_oggetto:"Parola esclusa nell’oggetto",
+  esclusione_nel_testo:"Parola esclusa nel testo (per esempio nel piè di pagina)",
+  nessun_segnale_di_avviso:"Formulazione dell’avviso non riconosciuta",
+  nessun_link_annuncio:"Link dell’annuncio non riconosciuto",
+  link_principale_generico:"Link principale generico (ricerca o pagina iniziale)"
+};
+const NMRE_DUBIOUS_PROOF_LABELS={scheda_specifica:"Contiene la scheda di un annuncio",mittente_portale:"Inviata da un portale immobiliare"};
+async function loadDubiousAlerts(){
+  const panel=$("candidateDubiousPanel");
+  if(!panel||!currentUser)return;
+  const {data,error}=await supabase.from("nmre_gmail_avvisi_dubbi")
+    .select("id,gmail_message_id,rfc822_message_id,ricevuto_il,regola_esclusione,prova,portale,link_annuncio,oggetto,stato,candidato_id,decisione_motivo,deciso_il,created_at,updated_at")
+    .eq("owner_id",currentUser.id).order("created_at",{ascending:false}).limit(500);
+  // Tabella non ancora creata o accesso ritirato: la sezione resta nascosta.
+  if(error){panel.hidden=true;candidateDubiousCache=[];return;}
+  candidateDubiousCache=data||[];
+  panel.hidden=false;
+  renderDubiousAlerts();
+}
+function renderDubiousAlerts(){
+  const box=$("candidateDubiousList"),summary=$("candidateDubiousSummary");
+  if(!box||!summary)return;
+  const filter=$("candidateDubiousFilter")?.value||"da_verificare";
+  const pending=candidateDubiousCache.filter(item=>item.stato==="da_verificare").length;
+  summary.textContent=pending+" da verificare · "+candidateDubiousCache.length+" in totale";
+  const visible=candidateDubiousCache.filter(item=>filter==="all"||item.stato===filter);
+  if(!visible.length){box.innerHTML='<p class="hint">Nessun avviso in questa categoria.</p>';return;}
+  box.innerHTML=visible.map(item=>{
+    const url=validUrl(item.link_annuncio);
+    const gmail=item.rfc822_message_id?"https://mail.google.com/mail/#search/"+encodeURIComponent("rfc822msgid:"+item.rfc822_message_id):null;
+    const when=item.ricevuto_il?new Date(item.ricevuto_il).toLocaleString("it-IT"):"data non disponibile";
+    let actions="";
+    if(item.stato==="da_verificare")actions='<button class="gold" type="button" data-dubious-action="da_promuovere" data-dubious-id="'+safe(item.id)+'">Crea candidato</button><button class="secondary" type="button" data-dubious-action="ignorato" data-dubious-id="'+safe(item.id)+'">Ignora</button>';
+    else if(item.stato==="da_promuovere")actions='<span class="small">Il candidato verrà creato alla prossima sincronizzazione.</span><button class="secondary" type="button" data-dubious-action="da_verificare" data-dubious-id="'+safe(item.id)+'">Annulla</button>';
+    else if(item.stato==="ignorato")actions='<button class="secondary" type="button" data-dubious-action="da_verificare" data-dubious-id="'+safe(item.id)+'">Ripristina</button>';
+    else actions='<span class="small">Promosso tra le nuove opportunità.</span>';
+    return '<article class="candidate candidate-recovery-item" data-dubious-item="'+safe(item.id)+'">'
+      +'<div class="candidate-email-meta"><span class="candidate-source-badge">'+safe(NMRE_DUBIOUS_RULE_LABELS[item.regola_esclusione]||item.regola_esclusione)+'</span>'
+      +'<span class="candidate-email-date">'+safe(when)+'</span></div>'
+      +'<h3>'+safe(item.oggetto||"Email senza oggetto")+'</h3>'
+      +'<p class="candidate-quick-facts">'+safe([item.portale,NMRE_DUBIOUS_PROOF_LABELS[item.prova]||item.prova].filter(Boolean).join(" · "))+'</p>'
+      +(item.decisione_motivo?'<p class="small">Nota: '+safe(item.decisione_motivo)+'</p>':'')
+      +'<div class="candidate-actions">'
+      +(url?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>':'<span class="candidate-link-warning">Link annuncio non disponibile</span>')
+      +(gmail?'<a href="'+safe(gmail)+'" target="_blank" rel="noopener noreferrer">Apri in Gmail</a>':'')
+      +actions+'</div></article>';
+  }).join("");
+  box.querySelectorAll("[data-dubious-action]").forEach(btn=>btn.addEventListener("click",()=>decideDubiousAlert(btn.dataset.dubiousId,btn.dataset.dubiousAction,btn)));
+}
+async function decideDubiousAlert(id,nextState,button){
+  const item=candidateDubiousCache.find(entry=>String(entry.id)===String(id));
+  if(!item)return;
+  const defaults={da_promuovere:"Avviso immobiliare da verificare",ignorato:"Non è un avviso immobiliare",da_verificare:"Ripristinato per una nuova verifica"};
+  const reason=prompt(nextState==="da_promuovere"?"Creare un candidato da questa email?\nNota (facoltativa):":nextState==="ignorato"?"Ignorare questa email?\nMotivo:":"Riportare l’avviso tra quelli da verificare?\nNota (facoltativa):",defaults[nextState]||"");
+  if(reason===null)return;
+  if(button)button.disabled=true;
+  const now=new Date().toISOString();
+  const {data,error}=await supabase.from("nmre_gmail_avvisi_dubbi")
+    .update({stato:nextState,decisione_motivo:(reason.trim()||defaults[nextState]||"").slice(0,300),deciso_il:now,updated_at:now})
+    .eq("id",id).eq("owner_id",currentUser.id).eq("stato",item.stato).select("id");
+  if(error||!data||data.length!==1){
+    msg("candidateMsg",error?"Impossibile aggiornare l’avviso: "+error.message:"L’avviso è già cambiato. Aggiorni la lista.","error");
+    if(button)button.disabled=false;return;
+  }
+  await loadDubiousAlerts();
+  msg("candidateMsg",nextState==="da_promuovere"?"Richiesta registrata: il candidato comparirà tra le nuove opportunità dopo la prossima sincronizzazione.":"Decisione registrata.","success");
 }
 async function recoverCandidate(id,kind,button){
   const source=kind==="agency"?candidateAgencyCache:candidateDismissedCache;
@@ -6478,6 +6696,7 @@ $("candidateResetFilters").addEventListener("click",()=>{
   renderCandidates();
 });
 $("candidateRecoveryFilter").addEventListener("change",renderCandidateRecovery);
+$("candidateDubiousFilter").addEventListener("change",renderDubiousAlerts);
 $("refreshCandidates").addEventListener("click",loadCandidates);
 $("archiveManualToggle").addEventListener("click",()=>{
   const panel=$("archiveManualPanel");

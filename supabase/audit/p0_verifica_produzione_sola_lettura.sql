@@ -549,7 +549,7 @@ select sum(property_notifications_count) as notifiche_immobiliari,
 
 
 -- =====================================================================
--- AUDIT ACQUISIZIONE · AGGIUNTE DEL 26/11 (docs/proposte/A1-nessuna-opportunita-persa.md)
+-- AUDIT ACQUISIZIONE · AGGIUNTE DEL 25/11 (docs/proposte/A1-nessuna-opportunita-persa.md)
 -- =====================================================================
 
 -- AQ10 · Email escluse dal filtro avvisi PRIMA del salvataggio (48 ore) ---
@@ -558,6 +558,11 @@ select sum(property_notifications_count) as notifiche_immobiliari,
 -- immobiliari legittime E avvisi reali esclusi per errore (L1–L4): è un
 -- limite superiore, non una stima delle perdite. Dopo la patch di Fase 1 la
 -- ripartizione per regola è nei log della funzione (propertyFilterRules).
+-- ATTENZIONE: i contatori sono somme per esecuzione, quindi contano LETTURE,
+-- non email distinte. Esito del 25/11/2026: escluse_dal_filtro = 73 letture
+-- escluse in 48 ore, che possono includere la stessa email riletta più volte
+-- (per esempio per la rielaborazione) e non sono necessariamente 73 avvisi
+-- immobiliari distinti.
 select sum(listed_count)                                   as messaggi_elencati,
        sum(read_count)                                     as email_lette,
        sum(property_notifications_count)                   as avvisi_accettati,
@@ -627,3 +632,19 @@ select seller_type, identifier_type,
   from public.seller_identity_registry
  group by 1, 2
  order by 1, 2;
+
+
+-- AQ15 · Avvisi dubbi (dopo la migrazione 20261125201000 e l'attivazione
+-- di NMRE_CAPTURE_DUBIOUS_ALERTS): solo conteggi per stato, regola e prova.
+select stato, regola_esclusione, prova, coalesce(portale, 'n/d') as portale,
+       count(*) as avvisi, min(created_at) as primo, max(created_at) as ultimo
+  from public.nmre_gmail_avvisi_dubbi
+ group by 1, 2, 3, 4
+ order by avvisi desc;
+
+-- AQ16 · Notifiche arrivate dopo lo scarto (dopo la patch) -------------
+select count(*) filter (where (dati_estratti->'notifiche_dopo_scarto'->>'da_rivedere')::boolean) as da_rivedere,
+       count(*) filter (where dati_estratti ? 'notifiche_dopo_scarto') as con_notifiche_dopo_scarto,
+       coalesce(sum((dati_estratti->'notifiche_dopo_scarto'->>'conteggio')::int), 0) as notifiche_totali
+  from public.annunci_candidati
+ where stato = 'scartato';

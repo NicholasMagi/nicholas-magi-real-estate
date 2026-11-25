@@ -230,6 +230,20 @@ function listingUrls(s:string):string[] {
 export function listingUrl(s:string):string|null {
   return listingUrls(s)[0]||null;
 }
+// Prima scheda specifica di un portale riconosciuto presente nel testo, anche se
+// non è il link principale scelto da listingUrl(). Usata solo dalla rete di
+// sicurezza degli avvisi dubbi: non cambia il filtro né il link salvato.
+export function specificPortalListingUrl(s:string):string|null {
+  for(const candidate of listingUrls(s)){
+    try{
+      const url=new URL(candidate);
+      const host=url.hostname.toLowerCase().replace(/^www\./,"");
+      const tracked=/^(?:click|clicks|tracking|track|redirect|links?)\./i.test(host)||/(?:^|\/)(?:f\/a|track|click|redirect)\//i.test(url.pathname);
+      if(!tracked&&isSpecificListingUrl(url))return url.toString();
+    }catch{}
+  }
+  return null;
+}
 export async function resolveListingUrl(s:string):Promise<string|null> {
   for(const candidate of listingUrls(s).slice(0,20)){
     try{

@@ -1,14 +1,18 @@
 import {
   municipality,price,listingPrice,listingUrl,propertyEmailDecision,listingTitle,propertyType,
   surface,rooms,bedrooms,bathrooms,resolveListingUrl,sellerClassificationDetails,canonicalListingKey,
-  priceReduction,extractAdditionalPropertyDetails
+  priceReduction,extractAdditionalPropertyDetails,specificPortalListingUrl
 } from "./_shared/parser.ts";
 import type { PropertyEmailRule } from "./_shared/parser.ts";
 import { collectHistoryMessageIds } from "./_shared/history.ts";
 import {
-  appendStatusHistory, isRepairEligible, keepAgencyCandidates, preserveStatusHistory,
-  processedVersionMark, sellerFieldsForExisting, shouldReopenDiscarded
+  appendStatusHistory, isNewNotificationAfterDiscard, isRepairEligible, keepAgencyCandidates,
+  preserveStatusHistory, processedVersionMark, recordNotificationAfterDiscard,
+  sellerFieldsForExisting, shouldReopenDiscarded
 } from "./_shared/retention.ts";
+import {
+  captureDubiousAlertsEnabled, dubiousAlertEvidence, promotedSellerClassification
+} from "./_shared/dubious.ts";
 import { withSupabase } from "npm:@supabase/server@^1";
 
 const ACCOUNT = "nicholasmagirealestate@gmail.com";
@@ -279,6 +283,7 @@ async function readEmail(messageId: string, token: string): Promise<any | null> 
     from: get("From"),
     subject: get("Subject"),
     date: get("Date"),
+    messageIdHeader: get("Message-ID").slice(0, 300),
     snippet: (email.snippet || "").slice(0, 500),
     bodyText: bodyParts(email.payload).join("\n").slice(0, 30000)
   };
@@ -508,7 +513,27 @@ export default {
         .filter((candidate: any) => isRepairEligible(candidate))
         .map((candidate: any) => candidate.source_email_id as string);
 
-      messageIds = [...new Set([...messageIds, ...repairIds])];
+      // Avvisi dubbi (Fase 2): attivi solo con NMRE_CAPTURE_DUBIOUS_ALERTS=true e
+      // DOPO l'applicazione della migrazione della tabella nmre_gmail_avvisi_dubbi.
+      // Gli avvisi che il titolare ha chiesto di promuovere vengono riletti e
+      // trattati come avvisi accettati, senza cambiare le regole del filtro.
+      const captureDubious = captureDubiousAlertsEnabled(Deno.env.get("NMRE_CAPTURE_DUBIOUS_ALERTS"));
+      const forcedIds = new Set<string>();
+      if (captureDubious) {
+        const { data: toPromote, error: promoteQueryError } = await ctx.supabaseAdmin
+          .from("nmre_gmail_avvisi_dubbi")
+          .select("gmail_message_id")
+          .eq("owner_id", owner)
+          .eq("stato", "da_promuovere")
+          .order("updated_at", { ascending: true })
+          .limit(50);
+        if (promoteQueryError) throw new Error("Lettura degli avvisi dubbi da promuovere non riuscita");
+        for (const item of toPromote || []) {
+          if (typeof item.gmail_message_id === "string" && item.gmail_message_id) forcedIds.add(item.gmail_message_id);
+        }
+      }
+
+      messageIds = [...new Set([...messageIds, ...repairIds, ...forcedIds])];
 
       const emails: Array<any | null> = [];
       for (let index = 0; index < messageIds.length; index += 5) {
@@ -531,7 +556,48 @@ export default {
         filterRuleById.set(String(email.id), decision.rule);
         propertyFilterRules[decision.rule] = (propertyFilterRules[decision.rule] || 0) + 1;
       }
-      const propertyEmails = mailboxEmails.filter(email => filterRuleById.get(String(email.id)) === "accettata");
+      const isForced = (email: any) => forcedIds.has(String(email.id));
+      const propertyEmails = mailboxEmails.filter(email =>
+        filterRuleById.get(String(email.id)) === "accettata" || isForced(email)
+      );
+
+      // Rete di sicurezza: le email escluse dal filtro con una prova oggettiva di
+      // riferirsi a un annuncio vengono conservate come avvisi dubbi (riferimento
+      // all'email, regola, portale, link e oggetto; mai il testo del messaggio).
+      let dubiousAlertsSaved = 0;
+      if (captureDubious) {
+        const dubiousRows = [];
+        // Le email rilette per la rielaborazione hanno già un candidato: non sono
+        // avvisi dubbi nuovi (vengono gestite come "conservato_non_riconosciuto").
+        const repairIdSet = new Set(repairIds);
+        for (const email of mailboxEmails) {
+          if (isForced(email) || repairIdSet.has(String(email.id))) continue;
+          const rule = filterRuleById.get(String(email.id)) || "accettata";
+          const fullText = [email.subject, email.snippet, email.bodyText].filter(Boolean).join(" ");
+          const evidence = dubiousAlertEvidence(rule, email, specificPortalListingUrl(fullText), PORTALS);
+          if (!evidence) continue;
+          dubiousRows.push({
+            owner_id: owner,
+            gmail_message_id: String(email.id),
+            rfc822_message_id: email.messageIdHeader || null,
+            ricevuto_il: email.date && !Number.isNaN(Date.parse(email.date)) ? new Date(email.date).toISOString() : null,
+            regola_esclusione: rule,
+            prova: evidence.reason,
+            portale: evidence.portal,
+            link_annuncio: evidence.listingUrl,
+            oggetto: String(email.subject || "").slice(0, 300) || null
+          });
+        }
+        if (dubiousRows.length) {
+          const { data: savedDubious, error: dubiousError } = await ctx.supabaseAdmin
+            .from("nmre_gmail_avvisi_dubbi")
+            .upsert(dubiousRows, { onConflict: "owner_id,gmail_message_id", ignoreDuplicates: true })
+            .select("id");
+          // Errore bloccante: il cursore non avanza e gli avvisi vengono ritentati.
+          if (dubiousError) throw new Error("Salvataggio degli avvisi dubbi non riuscito");
+          dubiousAlertsSaved = savedDubious?.length || 0;
+        }
+      }
 
       const { data: sellerRegistryRows, error: sellerRegistryError } = await ctx.supabaseAdmin
         .from("seller_identity_registry")
@@ -543,7 +609,9 @@ export default {
 
       const classifiedAll = propertyEmails.map(email => {
         const value = [email.subject, email.snippet, email.bodyText].filter(Boolean).join(" ");
-        return { email, text: value, seller: classifySellerWithRegistry(value, sellerRegistry) };
+        const seller = classifySellerWithRegistry(value, sellerRegistry);
+        // Un avviso promosso dal titolare resta sempre visibile in coda.
+        return { email, text: value, seller: isForced(email) ? promotedSellerClassification(seller) : seller };
       });
       // Le email classificate come agenzia vengono conservate come candidati
       // "Agenzia" (fuori dalla coda principale ma recuperabili dall'interfaccia).
@@ -674,6 +742,8 @@ export default {
       let notificationEventsLinked = 0;
       let autoArchived = 0;
       let reopenedOnPriceDrop = 0;
+      let notificationsAfterDiscard = 0;
+      const promotedCandidateByEmail = new Map<string, string>();
       for (const row of rows) {
         const { data: currentCandidate, error: currentError } = await ctx.supabaseAdmin
           .from("annunci_candidati")
@@ -865,6 +935,19 @@ export default {
           ? Math.round((priceDropAmount! / previousPrice!) * 10000) / 100
           : null;
 
+        // Per un candidato scartato serve sapere se la notifica è nuova o una rilettura.
+        let notificationAlreadyRecorded = true;
+        if (existingCandidate?.stato === "scartato") {
+          const { data: knownNotification, error: knownNotificationError } = await ctx.supabaseAdmin
+            .from("annunci_candidati_notifiche")
+            .select("source_email_id")
+            .eq("owner_id", owner)
+            .eq("source_email_id", row.source_email_id)
+            .maybeSingle();
+          if (knownNotificationError) throw new Error("Verifica dello storico notifiche non riuscita");
+          notificationAlreadyRecorded = !!knownNotification;
+        }
+
         const { error: notificationError } = await ctx.supabaseAdmin
           .from("annunci_candidati_notifiche")
           .upsert({
@@ -885,6 +968,7 @@ export default {
           }, { onConflict: "owner_id,source_email_id" });
         if (notificationError) throw new Error("Salvataggio dello storico notifiche non riuscito");
         notificationEventsLinked++;
+        if (forcedIds.has(row.source_email_id)) promotedCandidateByEmail.set(row.source_email_id, candidateId);
 
         // Uno scarto precedente non deve nascondere un nuovo ribasso: il candidato
         // torna "da verificare" con la motivazione registrata. Nessun dato viene
@@ -910,6 +994,35 @@ export default {
             .select("id");
           if (reopenError) throw new Error("Riapertura del candidato con ribasso non riuscita");
           reopenedOnPriceDrop += reopened?.length || 0;
+        } else if (existingCandidate && isNewNotificationAfterDiscard(existingCandidate.stato, notificationAlreadyRecorded)) {
+          // Nuova notifica senza ribasso su un annuncio scartato: il candidato resta
+          // scartato, ma la notifica viene evidenziata nel pannello di recupero.
+          const marked = recordNotificationAfterDiscard(existingCandidate.dati_estratti, {
+            data: row.data_pubblicazione || new Date().toISOString(),
+            source_email_id: row.source_email_id,
+            prezzo: currentPrice,
+            ribasso_percentuale: priceDropPercent,
+            titolo: row.titolo,
+            comune: row.comune,
+            portale: row.portale
+          });
+          const { error: markNotificationError } = await ctx.supabaseAdmin
+            .from("annunci_candidati")
+            .update({
+              dati_estratti: appendStatusHistory(marked, {
+                data: new Date().toISOString(),
+                origine: "sincronizzazione",
+                azione: "nuova_notifica_dopo_scarto",
+                motivo: "Nuova notifica dello stesso immobile dopo lo scarto"
+              }),
+              updated_at: new Date().toISOString()
+            })
+            .eq("owner_id", owner)
+            .eq("id", candidateId)
+            .eq("stato", "scartato");
+          if (markNotificationError) throw new Error("Registrazione della notifica dopo lo scarto non riuscita");
+          existingCandidate.dati_estratti = marked;
+          notificationsAfterDiscard++;
         }
 
         // Archivia solo i privati con prova esplicita ad alta affidabilita o verifica manuale gia salvata.
@@ -919,6 +1032,27 @@ export default {
           if (archiveError) throw new Error("Archiviazione automatica del privato non riuscita");
           if (archiveResult?.archived === true) autoArchived++;
         }
+      }
+
+      // Esito delle promozioni richieste dal titolare.
+      let promotedAlerts = 0;
+      for (const gmailId of forcedIds) {
+        const candidateId = promotedCandidateByEmail.get(gmailId);
+        const update = candidateId
+          ? { stato: "promosso", candidato_id: candidateId, updated_at: new Date().toISOString() }
+          : {
+            stato: "da_verificare",
+            decisione_motivo: "Promozione non completata: email non più disponibile in Gmail, in spam o nel cestino",
+            updated_at: new Date().toISOString()
+          };
+        const { error: promoteError } = await ctx.supabaseAdmin
+          .from("nmre_gmail_avvisi_dubbi")
+          .update(update)
+          .eq("owner_id", owner)
+          .eq("gmail_message_id", gmailId)
+          .eq("stato", "da_promuovere");
+        if (promoteError) throw new Error("Aggiornamento degli avvisi promossi non riuscito");
+        if (candidateId) promotedAlerts++;
       }
 
       await saveSyncCursor(ctx.supabaseAdmin, nextHistoryId);
@@ -958,8 +1092,9 @@ export default {
       }
       // Riepilogo diagnostico nei log della funzione: solo conteggi e nomi di regola.
       console.log("nmre-gmail-scheduled summary", JSON.stringify({
-        syncMode, propertyFilterRules, keptForReview, reopenedOnPriceDrop,
-        agencyCandidatesKept: keepAgency, excludedAgencies
+        syncMode, propertyFilterRules, keptForReview, reopenedOnPriceDrop, notificationsAfterDiscard,
+        agencyCandidatesKept: keepAgency, excludedAgencies, dubiousAlertsCaptured: captureDubious,
+        dubiousAlertsSaved, promotedAlerts
       }));
 
       return Response.json({
@@ -983,6 +1118,10 @@ export default {
         agencyCandidatesKept: keepAgency,
         keptForReview,
         reopenedOnPriceDrop,
+        notificationsAfterDiscard,
+        dubiousAlertsCaptured: captureDubious,
+        dubiousAlertsSaved,
+        promotedAlerts,
         propertyFilterRules,
         duplicatesOrExisting: Math.max(0, rows.length - inserted - updated),
         missingMessages: emails.filter(email => !email).length

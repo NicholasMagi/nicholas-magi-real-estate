@@ -33,8 +33,11 @@ jobs:
       - name: Test Gmail parser and incremental history adapter
         run: deno test supabase/functions/nmre-gmail-scheduled/parser_test.ts supabase/functions/nmre-gmail-scheduled/history_test.ts supabase/functions/nmre-gmail-scheduled/_shared/parser.test.ts
 
-      - name: Test opportunity retention rules and property filter diagnostics
-        run: deno test supabase/functions/nmre-gmail-scheduled/retention_test.ts supabase/functions/nmre-gmail-scheduled/property_filter_test.ts
+      - name: Test opportunity retention rules, property filter diagnostics and dubious alerts
+        run: deno test supabase/functions/nmre-gmail-scheduled/retention_test.ts supabase/functions/nmre-gmail-scheduled/property_filter_test.ts supabase/functions/nmre-gmail-scheduled/dubious_test.ts
+
+      - name: Test recovery panel functions in index.html
+        run: node tests/frontend/recovery_test.mjs
 
       - name: Test Immobiliare Insights API adapter
         run: deno test supabase/functions/nmre-insights-sync/provider_test.ts
@@ -96,3 +99,28 @@ jobs:
               raise SystemExit("Duplicate HTML ids: " + ", ".join(duplicates))
           print(f"Checked {len(parser.ids)} unique element ids.")
           PY
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test migrations and rollbacks on a disposable database
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: supabase/tests/run_migration_tests.sh

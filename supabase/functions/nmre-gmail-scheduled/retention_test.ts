@@ -1,6 +1,7 @@
 import {
   appendStatusHistory, isRepairEligible, keepAgencyCandidates, preserveStatusHistory,
-  processedVersionMark, sellerFieldsForExisting, shouldReopenDiscarded, STATUS_HISTORY_LIMIT
+  processedVersionMark, sellerFieldsForExisting, shouldReopenDiscarded, STATUS_HISTORY_LIMIT,
+  DISCARDED_NOTIFICATION_LIMIT, isNewNotificationAfterDiscard, recordNotificationAfterDiscard
 } from "./_shared/retention.ts";
 
 function assertEquals<T>(actual:T,expected:T,message:string){
@@ -104,4 +105,43 @@ Deno.test("le agenzie sono conservate salvo disattivazione esplicita",()=>{
   assertEquals(keepAgencyCandidates(""),true,"vuoto: conserva");
   assertEquals(keepAgencyCandidates("false"),false,"disattivazione esplicita");
   assertEquals(keepAgencyCandidates(" FALSE "),false,"maiuscole e spazi");
+});
+
+const notice=(id:string,extra:Record<string,unknown>={})=>({
+  data:"2026-11-25T10:00:00Z",source_email_id:id,prezzo:150000,ribasso_percentuale:null,
+  titolo:"Trilocale di prova",comune:"Ancona",portale:"immobiliare.it",...extra
+});
+
+Deno.test("una nuova notifica senza ribasso su uno scartato viene riconosciuta",()=>{
+  assertEquals(isNewNotificationAfterDiscard("scartato",false),true,"scartato, notifica nuova");
+  assertEquals(isNewNotificationAfterDiscard("scartato",true),false,"rilettura della stessa notifica");
+  assertEquals(isNewNotificationAfterDiscard("da_verificare",false),false,"già in coda: è visibile");
+  assertEquals(isNewNotificationAfterDiscard("confermato",false),false,"in archivio");
+});
+
+Deno.test("la notifica dopo lo scarto viene registrata con le informazioni essenziali",()=>{
+  const first=recordNotificationAfterDiscard({piano:"3"},notice("m1"));
+  const record=first.notifiche_dopo_scarto as Record<string,any>;
+  assertEquals(first.piano,"3","altri dati conservati");
+  assertEquals(record.conteggio,1,"conteggio");
+  assertEquals(record.da_rivedere,true,"da rivedere");
+  assertEquals(record.ultima.source_email_id,"m1","ultima notifica");
+  assertEquals(record.ultima.prezzo,150000,"prezzo");
+  const second=recordNotificationAfterDiscard(first,notice("m2",{prezzo:149000}));
+  assertEquals((second.notifiche_dopo_scarto as any).conteggio,2,"seconda notifica");
+  assertEquals((second.notifiche_dopo_scarto as any).ultima.prezzo,149000,"ultima aggiornata");
+});
+
+Deno.test("la stessa notifica non viene contata due volte",()=>{
+  const once=recordNotificationAfterDiscard({},notice("m1"));
+  const twice=recordNotificationAfterDiscard(once,notice("m1"));
+  assertEquals((twice.notifiche_dopo_scarto as any).conteggio,1,"idempotente");
+});
+
+Deno.test("l'elenco delle notifiche dopo lo scarto è limitato, il conteggio no",()=>{
+  let value:Record<string,unknown>={};
+  for(let index=0;index<DISCARDED_NOTIFICATION_LIMIT+4;index++)value=recordNotificationAfterDiscard(value,notice("m"+index));
+  const record=value.notifiche_dopo_scarto as any;
+  assertEquals(record.elenco.length,DISCARDED_NOTIFICATION_LIMIT,"elenco limitato");
+  assertEquals(record.conteggio,DISCARDED_NOTIFICATION_LIMIT+4,"conteggio completo");
 });

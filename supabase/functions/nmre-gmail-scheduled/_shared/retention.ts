@@ -135,3 +135,56 @@ export function preserveStatusHistory(
 export function keepAgencyCandidates(envValue: string | undefined): boolean {
   return String(envValue ?? "").trim().toLowerCase() !== "false";
 }
+
+export const DISCARDED_NOTIFICATION_LIMIT = 10;
+
+export type DiscardedNotificationInfo = {
+  data: string;
+  source_email_id: string;
+  prezzo: number | null;
+  ribasso_percentuale: number | null;
+  titolo: string | null;
+  comune: string | null;
+  portale: string | null;
+};
+
+/**
+ * Una notifica è "nuova dopo lo scarto" quando arriva per un candidato scartato e
+ * non era già registrata nello storico (non è una semplice rilettura).
+ */
+export function isNewNotificationAfterDiscard(existingStato: unknown, alreadyRecorded: boolean): boolean {
+  return existingStato === "scartato" && alreadyRecorded !== true;
+}
+
+/**
+ * Registra in dati_estratti.notifiche_dopo_scarto le informazioni essenziali di
+ * una nuova notifica arrivata su un candidato scartato (senza testi dell'email):
+ * conteggio, ultima notifica ed elenco delle più recenti. Restituisce un nuovo oggetto.
+ */
+export function recordNotificationAfterDiscard(
+  datiEstratti: unknown,
+  info: DiscardedNotificationInfo
+): Record<string, unknown> {
+  const base = datiEstratti && typeof datiEstratti === "object" && !Array.isArray(datiEstratti)
+    ? { ...(datiEstratti as Record<string, unknown>) }
+    : {};
+  const previous = base.notifiche_dopo_scarto && typeof base.notifiche_dopo_scarto === "object" &&
+      !Array.isArray(base.notifiche_dopo_scarto)
+    ? base.notifiche_dopo_scarto as Record<string, unknown>
+    : {};
+  const list = Array.isArray(previous.elenco) ? previous.elenco as DiscardedNotificationInfo[] : [];
+  if (list.some(item => item && item.source_email_id === info.source_email_id)) return base;
+  const clean: DiscardedNotificationInfo = {
+    ...info,
+    titolo: info.titolo ? String(info.titolo).slice(0, 250) : null,
+    comune: info.comune ? String(info.comune).slice(0, 120) : null,
+    portale: info.portale ? String(info.portale).slice(0, 80) : null
+  };
+  base.notifiche_dopo_scarto = {
+    conteggio: Number(previous.conteggio || 0) + 1,
+    ultima: clean,
+    elenco: [...list, clean].slice(-DISCARDED_NOTIFICATION_LIMIT),
+    da_rivedere: true
+  };
+  return base;
+}

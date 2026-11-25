@@ -82,7 +82,7 @@ L'audit è interamente in **sola lettura**.
 **Principio:** i numeri non dimostrano che gli elementi scartati o da verificare
 siano privati. L'audit serve a stabilirlo con dati e campioni, non a presumerlo.
 
-#### Risultati verificati il 26/11 (AQ2, AQ4, AQ9)
+#### Risultati verificati il 25/11 (AQ2, AQ4, AQ9)
 | Query | Esito |
 |---|---|
 | AQ2 | 104 scartati: 63 "Da verificare" manuali o storici non determinabili; 14 "Da verificare" con lo stesso URL di uno scarto precedente (D2 o D4); 11 "Da verificare" probabilmente scartati dalla sincronizzazione (D1); 16 "Agenzia" manuali (D3) |
@@ -112,7 +112,7 @@ siano privati. L'audit serve a stabilirlo con dati e campioni, non a presumerlo.
   **eventi** e non annunci distinti: un messaggio rielaborato (per esempio per
   l'aggiornamento della versione del parser) viene contato di nuovo.
 - ~~Circa 163 notifiche escluse come agenzia~~: **stima non confermata**. AQ9
-  (26/11) riporta 508 notifiche immobiliari, tutte "Da verificare", e **0 escluse
+  (25/11) riporta 508 notifiche immobiliari, tutte "Da verificare", e **0 escluse
   come agenzia**. La stima è ritirata.
 - ✅ Restano invece **non misurate** le email escluse dal filtro avvisi prima del
   salvataggio, che non lasciano traccia: vedi L1–L7 in
@@ -220,8 +220,9 @@ restituiscono solo conteggi e indicatori.
 
 ### A.1 Nessuna perdita automatica (priorità più alta del modulo)
 
-**Stato:** la Fase 1 è implementata sul branch come patch isolata con test, non
-distribuita. Dettaglio: `docs/proposte/A1-nessuna-opportunita-persa.md` (§3 patch,
+**Stato (25/11/2026):** Fase 1 completata (incluse la migrazione del trigger delle
+notifiche, le notifiche dopo lo scarto e la provenienza delle agenzie) e Fase 2
+(avvisi dubbi) preparata, entrambe sul branch con test, non distribuite. Dettaglio: `docs/proposte/A1-nessuna-opportunita-persa.md` (§3 patch,
 §5 recupero degli 88 scartati, §6 priorità). I punti che seguono restano
 l'obiettivo complessivo; quelli coperti dalla Fase 1 sono indicati nel rapporto.
 
