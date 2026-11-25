@@ -4806,14 +4806,35 @@ async function analyzeCandidatePage(id,button){
 
 async function prepareCandidateForArchive(candidate,fields={}){
   const merged={...fields};
+  const blank=value=>value===null||value===undefined||String(value).trim()==="";
+  const manualUpdates=()=>{
+    const updates={updated_at:new Date().toISOString()};
+    ["titolo","comune","tipologia_immobile","contatto"].forEach(field=>{
+      const value=blank(merged[field])?candidate?.[field]:merged[field];
+      if(value!==undefined)updates[field]=value||null;
+    });
+    ["prezzo","superficie_mq","locali","camere","bagni"].forEach(field=>{
+      const value=blank(merged[field])?candidate?.[field]:merged[field];
+      if(value!==undefined)updates[field]=blank(value)?null:Number(value);
+    });
+    return updates;
+  };
+  const persist=async updates=>{
+    const {error}=await supabase.from("annunci_candidati").update(updates).eq("id",candidate.id);
+    if(error)return {persisted:false,error:"Impossibile salvare i dati prima dell’archiviazione: "+error.message};
+    Object.assign(merged,updates);
+    return {persisted:true};
+  };
   const sourceUrl=validUrl(candidate?.url||candidate?.url_originale);
-  if(!sourceUrl)return {fields:merged,enriched:false,error:null,url:candidate?.url||candidate?.url_originale||null};
+  if(!sourceUrl){
+    const saved=await persist(manualUpdates());
+    return {fields:merged,enriched:false,error:null,url:candidate?.url||candidate?.url_originale||null,...saved};
+  }
   try{
     const {data,error}=await supabase.functions.invoke("nmre-candidate-enrich",{body:{url:sourceUrl}});
     if(error)throw new Error(error.message||"Analisi della pagina non disponibile.");
     if(!data?.success)throw new Error(data?.error||"La pagina non ha restituito dati leggibili.");
     const suggestions=data.suggestions||{};
-    const blank=value=>value===null||value===undefined||String(value).trim()==="";
     const fill=(field,suggestion)=>{
       if(suggestion===null||suggestion===undefined||suggestion==="")return;
       if(blank(merged[field])||(field==="titolo"&&String(merged[field]).trim().toLocaleLowerCase("it")==="annuncio immobiliare")){
@@ -4843,27 +4864,23 @@ async function prepareCandidateForArchive(candidate,fields={}){
       }
     };
     const updates={
-      titolo:merged.titolo||candidate.titolo,
-      comune:merged.comune||candidate.comune,
-      prezzo:blank(merged.prezzo)?candidate.prezzo:Number(merged.prezzo),
-      tipologia_immobile:merged.tipologia_immobile||candidate.tipologia_immobile,
-      superficie_mq:blank(merged.superficie_mq)?candidate.superficie_mq:Number(merged.superficie_mq),
-      locali:blank(merged.locali)?candidate.locali:Number(merged.locali),
-      camere:blank(merged.camere)?candidate.camere:Number(merged.camere),
-      bagni:blank(merged.bagni)?candidate.bagni:Number(merged.bagni),
-      contatto:merged.contatto||candidate.contatto||null,
+      ...manualUpdates(),
       url:data.final_url||candidate.url||sourceUrl,
       url_originale:candidate.url_originale||candidate.url||sourceUrl,
       dati_estratti:extracted,
-      data_extraction_version:2,
-      updated_at:new Date().toISOString()
+      data_extraction_version:2
     };
-    const {error:updateError}=await supabase.from("annunci_candidati").update(updates).eq("id",candidate.id);
-    if(updateError)throw new Error("Dati recuperati, ma non è stato possibile salvarli prima dell’archiviazione: "+updateError.message);
-    Object.assign(merged,updates);
-    return {fields:merged,enriched:true,error:null,url:updates.url};
+    const saved=await persist(updates);
+    if(!saved.persisted)return {fields:merged,enriched:false,error:saved.error,url:sourceUrl,persisted:false};
+    return {fields:merged,enriched:true,error:null,url:updates.url,persisted:true};
   }catch(error){
-    return {fields:merged,enriched:false,error:error.message||"Analisi della pagina non riuscita.",url:sourceUrl};
+    const saved=await persist(manualUpdates());
+    return {
+      fields:merged,enriched:false,
+      error:error.message||"Analisi della pagina non riuscita.",
+      url:sourceUrl,persisted:saved.persisted,
+      ...(saved.persisted?{}:{persistError:saved.error})
+    };
   }
 }
 
@@ -4931,6 +4948,10 @@ async function saveCandidateSeller(id,button){
     };
     if(candidate){
       const prepared=await prepareCandidateForArchive(candidate,archiveFields);
+      if(!prepared.persisted){
+        msg("candidateMsg",prepared.persistError||prepared.error||"Impossibile salvare i dati dell’annuncio prima dell’archiviazione.","error");
+        button.disabled=false;return;
+      }
       if(prepared.enriched)privateArchiveMessage+=" Dati pubblici dell’annuncio recuperati automaticamente.";
       else if(prepared.error)privateArchiveMessage+=" Alcuni dati non sono stati recuperati automaticamente: "+prepared.error;
     }
@@ -4978,6 +4999,10 @@ async function confirmCandidate(id,button){
   button.textContent="Recupero dati e archiviazione…";
   msg("candidateMsg","Sto recuperando i dati pubblici disponibili e preparando la scheda completa nell’Archivio.");
   const prepared=await prepareCandidateForArchive(candidate,fields);
+  if(!prepared.persisted){
+    msg("candidateMsg",prepared.persistError||prepared.error||"Impossibile salvare i dati dell’annuncio prima dell’archiviazione.","error");
+    button.disabled=false;button.textContent=originalLabel;return;
+  }
   const finalFields=prepared.fields;
   const title=String(finalFields.titolo||"").trim();
   const municipality=String(finalFields.comune||"").trim();
