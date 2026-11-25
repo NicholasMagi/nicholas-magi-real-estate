@@ -631,10 +631,6 @@ button:disabled{opacity:.55;cursor:not-allowed}
     <p class="hint">Gestisca da qui gli avvisi di NMRE, le preferenze operative e il collegamento sicuro al Suo account.</p>
   </div>
   <section class="panel nmre-settings-account">
-    <div class="nmre-settings-card-head"><div><h2>Fonti e acquisizione automatica</h2><p class="hint">Gestione del collegamento Gmail, monitor della sincronizzazione e integrazioni dei portali immobiliari.</p></div><span class="nmre-settings-symbol" aria-hidden="true">↻</span></div>
-    <div class="nmre-settings-account-actions"><button class="secondary" type="button" data-nmre-nav="automationSection" data-nmre-label="Fonti e acquisizione automatica">Apri fonti e acquisizione automatica</button></div>
-  </section>
-  <section class="panel nmre-settings-account">
     <div class="nmre-settings-card-head"><div><h2>Account e collegamento</h2><p class="hint">Account attualmente utilizzato: <strong id="nmreSettingsEmail"></strong></p></div><span class="nmre-settings-symbol" aria-hidden="true">♙</span></div>
     <div class="nmre-settings-account-actions"><button class="secondary" id="editConfig" type="button">Modifica collegamento a Supabase</button></div>
     <p class="small">La configurazione utilizza la Project URL e la Publishable Key. Non inserisca mai qui la Secret Key o la password del database.</p>
@@ -664,6 +660,59 @@ button:disabled{opacity:.55;cursor:not-allowed}
   </div>
   <div class="nmre-notification-history-head"><h3>Notifiche recenti</h3><button id="nmreRefreshNotifications" class="secondary" type="button">Aggiorna</button></div>
   <div id="nmreNotificationList" class="nmre-notification-list"><p class="hint">Caricamento notifiche…</p></div>
+</section>
+
+
+<section id="automationSection" class="panel dash-section-anchor">
+<h2>Acquisizione automatica degli annunci</h2>
+<p class="hint">
+La casella Gmail viene elaborata dal server in background. Qui non vengono mostrate le email: vede soltanto i dati estratti dagli annunci immobiliari, senza mittente, oggetto o testo dei messaggi.
+</p>
+<div class="topline">
+<div><span class="pill">Sincronizzazione automatica attiva</span><div class="small">Controllo server-side ogni minuto, anche a sito chiuso; la lista si aggiorna ogni minuto quando il sito è aperto.</div></div>
+<button class="secondary" id="connectGmail">Ricollega Gmail</button>
+</div>
+<div class="gmail-sync-monitor" aria-live="polite">
+  <div class="gmail-sync-monitor-top">
+    <div><strong id="gmailSyncTitle">Monitor sincronizzazione · Caricamento…</strong><div id="gmailSyncLastRun" class="gmail-sync-last-run">Lettura dell'ultimo esito registrato.</div></div>
+    <button class="secondary" id="refreshGmailSyncStatus" type="button">Aggiorna stato</button>
+  </div>
+  <div class="gmail-sync-grid">
+    <div class="gmail-sync-stat"><strong id="gmailSyncRead">—</strong><span>Email esaminate</span></div>
+    <div class="gmail-sync-stat"><strong id="gmailSyncProperty">—</strong><span>Notifiche immobiliari</span></div>
+    <div class="gmail-sync-stat"><strong id="gmailSyncInserted">—</strong><span>Nuovi candidati</span></div>
+    <div class="gmail-sync-stat"><strong id="gmailSyncAutoArchived">—</strong><span>Privati archiviati</span></div>
+    <div class="gmail-sync-stat"><strong id="gmailSyncReview">—</strong><span>Da verificare</span></div>
+    <div class="gmail-sync-stat"><strong id="gmailSyncAgencies">—</strong><span>Agenzie escluse</span></div>
+    <div class="gmail-sync-stat"><strong id="gmailSyncDuplicates">—</strong><span>Già presenti / duplicati</span></div>
+    <div class="gmail-sync-stat"><strong id="gmailSyncRuns24h">—</strong><span>Esecuzioni ultime 24h</span></div>
+    <div class="gmail-sync-stat"><strong id="gmailSyncErrors24h">—</strong><span>Errori ultime 24h</span></div>
+    <div class="gmail-sync-stat"><strong id="gmailSyncSuccessStreak">—</strong><span>Ultimi esiti riusciti consecutivi</span></div>
+  </div>
+  <div id="gmailSyncDetails" class="gmail-sync-details">Il sistema registrerà il riepilogo della prossima esecuzione automatica.</div>
+</div>
+<div id="gmailMsg" class="status">Gmail lavora in background. Gli annunci ambigui richiedono la Sua approvazione.</div>
+</section>
+
+<section class="panel">
+<div class="topline"><h2>Collegamenti API dei portali</h2><span class="pill">Fonti ufficiali</span></div>
+<p class="hint">Oltre agli avvisi Gmail, NMRE può interrogare le API dei portali che rilasciano accessi professionali. Le credenziali restano sul server Supabase e non vengono salvate nel browser.</p>
+<div class="topline">
+<div>
+<strong>Immobiliare.it Insights</strong>
+<div id="insightsApiStatus" class="small">Stato API non ancora verificato</div>
+<div class="small">Confronta le ricerche ufficiali Privato e Professionista con gli annunci email, riconoscendo i venditori dal link esatto. Il filtro sul telefono indica soltanto che il portale segnala un recapito nell’annuncio: l’API non restituisce il numero, che va verificato manualmente aprendo la scheda originale.</div>
+</div>
+<div class="actions">
+<button class="secondary" id="checkInsightsApi">Verifica accesso</button>
+<button class="gold" id="syncInsightsApi" disabled>Importa annunci privati</button>
+</div>
+</div>
+<div class="small">Documentazione <a href="https://insights.immobiliare.it/webdocs/" target="_blank" rel="noopener noreferrer">API Immobiliare.it Insights</a>. Idealista Search API: accesso da richiedere al portale. <a href="https://developers.idealista.com/access-request" target="_blank" rel="noopener noreferrer">Richiedi le credenziali API</a>.</div>
+<p class="hint">L'importazione diretta da Insights resta disabilitata finché Immobiliare.it non conferma per iscritto che la licenza consente l'uso dei risultati per acquisizione immobiliare. Le condizioni del portale vietano lo sfruttamento commerciale non autorizzato dei servizi e dei dati. <a href="https://www.immobiliare.it/insights/en/api/" target="_blank" rel="noopener noreferrer">Contatta il team Insights per autorizzazioni e licenza</a>.</p>
+<p class="hint">Subito vieta di contattare gli inserzionisti per proporre servizi di intermediazione tramite la piattaforma. NMRE non invia messaggi automatici e non aggira le regole dei portali. Il feed XML Green-Acres serve invece a pubblicare gli annunci della propria agenzia.</p>
+<p class="hint">Avvisi Gmail già riconosciuti: Idealista, Immobiliare.it, Casa.it, Subito, Green-Acres, Gate-away, Trovacasa e Wikicasa. Per gli altri portali useremo solo API, feed o notifiche autorizzate. Il numero telefonico non viene inventato né estratto automaticamente se il portale non lo restituisce.</p>
+<div id="portalApiMsg" class="status"></div>
 </section>
 </section>
 
@@ -1106,57 +1155,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   </div>
 </section>
 
-<section id="automationSection" class="panel dash-section-anchor" hidden>
-<h2>Acquisizione automatica degli annunci</h2>
-<p class="hint">
-La casella Gmail viene elaborata dal server in background. Qui non vengono mostrate le email: vede soltanto i dati estratti dagli annunci immobiliari, senza mittente, oggetto o testo dei messaggi.
-</p>
-<div class="topline">
-<div><span class="pill">Sincronizzazione automatica attiva</span><div class="small">Controllo server-side ogni minuto, anche a sito chiuso; la lista si aggiorna ogni minuto quando il sito è aperto.</div></div>
-<button class="secondary" id="connectGmail">Ricollega Gmail</button>
-</div>
-<div class="gmail-sync-monitor" aria-live="polite">
-  <div class="gmail-sync-monitor-top">
-    <div><strong id="gmailSyncTitle">Monitor sincronizzazione · Caricamento…</strong><div id="gmailSyncLastRun" class="gmail-sync-last-run">Lettura dell'ultimo esito registrato.</div></div>
-    <button class="secondary" id="refreshGmailSyncStatus" type="button">Aggiorna stato</button>
-  </div>
-  <div class="gmail-sync-grid">
-    <div class="gmail-sync-stat"><strong id="gmailSyncRead">—</strong><span>Email esaminate</span></div>
-    <div class="gmail-sync-stat"><strong id="gmailSyncProperty">—</strong><span>Notifiche immobiliari</span></div>
-    <div class="gmail-sync-stat"><strong id="gmailSyncInserted">—</strong><span>Nuovi candidati</span></div>
-    <div class="gmail-sync-stat"><strong id="gmailSyncAutoArchived">—</strong><span>Privati archiviati</span></div>
-    <div class="gmail-sync-stat"><strong id="gmailSyncReview">—</strong><span>Da verificare</span></div>
-    <div class="gmail-sync-stat"><strong id="gmailSyncAgencies">—</strong><span>Agenzie escluse</span></div>
-    <div class="gmail-sync-stat"><strong id="gmailSyncDuplicates">—</strong><span>Già presenti / duplicati</span></div>
-    <div class="gmail-sync-stat"><strong id="gmailSyncRuns24h">—</strong><span>Esecuzioni ultime 24h</span></div>
-    <div class="gmail-sync-stat"><strong id="gmailSyncErrors24h">—</strong><span>Errori ultime 24h</span></div>
-    <div class="gmail-sync-stat"><strong id="gmailSyncSuccessStreak">—</strong><span>Ultimi esiti riusciti consecutivi</span></div>
-  </div>
-  <div id="gmailSyncDetails" class="gmail-sync-details">Il sistema registrerà il riepilogo della prossima esecuzione automatica.</div>
-</div>
-<div id="gmailMsg" class="status">Gmail lavora in background. Gli annunci ambigui richiedono la Sua approvazione.</div>
-</section>
 
-<section class="panel">
-<div class="topline"><h2>Collegamenti API dei portali</h2><span class="pill">Fonti ufficiali</span></div>
-<p class="hint">Oltre agli avvisi Gmail, NMRE può interrogare le API dei portali che rilasciano accessi professionali. Le credenziali restano sul server Supabase e non vengono salvate nel browser.</p>
-<div class="topline">
-<div>
-<strong>Immobiliare.it Insights</strong>
-<div id="insightsApiStatus" class="small">Stato API non ancora verificato</div>
-<div class="small">Confronta le ricerche ufficiali Privato e Professionista con gli annunci email, riconoscendo i venditori dal link esatto. Il filtro sul telefono indica soltanto che il portale segnala un recapito nell’annuncio: l’API non restituisce il numero, che va verificato manualmente aprendo la scheda originale.</div>
-</div>
-<div class="actions">
-<button class="secondary" id="checkInsightsApi">Verifica accesso</button>
-<button class="gold" id="syncInsightsApi" disabled>Importa annunci privati</button>
-</div>
-</div>
-<div class="small">Documentazione <a href="https://insights.immobiliare.it/webdocs/" target="_blank" rel="noopener noreferrer">API Immobiliare.it Insights</a>. Idealista Search API: accesso da richiedere al portale. <a href="https://developers.idealista.com/access-request" target="_blank" rel="noopener noreferrer">Richiedi le credenziali API</a>.</div>
-<p class="hint">L'importazione diretta da Insights resta disabilitata finché Immobiliare.it non conferma per iscritto che la licenza consente l'uso dei risultati per acquisizione immobiliare. Le condizioni del portale vietano lo sfruttamento commerciale non autorizzato dei servizi e dei dati. <a href="https://www.immobiliare.it/insights/en/api/" target="_blank" rel="noopener noreferrer">Contatta il team Insights per autorizzazioni e licenza</a>.</p>
-<p class="hint">Subito vieta di contattare gli inserzionisti per proporre servizi di intermediazione tramite la piattaforma. NMRE non invia messaggi automatici e non aggira le regole dei portali. Il feed XML Green-Acres serve invece a pubblicare gli annunci della propria agenzia.</p>
-<p class="hint">Avvisi Gmail già riconosciuti: Idealista, Immobiliare.it, Casa.it, Subito, Green-Acres, Gate-away, Trovacasa e Wikicasa. Per gli altri portali useremo solo API, feed o notifiche autorizzate. Il numero telefonico non viene inventato né estratto automaticamente se il portale non lo restituisce.</p>
-<div id="portalApiMsg" class="status"></div>
-</section>
 
 <section id="candidateSection" class="panel dash-section-anchor" hidden>
 <div class="topline"><h2>Annunci privati e opportunità da valutare</h2><div class="actions"><button class="secondary" id="exportCandidatesCsv">Candidati CSV</button><button class="secondary" id="exportCandidatesXlsx">Candidati Excel</button><button class="secondary" id="refreshCandidates">Aggiorna</button></div></div>
@@ -1612,7 +1611,7 @@ async function removeSellerRegistryEntry(id){
 }
 
 const NMRE_VIEW_LABELS={
-  dashboard:"Panoramica",automationSection:"Fonti e automazioni",
+  dashboard:"Panoramica",
   candidateSection:"Nuove opportunità",archiveSection:"Archivio annunci",
   callCenter:"Centro telefonate",nmreCrm:"CRM",followupSection:"Richiami programmati",
   newListingSection:"Registra immobile",propertyMapSection:"Mappa immobili",marketAnalysisSection:"Analisi di mercato",
@@ -1631,6 +1630,7 @@ function nmreToggleMenu(){
   toggle.setAttribute("aria-expanded",String(!panel.hidden));
 }
 function nmreShowView(viewId,options={}){
+   if(viewId==="automationSection")viewId="settingsSection";
   const allowed=["dashboard","nmreCrm","settingsSection","marketAnalysisSection","automationSection","candidateSection","newListingSection","followupSection","archiveSection","propertyMapSection"];
   if(!allowed.includes(viewId))return false;
   allowed.forEach(id=>{const section=$(id);if(section)section.hidden=id!==viewId;});
