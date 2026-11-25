@@ -5970,6 +5970,8 @@ function renderCallCenter(){
 }
 
 async function openCallCrm(id){
+  // Mostra l'Archivio prima di caricare e aprire il dettaglio collegato dalla Rubrica.
+  nmreShowView("archiveSection",{scroll:false});
   $("listingSearch").value="";
   $("listingTownFilter").value="";
   $("listingTypeFilter").value="";
@@ -5980,8 +5982,10 @@ async function openCallCrm(id){
   const details=[...$("listingList").querySelectorAll("[data-crm-id]")].find(node=>node.dataset.crmId===String(id));
   if(details){
     details.open=true;
-    details.scrollIntoView({behavior:"smooth",block:"center"});
+    requestAnimationFrame(()=>details.scrollIntoView({behavior:"smooth",block:"center"}));
     details.querySelector('[data-crm-field="stato_contatto"]')?.focus({preventScroll:true});
+  }else{
+    msg("listMsg","L’immobile collegato non è presente nell’Archivio o è stato eliminato.","error");
   }
 }
 
