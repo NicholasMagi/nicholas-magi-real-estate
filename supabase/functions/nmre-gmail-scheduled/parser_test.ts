@@ -143,3 +143,11 @@ Deno.test("non associa automaticamente immobili in comuni diversi",()=>{
   );
   assertEquals(result.kind,"none","il comune deve coincidere");
 });
+
+
+Deno.test("stesso civico senza dettagli dell'unità resta da verificare",()=>{
+  const a={titolo:"Appartamento in Via Roma",comune:"Osimo",tipologia_immobile:"Appartamento",dati_estratti:{indirizzo_rilevato:"Via Roma 14"}};
+  const b={titolo:"Appartamento in Via Roma",comune:"Osimo",tipologia_immobile:"Appartamento",dati_estratti:{indirizzo_rilevato:"Via Roma 14"}};
+  const result=compareListingIdentity(a,b);
+  if(result.kind==="strong")throw new Error("Il civico da solo non deve unire due unità dello stesso edificio.");
+});

@@ -463,7 +463,15 @@ export function compareListingIdentity(incoming:ListingIdentitySnapshot,existing
   if(bathroomsClose)score+=4;if(priceClose)score+=16;score+=Math.round(titleTokens*16);
   if(addressPartial)score+=10;if(addressWithCivicNumber)score+=24;
   const confidence=Math.min(100,Math.round(score/120*100));
-  if(addressWithCivicNumber&&(!incomingType||!existingType||typeClose))
+  const hasBothSurfaces=Number(incomingSurface)>0&&Number(existingSurface)>0;
+  const incomingRooms=identityValue(incoming,"locali","rooms");
+  const existingRooms=identityValue(existing,"locali","rooms");
+  const hasBothRooms=Number(incomingRooms)>0&&Number(existingRooms)>0;
+  const addressUnitCompatible=
+    (hasBothSurfaces&&surfaceClose&&(!hasBothRooms||roomsClose))||
+    (hasBothRooms&&roomsClose&&(bedroomsClose||bathroomsClose||priceClose))||
+    (titleTokens>=0.8&&priceClose&&(surfaceClose||roomsClose));
+  if(addressWithCivicNumber&&addressUnitCompatible&&(!incomingType||!existingType||typeClose))
     return {kind:"strong",confidence:Math.max(95,confidence),reason:"Comune e indirizzo con numero civico coincidono; tipologia compatibile."};
   const strongProfile=typeClose&&surfaceClose&&priceClose&&(
     (roomsClose&&titleTokens>=0.62)||(titleTokens>=0.82&&(roomsClose||bedroomsClose))||
@@ -471,7 +479,7 @@ export function compareListingIdentity(incoming:ListingIdentitySnapshot,existing
   );
   if(strongProfile)return {kind:"strong",confidence:Math.max(88,confidence),reason:"Comune, tipologia, metratura e prezzo coincidono; anche titolo o distribuzione dei locali sono molto simili."};
   const supporting=[typeClose,surfaceClose,roomsClose,bedroomsClose,bathroomsClose,priceClose,titleTokens>=0.55,addressPartial].filter(Boolean).length;
-  if(supporting>=2&&(typeClose||addressPartial)&&(surfaceClose||priceClose||titleTokens>=0.55||addressPartial)&&confidence>=50)
+  if(supporting>=2&&(typeClose||addressPartial)&&(surfaceClose||priceClose||titleTokens>=0.55||addressPartial)&&confidence>=45)
     return {kind:"possible",confidence,reason:"Alcuni dati coincidono, ma non sono sufficienti per unire automaticamente i due annunci."};
   return {kind:"none",confidence:0,reason:null};
 }
