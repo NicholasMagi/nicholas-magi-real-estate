@@ -3489,7 +3489,7 @@ function novaRespond(message){
   if(town)novaLastTown=town;
 
   let intent=null;
-  if(query.includes("telefon")||query.includes("chiam")||query.includes("copion")||query.includes("script")||query.includes("prepara"))intent="call";
+  if(query.includes("telefon")||query.includes("copion")||query.includes("script")||query.includes("prepara")||query.includes("contattare un proprietario")||query.includes(" chiama "))intent="call";
   else if(query.includes("richiam")||query.includes("scadenz")||query.includes("appuntament")||query.includes("agenda"))intent="followups";
   else if(query.includes("priorit")||query.includes("oggi")||query.includes("cosa devo fare")||query.includes("cosa dovrei fare")||query.includes("da dove comincio"))intent="priorities";
   else if(query.includes("privat")||query.includes("venditor"))intent="private";
