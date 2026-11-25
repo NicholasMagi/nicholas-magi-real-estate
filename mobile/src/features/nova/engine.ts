@@ -143,12 +143,11 @@ function isLikelySameProperty(candidate: NovaCandidate, other: NovaCandidate | N
   if (priceA <= 0 || priceB <= 0) return false;
   const tolerance = Math.max(1_200, Math.min(priceA, priceB) * 0.012);
   if (Math.abs(priceA - priceB) > tolerance) return false;
-  const otherCandidate = other as NovaCandidate;
   const typeA = normalizeNovaText(candidate.propertyType);
-  const typeB = normalizeNovaText(otherCandidate.propertyType);
+  const typeB = normalizeNovaText(other.propertyType);
   if (typeA && typeB && typeA !== typeB) return false;
   const surfaceA = candidate.surfaceSqm ?? 0;
-  const surfaceB = otherCandidate.surfaceSqm ?? 0;
+  const surfaceB = other.surfaceSqm ?? 0;
   const surfaceClose = surfaceA > 0 && surfaceB > 0
     && Math.abs(surfaceA - surfaceB) <= Math.max(5, Math.min(surfaceA, surfaceB) * 0.04);
   const titleClose = titleSimilarity(candidate.title, other.title) >= 0.8;
@@ -167,7 +166,8 @@ function findDuplicate(
     if ((url && otherUrl && url === otherUrl) || isLikelySameProperty(candidate, other)) return true;
   }
   for (const other of listings) {
-    if (isLikelySameProperty(candidate, other)) return true;
+    const otherUrl = canonicalUrl(other.listingUrl);
+    if ((url && otherUrl && url === otherUrl) || isLikelySameProperty(candidate, other)) return true;
   }
   return false;
 }
