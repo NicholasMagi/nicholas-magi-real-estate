@@ -33,6 +33,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="listings" options={{ title: "Immobili", tabBarIcon: ({ color }) => <TabGlyph symbol="▤" color={color} /> }} />
       <Tabs.Screen name="leads" options={{ title: "Opportunità", tabBarIcon: ({ color }) => <TabGlyph symbol="◎" color={color} /> }} />
       <Tabs.Screen name="crm" options={{ title: "CRM", tabBarIcon: ({ color }) => <TabGlyph symbol="♙" color={color} /> }} />
+      <Tabs.Screen name="nova" options={{ title: "NOVA", tabBarIcon: ({ color }) => <TabGlyph symbol="✦" color={color} /> }} />
     </Tabs>
   );
 }
