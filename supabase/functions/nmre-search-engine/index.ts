@@ -24,15 +24,20 @@ function canonicalListingKey(value: string | null): string | null {
   if (!value) return null;
   try {
     const url = new URL(value);
-    const host = url.hostname.toLowerCase().replace(/^www\\./, "");
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
     const allowed = LISTING_PORTALS.some(domain => host === domain || host.endsWith("." + domain));
     if (!allowed) return null;
-    const path = decodeURIComponent(url.pathname).replace(/\\/+$/, "").toLowerCase() || "/";
-    if (path === "/" || /\\/(?:search|ricerca|risultati|vendita|affitto|case-in-vendita|immobili-in-vendita)(?:\\/|$)/.test(path)) return null;
-    const isSpecific = host === "immobiliare.it" || host.endsWith(".immobiliare.it")
-      ? /\\/(?:annunci|immobile)\\/[^/]*\\d{5,}/i.test(path)
-      : /\\/(?:annuncio|annunci|immobile|immobili|property|listing|detail)\\/[^/]+/i.test(path)
-        || /\\/[^/]*\\d{6,}[^/]*(?:\\.html?)?\\/?$/i.test(path);
+    const segments = decodeURIComponent(url.pathname).split("/").filter(Boolean).map(part => part.toLowerCase());
+    if (!segments.length) return null;
+    const ignored = ["search", "ricerca", "risultati", "vendita", "affitto", "case-in-vendita", "immobili-in-vendita"];
+    if (segments.some(part => ignored.includes(part))) return null;
+    const path = "/" + segments.join("/");
+    const hasNumericId = segments.some(part => /\d{5,}/.test(part));
+    const isImmobiliare = host === "immobiliare.it" || host.endsWith(".immobiliare.it");
+    const isSpecific = isImmobiliare
+      ? (segments[0] === "annunci" || segments[0] === "immobile") && hasNumericId
+      : (["annuncio", "annunci", "immobile", "immobili", "property", "listing", "detail"].some(part => segments.includes(part))
+        || hasNumericId);
     return isSpecific ? host + path : null;
   } catch {
     return null;
