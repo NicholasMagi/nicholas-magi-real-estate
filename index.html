@@ -2257,7 +2257,7 @@ function renderTerritoryScanner(all=listingCache,candidates=candidateCache,now=n
  const totalPrivate=rows.reduce((n,r)=>n+r.privateAds,0),totalActive=rows.reduce((n,r)=>n+r.crmActive,0),totalRecent=rows.reduce((n,r)=>n+r.recent,0);
  const totalDropProperties=rows.reduce((n,r)=>n+r.dropProperties,0),totalDropEvents=rows.reduce((n,r)=>n+r.dropEvents,0);
  const summary=$("territoryScannerSummary");
- if(summary)summary.innerHTML=[[rows.length,"Comuni con dati"],[totalPrivate,"Immobili privati distinti"],[totalActive,"Proprietari attivi CRM"],[totalDropProperties,"Immobili con ribassi documentati"]].map(x=>'<div class="dash-overview-item"><strong>'+x[0]+'</strong><span>'+x[1]+'</span></div>').join("");
+ if(summary)summary.innerHTML=[[rows.length,"Comuni con dati","propertyMapSection"],[totalPrivate,"Immobili privati distinti","candidateSection"],[totalActive,"Proprietari attivi CRM","nmreCrm"],[totalDropProperties,"Immobili con ribassi documentati","archiveSection"]].map(x=>'<div class="dash-overview-item" role="button" tabindex="0" data-dashboard-nav="'+x[2]+'"'+(x[2]==="candidateSection"?' data-dashboard-candidate-seller-filter="Privato"':"")+(x[2]==="nmreCrm"?' data-dashboard-crm-tab="contatti"':"")+'><strong>'+x[0]+'</strong><span>'+x[1]+'</span></div>').join("");
  const note=$("territoryScannerNote");
  if(note)note.textContent=totalDropEvents+" ribassi documentati in "+totalDropProperties+" immobili · "+totalRecent+" schede inserite negli ultimi 30 giorni. Le date delle notifiche non sono considerate date di pubblicazione dell'annuncio.";
  if(!rows.length){box.innerHTML='<div class="dash-empty">Non ci sono ancora comuni sufficientemente valorizzati negli annunci o nel CRM. Completi il campo comune nelle schede per attivare la classifica.</div>';return;}
@@ -2341,7 +2341,7 @@ function renderSellerRelationshipScore(all=listingCache,now=new Date()){
   ["Ribassi da approfondire",rows.filter(row=>row.category==="Ribasso da approfondire").length]
  ];
  const summary=$("sellerRelationshipSummary");
- if(summary)summary.innerHTML=counts.map(([label,value])=>'<div class="dash-overview-item"><strong>'+value+'</strong><span>'+label+'</span></div>').join("");
+ if(summary)summary.innerHTML=counts.map(([label,value])=>{const filter=label==="Richiami scaduti"?"overdue":label==="Da riattivare"?"stale":label==="Risposte registrate"?"plan":null;return '<div class="dash-overview-item" role="button" tabindex="0" '+(filter?'data-dashboard-call-filter="'+filter+'"':'data-dashboard-nav="archiveSection"')+'><strong>'+value+'</strong><span>'+label+'</span></div>';}).join("");
  const count=$("sellerRelationshipCount");
  if(count)count.textContent=rows.length+" proprietari attivi";
  const chosen=rows.filter(row=>row.urgency<5).slice(0,8);
@@ -2408,17 +2408,17 @@ function renderDashboard(){
   $("dashMandates").textContent=String(mandates);
 
   const stages=[
-    ["Da contattare",toCall],
-    ["Primo contatto",firstContact],
-    ["Interessato",interested],
-    ["Appuntamento",appointments],
-    ["Incarico acquisito",mandates],
-    ["Non interessato",notInterested]
+    ["da_contattare","Da contattare",toCall],
+    ["primo_contatto","Primo contatto",firstContact],
+    ["interessato","Interessato",interested],
+    ["appuntamento","Appuntamento",appointments],
+    ["incarico_acquisito","Incarico acquisito",mandates],
+    ["non_interessato","Non interessato",notInterested]
   ];
   const denominator=Math.max(all.length,1);
   $("dashPipeline").innerHTML=stages.map(stage=>{
-    const width=Math.round(stage[1]/denominator*100);
-    return '<div class="dash-pipeline-row"><div class="dash-pipeline-label">'+stage[0]+'</div><div class="dash-track"><div class="dash-fill" style="width:'+width+'%"></div></div><div class="dash-pipeline-count">'+stage[1]+'</div></div>';
+    const width=Math.round(stage[2]/denominator*100);
+    return '<div class="dash-pipeline-row" role="button" tabindex="0" data-dashboard-nav="archiveSection" data-dashboard-contact-filter="'+stage[0]+'"><div class="dash-pipeline-label">'+stage[1]+'</div><div class="dash-track"><div class="dash-fill" style="width:'+width+'%"></div></div><div class="dash-pipeline-count">'+stage[2]+'</div></div>';
   }).join("");
   $("dashPipelineTotal").textContent=all.length+" immobili in archivio";
   $("dashPipelineProgress").textContent=(all.length?Math.round(mandates/all.length*100):0)+"% trasformati in incarichi";
@@ -2458,14 +2458,14 @@ function renderDashboard(){
   });
 
   const overview=[
-    [all.length,"Annunci in archivio"],
-    [privateCount,"Venditori privati"],
-    [upcoming.length,"Richiami nei prossimi 7 giorni"],
-    [sources,"Fonti presenti"],
-    [interested,"Proprietari interessati"],
-    [appointments,"Appuntamenti in pipeline"]
+    {value:all.length,label:"Annunci in archivio",target:"archiveSection"},
+    {value:privateCount,label:"Venditori privati",target:"archiveSection",seller:"Privato"},
+    {value:upcoming.length,label:"Richiami nei prossimi 7 giorni",target:"followupSection"},
+    {value:sources,label:"Fonti presenti",target:"archiveSection"},
+    {value:interested,label:"Proprietari interessati",target:"archiveSection",contact:"interessato"},
+    {value:appointments,label:"Appuntamenti in pipeline",target:"nmreCrm",tab:"agenda"}
   ];
-  $("dashOverview").innerHTML=overview.map(item=>'<div class="dash-overview-item"><strong>'+item[0]+'</strong><span>'+item[1]+'</span></div>').join("");
+  $("dashOverview").innerHTML=overview.map(item=>'<div class="dash-overview-item" role="button" tabindex="0" data-dashboard-nav="'+item.target+'"'+(item.contact?' data-dashboard-contact-filter="'+item.contact+'"':"")+(item.seller?' data-dashboard-seller-filter="'+item.seller+'"':"")+(item.tab?' data-dashboard-crm-tab="'+item.tab+'"':"")+'><strong>'+item.value+'</strong><span>'+item.label+'</span></div>').join("");
 }
 
 $("dashboardRefresh").addEventListener("click",async()=>{
@@ -3388,7 +3388,7 @@ function renderConversionIntelligence(){
   ["Incarichi registrati",mandates.size],
   ["Non interessati registrati",notInterested.size]
  ];
- metricsBox.innerHTML=metrics.map(([label,value])=>'<div class="dash-overview-item"><strong>'+value+'</strong><span>'+safe(label)+'</span></div>').join("");
+ metricsBox.innerHTML=metrics.map(([label,value])=>{const tab=label.includes("Appuntamenti")||label.includes("Valutazioni")?"agenda":label.includes("Incarichi")?"immobili":"contatti";return '<div class="dash-overview-item" role="button" tabindex="0" data-dashboard-nav="nmreCrm" data-dashboard-crm-tab="'+tab+'"><strong>'+value+'</strong><span>'+safe(label)+'</span></div>';}).join("");
  const completedWithoutValuation=[...completedAppointments].filter(k=>!completedValuations.has(k)).length;
  const valuationWithoutMandate=[...completedValuations].filter(k=>!mandates.has(k)).length;
  const actions=[
@@ -3428,7 +3428,7 @@ function renderAcquisitionPipeline(){
   ["venduto","Venduto"]
  ];
  const counts=stages.map(([key,label])=>[label,properties.filter(item=>item.status===key).length]);
- stockBox.innerHTML=counts.map(([label,value])=>'<div class="dash-overview-item"><strong>'+value+'</strong><span>'+safe(label)+'</span></div>').join("");
+ stockBox.innerHTML=counts.map(([label,value])=>'<div class="dash-overview-item" role="button" tabindex="0" data-dashboard-nav="nmreCrm" data-dashboard-crm-tab="immobili"><strong>'+value+'</strong><span>'+safe(label)+'</span></div>').join("");
  const range=Number($("salesPerformanceRange")?.value||30);
  const from=new Date();from.setDate(from.getDate()-range+1);from.setHours(0,0,0,0);
  const inRange=row=>{const t=Date.parse(row.created_at||"");return Number.isFinite(t)&&t>=from.getTime();};
@@ -3508,7 +3508,7 @@ function renderSalesPerformance(){
   {label:"Risposte → Appuntamenti",value:responseAppointment,detail:appointments+" su "+responses.length+" conversazioni"},
   {label:"Appuntamenti → Incarichi",value:appointmentMandate,detail:mandates+" incarichi su "+appointments+" appuntamenti"}
  ];
- $("salesPerformanceFunnel").innerHTML=steps.map(step=>'<div class="sales-performance-step"><div class="sales-performance-step-top"><span>'+step.label+'</span><strong>'+step.value+'%</strong></div><div class="sales-performance-track"><div class="sales-performance-fill" style="width:'+Math.min(100,step.value)+'%"></div></div><div class="sales-performance-note">'+step.detail+'</div></div>').join("");
+ $("salesPerformanceFunnel").innerHTML=steps.map((step,index)=>'<div class="sales-performance-step" role="button" tabindex="0" data-dashboard-nav="'+(index===2?"nmreCrm":"callCenter")+'"'+(index===2?' data-dashboard-crm-tab="immobili"':"")+'><div class="sales-performance-step-top"><span>'+step.label+'</span><strong>'+step.value+'%</strong></div><div class="sales-performance-track"><div class="sales-performance-fill" style="width:'+Math.min(100,step.value)+'%"></div></div><div class="sales-performance-note">'+step.detail+'</div></div>').join("");
  renderAcquisitionPipeline();
  const unclassified=calls.filter(x=>!x.outcome_code).length;
  $("salesPerformanceNote").textContent=calls.length
