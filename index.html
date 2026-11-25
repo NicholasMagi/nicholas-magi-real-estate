@@ -4871,7 +4871,21 @@ function renderCandidates(){
       +'</div></details>'
       +'</article>';
   }).join("");
-  box.querySelectorAll("[data-confirm]").forEach(btn=>btn.addEventListener("click",()=>confirmCandidate(btn.dataset.confirm,btn)));
+  box.querySelectorAll("[data-confirm]").forEach(btn=>btn.addEventListener("click",()=>{
+    const card=btn.closest("[data-candidate]");
+    const details=card?.querySelector("[data-candidate-details]");
+    const seller=card?.querySelector('[data-field="venditore"]');
+    if(seller?.value!=="Privato"){
+      if(details)details.open=true;
+      seller?.scrollIntoView({behavior:"smooth",block:"center"});
+      seller?.focus({preventScroll:true});
+      msg("candidateMsg",seller?.value==="Agenzia"
+        ?"Questo annuncio è classificato come agenzia: non può essere inserito nell’Archivio delle opportunità private."
+        :"Prima di archiviare, verifichi il venditore e selezioni «Privato». Poi prema nuovamente «Archivia».","error");
+      return;
+    }
+    confirmCandidate(btn.dataset.confirm,btn);
+  }));
   box.querySelectorAll("[data-open-candidate-details]").forEach(btn=>btn.addEventListener("click",()=>{
     const card=btn.closest("[data-candidate]");
     const details=card?.querySelector("[data-candidate-details]");
