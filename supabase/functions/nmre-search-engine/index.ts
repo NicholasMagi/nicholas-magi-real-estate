@@ -14,6 +14,46 @@ function reply(data: unknown, status = 200) {
   });
 }
 
+const LISTING_PORTALS = [
+  "immobiliare.it", "idealista.it", "casa.it", "subito.it",
+  "green-acres.it", "green-acres.com", "gate-away.com",
+  "trovacasa.it", "wikicasa.it"
+];
+
+function canonicalListingKey(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const allowed = LISTING_PORTALS.some(domain => host === domain || host.endsWith("." + domain));
+    if (!allowed) return null;
+    const segments = decodeURIComponent(url.pathname).split("/").filter(Boolean).map(part => part.toLowerCase());
+    if (!segments.length) return null;
+    const ignored = ["search", "ricerca", "risultati", "vendita", "affitto", "case-in-vendita", "immobili-in-vendita"];
+    if (segments.some(part => ignored.includes(part))) return null;
+    const path = "/" + segments.join("/");
+    const hasNumericId = segments.some(part => /\d{5,}/.test(part));
+    const isImmobiliare = host === "immobiliare.it" || host.endsWith(".immobiliare.it");
+    const isSpecific = isImmobiliare
+      ? (segments[0] === "annunci" || segments[0] === "immobile") && hasNumericId
+      : (["annuncio", "annunci", "immobile", "immobili", "property", "listing", "detail"].some(part => segments.includes(part))
+        || hasNumericId);
+    return isSpecific ? host + path : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  try {
+    if (JSON.stringify(value).length > 100_000) return null;
+  } catch {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -110,6 +150,45 @@ Deno.serve(async (req: Request) => {
       return reply({ success: false, error: "Numero bagni non valido." }, 400);
     }
 
+    const optionalUrl = (value: unknown) =>
+      typeof value === "string" ? value.trim().slice(0, 2000) : null;
+    const url = optionalUrl(body.url);
+    const originalUrl = optionalUrl(body.url_originale) ?? url;
+    const listingKey = canonicalListingKey(originalUrl ?? url);
+    const sellerType = optionalText(body.tipo_venditore) ?? "Da verificare";
+    if (!["Privato", "Agenzia", "Da verificare"].includes(sellerType)) {
+      return reply({ success: false, error: "Tipologia venditore non valida." }, 400);
+    }
+
+    // Duplicate checks are owner-scoped and backed by the unique listing_key index.
+    if (listingKey) {
+      const { data: existing, error: duplicateError } = await supabase
+        .from("annunci")
+        .select("id,titolo")
+        .eq("owner_id", userData.user.id)
+        .eq("listing_key", listingKey)
+        .limit(1)
+        .maybeSingle();
+      if (duplicateError) return reply({ success: false, error: "Controllo duplicati non riuscito." }, 400);
+      if (existing) return reply({ success: false, duplicate: true, error: "Questo annuncio è già presente nell’Archivio." });
+    }
+    for (const candidateUrl of [...new Set([url, originalUrl].filter((value): value is string => !!value))]) {
+      for (const column of ["url", "url_originale"] as const) {
+        const { data: existing, error: duplicateError } = await supabase
+          .from("annunci")
+          .select("id,titolo")
+          .eq("owner_id", userData.user.id)
+          .eq(column, candidateUrl)
+          .limit(1)
+          .maybeSingle();
+        if (duplicateError) return reply({ success: false, error: "Controllo duplicati non riuscito." }, 400);
+        if (existing) return reply({ success: false, duplicate: true, error: "Questo annuncio è già presente nell’Archivio." });
+      }
+    }
+
+    const sourceData = safeObject(body.dati_fonte);
+    const extractedData = safeObject(body.dati_estratti);
+    const extractionVersion = Number(body.data_extraction_version);
     const { data: annuncio, error: insertError } = await supabase
       .from("annunci")
       .insert({
@@ -119,19 +198,30 @@ Deno.serve(async (req: Request) => {
         indirizzo: optionalText(body.indirizzo)?.slice(0, 220) ?? null,
         prezzo,
         contatto: optionalText(body.contatto),
-        tipo_venditore: optionalText(body.tipo_venditore) ?? "Da verificare",
+        tipo_venditore: sellerType,
+        seller_identity: optionalText(body.seller_identity),
         portale: optionalText(body.portale),
-        url: optionalText(body.url),
+        url,
+        url_originale: originalUrl,
+        listing_key: listingKey,
         tipologia_immobile: optionalText(body.tipologia_immobile)?.slice(0, 80) ?? null,
         superficie_mq: surface,
         locali: rooms,
         camere: bedrooms,
         bagni: bathrooms,
+        dati_fonte: sourceData,
+        dati_estratti: extractedData,
+        data_extraction_version: Number.isInteger(extractionVersion) && extractionVersion >= 1 && extractionVersion <= 10
+          ? extractionVersion
+          : 1,
       })
       .select()
       .single();
 
     if (insertError) {
+      if (insertError.code === "23505") {
+        return reply({ success: false, duplicate: true, error: "Questo annuncio è già presente nell’Archivio." });
+      }
       console.error("Errore salvataggio annuncio:", insertError.message);
       return reply({ success: false, error: "Impossibile salvare l'annuncio." }, 400);
     }

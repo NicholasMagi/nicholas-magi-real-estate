@@ -100,11 +100,11 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .candidate{border-top:1px solid var(--line);border-left:4px solid #d9dee6;padding:14px 12px;margin:8px 0;border-radius:0 10px 10px 0}.candidate.candidate-source-idealista{border-left-color:#e0b323;background:linear-gradient(90deg,rgba(224,179,35,.075),transparent 38%)}.candidate.candidate-source-immobiliare{border-left-color:#2875c7;background:linear-gradient(90deg,rgba(40,117,199,.075),transparent 38%)}.candidate.candidate-source-subito{border-left-color:#7b263f;background:linear-gradient(90deg,rgba(123,38,63,.075),transparent 38%)}.candidate-source-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 14px}.candidate-source-badge{display:inline-flex;align-items:center;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:800;letter-spacing:.02em}.candidate-source-badge-idealista{background:#fff4c9;color:#765900;border:1px solid #e8d17a}.candidate-source-badge-immobiliare{background:#e8f2ff;color:#15569b;border:1px solid #a9c9ee}.candidate-source-badge-subito{background:#f7e9ee;color:#702039;border:1px solid #d8aaba}.candidate input{margin:5px 0}.candidate-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.candidate-quick-summary{margin:9px 0 12px}.candidate-quick-summary h3{font-size:15px;line-height:1.4;margin:8px 0 4px;color:var(--ink)}.candidate-quick-facts{font-size:11px;line-height:1.5;color:var(--muted);margin:0}.candidate-quick-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.candidate-quick-tag{display:inline-flex;align-items:center;border-radius:20px;padding:4px 8px;background:#f1f3f6;color:#526075;font-size:10px;font-weight:700}.candidate-quick-tag-price{background:#f5faf6;color:#315b3d}.candidate-detail-panel{border:1px solid var(--line);border-radius:10px;background:#fff;margin:10px 0;overflow:hidden}.candidate-detail-panel>summary{cursor:pointer;list-style:none;padding:11px 12px;color:#725b36;font-size:11px;font-weight:800}.candidate-detail-panel>summary::-webkit-details-marker{display:none}.candidate-detail-panel>summary::after{content:"＋";float:right}.candidate-detail-panel[open]>summary::after{content:"−"}.candidate-detail-content{padding:0 12px 12px;border-top:1px solid #edf0f4}.candidate-actions-primary{align-items:center}.candidate-actions-primary .gold{min-width:180px}.candidate-detail-actions{padding-top:6px;border-top:1px solid #edf0f4}.candidate-priority{display:flex;align-items:center;gap:12px;padding:10px 12px;margin:10px 0;border:1px solid #e5e9ef;border-radius:10px;background:#f8f9fb}.candidate-priority-score{min-width:54px;text-align:center;color:#26364d}.candidate-priority-score strong{font-family:Georgia,serif;font-size:25px;line-height:1}.candidate-priority-score span{font-size:10px;color:var(--muted);margin-left:2px}.candidate-priority-info{display:grid;gap:3px;min-width:0}.candidate-priority-info strong{font-size:12px;color:#35435a}.candidate-priority-info>span{font-size:11px;color:#58667a}.candidate-priority-info small{font-size:10px;line-height:1.45;color:#7b8797}.candidate-priority-high{border-left:4px solid #b8955b}.candidate-priority-medium{border-left:4px solid #7890ad}.candidate-priority-low{border-left:4px solid #b9c1cc}.candidate-priority-summary{font-size:11px;color:var(--muted);margin:8px 0}.candidate-priority-legend{font-size:11px;color:var(--muted);line-height:1.5;margin:8px 0 12px}.candidate-source-details{margin-top:10px}.candidate-source-original{margin-top:10px}.candidate-source-original pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;font:inherit;font-size:12px;line-height:1.5;padding:10px;border-radius:8px;background:var(--panel,#f5f5f5)}
 .candidate-quality{padding:10px 12px;margin:10px 0;border:1px solid #e4e8ee;border-radius:9px;background:#fafbfc;font-size:11px;line-height:1.55;color:#526075}.candidate-quality strong{color:#35435a}.candidate-quality-warning{border-left:4px solid #bd8950;background:#fffaf2}.candidate-quality-review{border-left:4px solid #8194ad}.candidate-quality-ok{border-left:4px solid #8eaa98;background:#f8fbf8}.candidate-link-warning{font-size:11px;color:#9a642f;font-weight:700;align-self:center}
 .candidate-inbox-intro{margin:8px 0 16px;color:var(--muted);font-size:12px;line-height:1.55;max-width:900px}
-.candidate-manual-form{margin:12px 0 16px;border-color:#d7dce4;background:#fff}
-.candidate-manual-form h3{margin:0 0 4px;font-size:14px}
-.candidate-manual-form form{margin-top:8px}
-.candidate-manual-form input,.candidate-manual-form select{margin:0}
-.candidate-manual-form .hint{margin:10px 0}
+.archive-manual-form{margin:12px 0 16px;border-color:#d7dce4;background:#fff}
+.archive-manual-form h3{margin:0 0 4px;font-size:14px}
+.archive-manual-form form{margin-top:8px}
+.archive-manual-form input,.archive-manual-form select{margin:0}
+.archive-manual-form .hint{margin:10px 0}
 .candidate-inbox-toolbar{display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px;margin:12px 0 16px;border:1px solid var(--line);border-radius:11px;background:#fafbfc}
 .candidate-inbox-search{flex:1 1 260px;min-width:0}
 .candidate-inbox-search label{display:block;font-size:10px;font-weight:700;margin-bottom:5px;color:var(--muted)}
@@ -1198,53 +1198,10 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
   <div class="topline">
     <h2>Nuove opportunità</h2>
     <div class="actions">
-      <button class="gold" id="manualCandidateToggle" type="button" aria-expanded="false"><span aria-hidden="true">＋</span> Aggiungi opportunità</button>
       <button class="secondary" id="refreshCandidates" type="button">Aggiorna email</button>
     </div>
   </div>
-  <p class="candidate-inbox-intro">Qui trova le opportunità arrivate dalle email e gli annunci che inserisce personalmente. Quando verifica che il venditore è un privato, NMRE trasferisce l’immobile nell’Archivio conservando i dati disponibili e il link originale.</p>
-  <div id="manualCandidatePanel" class="panel candidate-manual-form" hidden>
-    <div class="topline">
-      <div><h3>Aggiungi un annuncio trovato da Lei</h3><p class="hint">Inserisca il link e le informazioni già disponibili. Titolo e comune sono necessari per archiviare l’immobile.</p></div>
-      <button class="secondary" id="manualCandidateClose" type="button">Chiudi</button>
-    </div>
-    <form id="manualCandidateForm">
-      <label>Link diretto all’annuncio *<input id="manualCandidateUrl" type="url" required maxlength="1500" placeholder="https://www.immobiliare.it/annunci/..."></label>
-      <label>Titolo / descrizione *<input id="manualCandidateTitle" required maxlength="250" placeholder="Es. Appartamento con terrazzo in zona centro"></label>
-      <div class="row">
-        <div><label>Comune *<input id="manualCandidateTown" required maxlength="100" placeholder="Es. Osimo"></label></div>
-        <div><label>Prezzo richiesto (€)<input id="manualCandidatePrice" type="number" min="0" step="1" placeholder="Non indicato"></label></div>
-      </div>
-      <div class="row">
-        <div><label>Tipologia immobile<input id="manualCandidateType" maxlength="80" placeholder="Es. Trilocale, villa, terreno"></label></div>
-        <div><label>Superficie (m²)<input id="manualCandidateSurface" type="number" min="1" max="100000" step="1" placeholder="Non indicata"></label></div>
-      </div>
-      <div class="row">
-        <div><label>Locali<input id="manualCandidateRooms" type="number" min="0.5" max="100" step="0.5"></label></div>
-        <div><label>Camere<input id="manualCandidateBedrooms" type="number" min="0" max="100" step="1"></label></div>
-      </div>
-      <div class="row">
-        <div><label>Bagni<input id="manualCandidateBathrooms" type="number" min="0" max="100" step="1"></label></div>
-        <div><label>Portale / fonte<input id="manualCandidatePortal" maxlength="100" placeholder="Rilevato automaticamente dal link"></label></div>
-      </div>
-      <div class="row">
-        <div><label>Telefono / email del venditore (facoltativo)<input id="manualCandidateContact" maxlength="180" placeholder="Solo recapiti verificati"></label></div>
-        <div><label>Nome proprietario / agenzia (facoltativo)<input id="manualCandidateSellerIdentity" maxlength="180" placeholder="Nome verificato sull’annuncio"></label></div>
-      </div>
-      <label>Classificazione venditore
-        <select id="manualCandidateSeller">
-          <option value="Da verificare" selected>Da verificare</option>
-          <option value="Privato">Privato verificato</option>
-        </select>
-      </label>
-      <p class="hint">Se seleziona “Privato verificato”, NMRE proverà ad archiviare subito l’annuncio. Se lascia “Da verificare”, la scheda entrerà nella coda Opportunità e potrà completare la verifica in seguito.</p>
-      <div class="actions">
-        <button class="gold" id="manualCandidateSave" type="submit">＋ Salva opportunità</button>
-        <button class="secondary" id="manualCandidateCancel" type="button">Annulla</button>
-      </div>
-      <div id="manualCandidateMsg" class="status" aria-live="polite"></div>
-    </form>
-  </div>
+  <p class="candidate-inbox-intro">Qui trova soltanto le email immobiliari ancora da verificare. Quando conferma che il venditore è un privato, NMRE trasferisce l’immobile nell’Archivio; i privati riconosciuti automaticamente con prove affidabili vengono archiviati senza passare da questa coda. Le agenzie e le email scartate vengono escluse.</p>
   <div class="candidate-inbox-toolbar">
     <div class="candidate-inbox-search">
       <label for="candidateSearch">Cerca nelle email</label>
@@ -1330,7 +1287,45 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 </section>
 
 <section id="archiveSection" class="panel dash-section-anchor" hidden>
-<div class="topline"><h2>Archivio annunci</h2><div class="actions"><button class="secondary" id="exportCsv">Esporta CSV</button><button class="secondary" id="exportXlsx">Esporta Excel</button><button class="secondary" id="refresh">Aggiorna</button></div></div>
+<div class="topline"><h2>Archivio annunci</h2><div class="actions"><button class="secondary" id="exportCsv">Esporta CSV</button><button class="secondary" id="exportXlsx">Esporta Excel</button><button class="secondary" id="refresh">Aggiorna</button><button class="gold" id="archiveManualToggle" type="button" aria-expanded="false"><span aria-hidden="true">＋</span> Aggiungi annuncio</button></div></div><div id="archiveManualPanel" class="panel archive-manual-form" hidden>
+  <div class="topline">
+    <div><h3>Aggiungi un annuncio all’Archivio</h3><p class="hint">Incolli il link: NMRE proverà a recuperare automaticamente i dati pubblici. Potrà completare o correggere i campi prima del salvataggio.</p></div>
+    <button class="secondary" id="archiveManualClose" type="button">Chiudi</button>
+  </div>
+  <form id="archiveManualForm">
+    <label>Link diretto all’annuncio *<input id="archiveManualUrl" type="url" required maxlength="2000" placeholder="https://www.immobiliare.it/annunci/..."></label>
+    <div class="row">
+      <div><label>Titolo / descrizione<input id="archiveManualTitle" maxlength="250" placeholder="Recuperato dal portale, se disponibile"></label></div>
+      <div><label>Comune<input id="archiveManualTown" maxlength="150" placeholder="Es. Osimo"></label></div>
+    </div>
+    <div class="row">
+      <div><label>Prezzo richiesto (€)<input id="archiveManualPrice" type="number" min="0" step="1" placeholder="Non indicato"></label></div>
+      <div><label>Indirizzo (facoltativo)<input id="archiveManualAddress" maxlength="220" placeholder="Via e numero civico"></label></div>
+    </div>
+    <div class="row">
+      <div><label>Tipologia immobile<input id="archiveManualType" maxlength="80" placeholder="Es. Trilocale, villa"></label></div>
+      <div><label>Superficie (m²)<input id="archiveManualSurface" type="number" min="1" max="100000" step="1"></label></div>
+    </div>
+    <div class="row">
+      <div><label>Locali<input id="archiveManualRooms" type="number" min="0.5" max="100" step="0.5"></label></div>
+      <div><label>Camere<input id="archiveManualBedrooms" type="number" min="0" max="100" step="1"></label></div>
+    </div>
+    <div class="row">
+      <div><label>Bagni<input id="archiveManualBathrooms" type="number" min="0" max="100" step="1"></label></div>
+      <div><label>Portale / fonte<input id="archiveManualPortal" maxlength="100" placeholder="Rilevato dal link"></label></div>
+    </div>
+    <div class="row">
+      <div><label>Telefono / email del venditore<input id="archiveManualContact" maxlength="180" placeholder="Solo recapiti verificati"></label></div>
+      <div><label>Venditore<select id="archiveManualSeller"><option value="Da verificare" selected>Da verificare</option><option value="Privato">Privato</option><option value="Agenzia">Agenzia</option></select></label></div>
+    </div>
+    <div class="actions">
+      <button class="gold" id="archiveManualSave" type="submit">＋ Aggiungi all’Archivio</button>
+      <button class="secondary" id="archiveManualCancel" type="button">Annulla</button>
+    </div>
+    <p class="hint">Il link originale e i dati recuperati vengono conservati nella scheda. Se il portale non consente l’analisi, potrà comunque salvare i dati inseriti manualmente.</p>
+    <div id="archiveManualMsg" class="status" aria-live="polite"></div>
+  </form>
+</div>
 <div class="search-filter-panel">
   <div class="search-filter-head"><div class="search-filter-title">Ricerca archivio · Filtri commerciali e immobiliari</div><span class="small">Combinabili tra loro</span></div>
   <div class="search-filter-grid">
@@ -1425,7 +1420,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-manual-opportunities-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-manual-archive-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1500,7 +1495,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261125-manual-opportunities-1");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261125-manual-archive-1");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -4115,7 +4110,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-manual-opportunities-1");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-manual-archive-1");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);
@@ -4515,11 +4510,8 @@ function findCandidateDuplicate(item,candidates,archive){
 
 function candidateQuality(item,candidates,archive,now=new Date()){
   const specificLink=isSpecificCandidateUrl(item.url);
-  const isManualOpportunity=item?.dati_fonte?.origine==="inserimento_manuale";
-  // Email records use the email Date header; manual entries use their creation time.
-  const notificationTimestamp=isManualOpportunity
-    ?Date.parse(item.created_at||"")
-    :(item.data_pubblicazione?Date.parse(item.data_pubblicazione):NaN);
+  // This legacy column stores the email's Date header, not portal listing age.
+  const notificationTimestamp=item.data_pubblicazione?Date.parse(item.data_pubblicazione):NaN;
   const hasNotificationDate=Number.isFinite(notificationTimestamp);
   const notificationDays=hasNotificationDate?Math.max(0,Math.floor((now.getTime()-notificationTimestamp)/86400000)):null;
   const missing=[];
@@ -4532,7 +4524,7 @@ function candidateQuality(item,candidates,archive,now=new Date()){
   // I portali spesso non includono il recapito diretto nelle email:
   // resta un dato consigliato da verificare sull'annuncio, non un requisito di completezza.
   if(!String(item.contatto||"").trim())recommendedMissing.push("recapito diretto da verificare sul portale");
-  if(!hasNotificationDate&&!isManualOpportunity)missing.push("data notifica email");
+  if(!hasNotificationDate)missing.push("data notifica email");
   const duplicate=findCandidateDuplicate(item,candidates,archive);
 
   // Il punteggio misura soltanto quanto sono completi e verificabili i dati.
@@ -4542,8 +4534,8 @@ function candidateQuality(item,candidates,archive,now=new Date()){
   if(String(item.tipologia_immobile||"").trim())qualityScore+=10;
   if(Number(item.superficie_mq)>0)qualityScore+=15;
   if(Number(item.locali)>0)qualityScore+=5;
-  if(specificLink||(isManualOpportunity&&!!validUrl(item.url)))qualityScore+=15;
-  if(hasNotificationDate&&!isManualOpportunity)qualityScore+=10;
+  if(specificLink)qualityScore+=15;
+  if(hasNotificationDate)qualityScore+=10;
   if(item.tipo_venditore==="Privato"&&Number(item.seller_confidence)>=90)qualityScore+=10;
   if(String(item.contatto||"").trim())qualityScore+=5;
 
@@ -4557,7 +4549,7 @@ function candidateQuality(item,candidates,archive,now=new Date()){
     hasValidUrl:!!validUrl(item.url||item.url_originale),
     hasNotificationDate,
     notificationDays,
-    oldNotification:!isManualOpportunity&&hasNotificationDate&&notificationDays>30,
+    oldNotification:hasNotificationDate&&notificationDays>30,
     missing,
     recommendedMissing,
     incomplete:missing.length>0,
@@ -4678,7 +4670,7 @@ function renderCandidates(){
   const visibleNotifications=visibleNotificationIds.size;
   $("candidateFilterCount").textContent=visibleNotifications+" email da verificare · "+uniqueRanked.length+" immobili";
   if(!data.length){
-    box.innerHTML='<p class="hint">Nessuna opportunità da verificare. Le nuove email e gli annunci aggiunti manualmente compariranno qui.</p>';
+    box.innerHTML='<p class="hint">Nessuna email da verificare. I privati riconosciuti con prove affidabili vengono archiviati automaticamente.</p>';
     msg("candidateMsg","");
     renderDashboard();
     return;
@@ -4691,26 +4683,22 @@ function renderCandidates(){
   }
   box.innerHTML=uniqueRanked.map(({item:c,priority,quality})=>{
     const isPrivate=c.tipo_venditore==="Privato";
-    const isManualOpportunity=c?.dati_fonte?.origine==="inserimento_manuale";
-    const notificationTimestamp=isManualOpportunity?c.created_at:c.data_pubblicazione;
     const notificationDate=quality.hasNotificationDate
-      ?new Date(notificationTimestamp).toLocaleDateString("it-IT"):"Data email non indicata";
+      ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data email non indicata";
     const url=validUrl(c.url);
-    const linkHtml=quality.specificLink||(isManualOpportunity&&!!url)
+    const linkHtml=quality.specificLink
       ?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
       :'<span class="candidate-link-warning">Link diretto non verificato: apertura sospesa</span>';
-    const ageText=isManualOpportunity
-      ?"Inserita manualmente"+(quality.hasNotificationDate?" il "+notificationDate:"")
-      :quality.hasNotificationDate
-        ?(quality.notificationDays===0?"Email ricevuta oggi":"Email ricevuta "+quality.notificationDays+" giorni fa")
-        :"Data di ricezione dell'email non disponibile";
-    const linkText=isManualOpportunity&&url?"Link inserito manualmente":(quality.specificLink?"Link specifico individuato":(quality.hasValidUrl?"Collegamento generico o non riconosciuto":"Nessun collegamento disponibile"));
+    const ageText=quality.hasNotificationDate
+      ?(quality.notificationDays===0?"Email ricevuta oggi":"Email ricevuta "+quality.notificationDays+" giorni fa")
+      :"Data di ricezione dell'email non disponibile";
+    const linkText=quality.specificLink?"Link specifico individuato":(quality.hasValidUrl?"Collegamento generico o non riconosciuto":"Nessun collegamento disponibile");
     const missingText=quality.missing.length?"Dati essenziali mancanti: "+quality.missing.join(", "):"Dati essenziali presenti";
     const recommendedText=quality.recommendedMissing.length?"Da verificare sull'annuncio: "+quality.recommendedMissing.join(", "):"Recapito diretto disponibile";
     const duplicateText=quality.duplicate
       ?"Possibile duplicato nell'"+(quality.duplicate.scope==="archivio"?"archivio":"elenco opportunità")+": "+(quality.duplicate.item.titolo||"annuncio simile")+" ("+quality.duplicate.reason+")"
       :"Nessun duplicato evidente individuato";
-    const tone=quality.duplicate||(!quality.specificLink&&!isManualOpportunity)||quality.oldNotification?"warning":quality.incomplete||!quality.hasNotificationDate?"review":"ok";
+    const tone=quality.duplicate||!quality.specificLink||quality.oldNotification?"warning":quality.incomplete||!quality.hasNotificationDate?"review":"ok";
     const qualityHtml='<div class="candidate-quality candidate-quality-'+tone+'"><strong>Controllo qualità:</strong> '+safe(linkText)+' · '+safe(ageText)+' · '+safe(missingText)+'<br>'+safe(recommendedText)+'<br>'+safe(duplicateText)+'</div>';
     const duplicateTarget=quality.duplicate?.item||null;
     const duplicateTargetVisible=!!duplicateTarget&&data.some(entry=>String(entry.id)===String(duplicateTarget.id));
@@ -4782,12 +4770,12 @@ function renderCandidates(){
       '<span class="candidate-quick-tag">Qualità dati '+quality.qualityScore+'/100</span>',
       latestPriceDrop?'<span class="candidate-quick-tag candidate-quick-tag-price">Ribasso documentato</span>':""
     ].filter(Boolean).join("");
-    const reviewAction='<button class="gold" type="button" data-open-candidate-details="'+safe(c.id)+'">'+(isManualOpportunity?"Verifica annuncio":"Verifica email")+'</button>';
+    const reviewAction='<button class="gold" type="button" data-open-candidate-details="'+safe(c.id)+'">Verifica email</button>';
     const sourceTheme=candidateSourceTheme(c.portale);
     const sourceLabel=sourceTheme==="idealista"?"Idealista":sourceTheme==="immobiliare"?"Immobiliare.it":sourceTheme==="subito"?"Subito":(c.portale||"Portale non indicato");
-    const emailSubject=isManualOpportunity?"Opportunità inserita manualmente":String(c.email_subject||"Notifica immobiliare").trim();
-    const emailSender=isManualOpportunity?"Inserimento manuale":String(c.notification_sender||sourceLabel).trim();
-    const emailCount=isManualOpportunity?"Scheda manuale":(Number(c.notification_count)>1?Number(c.notification_count)+" email collegate":"1 email");
+    const emailSubject=String(c.email_subject||"Notifica immobiliare").trim();
+    const emailSender=String(c.notification_sender||sourceLabel).trim();
+    const emailCount=Number(c.notification_count)>1?Number(c.notification_count)+" email collegate":"1 email";
     const sellerStateLabel=isPrivate?"Privato riconosciuto · archiviazione da completare":"Venditore da verificare";
     const duplicateBadge=quality.duplicate?'<span class="candidate-email-duplicate">Possibile duplicato</span>':"";
 
@@ -4799,14 +4787,14 @@ function renderCandidates(){
       +'<span class="candidate-email-count">'+safe(emailCount)+'</span>'
       +'</div>'
       +'<div class="candidate-quick-summary">'
-      +'<div class="candidate-email-subject"><span>'+(isManualOpportunity?"Origine scheda":"Oggetto email")+'</span> '+safe(emailSubject)+'</div>'
+      +'<div class="candidate-email-subject"><span>Oggetto email</span> '+safe(emailSubject)+'</div>'
       +'<h3>'+safe(c.titolo||"Annuncio immobiliare")+'</h3>'
       +'<p class="candidate-quick-facts">'+safe(quickFacts||"Caratteristiche dell’immobile da completare")+'</p>'
       +'<div class="candidate-email-status">'+safe(sellerStateLabel)+' '+duplicateBadge+'</div>'
       +'</div>'
       +'<div class="candidate-actions candidate-actions-primary">'+reviewAction+'<button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta email</button>'+linkHtml+'</div>'
       +'<details class="candidate-detail-panel" data-candidate-details>'
-      +'<summary>'+(isManualOpportunity?"Apri scheda e verifica del venditore":"Apri email e verifica del venditore")+'</summary>'
+      +'<summary>Apri email e verifica del venditore</summary>'
       +'<div class="candidate-detail-content">'
       +analysisHtml
       +priceDropHtml
@@ -4859,7 +4847,7 @@ async function loadCandidates(){
     const {data:page,error}=await supabase.from("annunci_candidati")
       .select("*").eq("stato","da_verificare")
       .in("tipo_venditore",["Privato","Da verificare"])
-      .or("source_email_id.not.is.null,dati_fonte->>origine.eq.inserimento_manuale")
+      .not("source_email_id","is",null).neq("source_email_id","")
       .order("created_at",{ascending:false}).order("id",{ascending:true})
       .range(offset,offset+pageSize-1);
     if(error){box.innerHTML="";msg("candidateMsg",error.message,"error");return;}
@@ -5302,24 +5290,7 @@ async function discardCandidate(id,button){
     :"Immobile scartato: rimosse "+discardedCount+" notifiche duplicate dalla coda.", "success");
 }
 
-async function manualCandidateIdentity(value){
-  const parsed=new URL(value);
-  parsed.hash="";
-  for(const key of [...parsed.searchParams.keys()]){
-    if(/^(utm_.+|gclid|fbclid|mc_cid|mc_eid|ref|source)$/i.test(key))parsed.searchParams.delete(key);
-  }
-  const host=parsed.hostname.toLowerCase().replace(/^www\./,"");
-  const path=decodeURIComponent(parsed.pathname).replace(/\/+$/,"").toLowerCase()||"/";
-  const query=[...parsed.searchParams.entries()].sort(([a],[b])=>a.localeCompare(b));
-  return host+path+(query.length?"?"+new URLSearchParams(query).toString():"");
-}
-
-async function manualCandidateDedupKey(identity){
-  const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(identity));
-  return "manual:"+Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,"0")).join("");
-}
-
-function manualCandidatePortal(url){
+function manualArchivePortal(url){
   try{
     const host=new URL(url).hostname.toLowerCase().replace(/^www\./,"");
     if(host.includes("idealista"))return "Idealista";
@@ -5333,175 +5304,158 @@ function manualCandidatePortal(url){
   }catch{return "Fonte manuale";}
 }
 
-async function findManualOpportunityDuplicate(table,listingKey,url){
-  if(listingKey){
-    const {data,error}=await supabase.from(table).select(table==="annunci_candidati"?"id,titolo,stato,annuncio_id":"id,titolo")
-      .eq("listing_key",listingKey).limit(1).maybeSingle();
-    if(error)throw error;
-    if(data)return data;
-  }
+async function findManualArchiveDuplicate(url){
   for(const column of ["url","url_originale"]){
-    const {data,error}=await supabase.from(table).select(table==="annunci_candidati"?"id,titolo,stato,annuncio_id":"id,titolo")
-      .eq(column,url).limit(1).maybeSingle();
+    const {data,error}=await supabase.from("annunci").select("id,titolo").eq(column,url).limit(1).maybeSingle();
     if(error)throw error;
     if(data)return data;
   }
   return null;
 }
 
-async function saveManualCandidate(event){
+async function saveManualArchiveListing(event){
   event.preventDefault();
   if(!currentUser||!supabase){
-    msg("manualCandidateMsg","Sessione non disponibile. Effettui nuovamente l’accesso.","error");
+    msg("archiveManualMsg","Sessione non disponibile. Effettui nuovamente l’accesso.","error");
     return;
   }
-  const button=$("manualCandidateSave");
+  const button=$("archiveManualSave");
   if(button.disabled)return;
-  const rawUrl=$("manualCandidateUrl").value.trim();
-  const cleanUrl=validUrl(rawUrl);
-  if(!cleanUrl){
-    msg("manualCandidateMsg","Inserisca un link valido che inizi con http:// o https://.","error");
-    return;
-  }
   const value=id=>$(id).value.trim();
-  const title=value("manualCandidateTitle");
-  const town=value("manualCandidateTown");
-  if(!title||!town){
-    msg("manualCandidateMsg","Titolo e comune sono obbligatori.","error");
+  const cleanUrl=validUrl(value("archiveManualUrl"));
+  if(!cleanUrl){
+    msg("archiveManualMsg","Inserisca un link valido che inizi con http:// o https://.","error");
     return;
   }
-  const numeric=(id,label,min,max,step)=>{
+  const numeric=(id,label,min,max,integer=false)=>{
     const raw=value(id);
     if(!raw)return null;
     const number=Number(raw);
-    if(!Number.isFinite(number)||number<min||number>max||(step===1&&!Number.isInteger(number))){
+    if(!Number.isFinite(number)||number<min||number>max||(integer&&!Number.isInteger(number))){
       throw new Error(label+" non valido.");
     }
     return number;
   };
   let price,surface,rooms,bedrooms,bathrooms;
   try{
-    price=numeric("manualCandidatePrice","Prezzo",0,1000000000,false);
-    surface=numeric("manualCandidateSurface","Superficie",1,100000,1);
-    rooms=numeric("manualCandidateRooms","Locali",0.5,100,false);
-    bedrooms=numeric("manualCandidateBedrooms","Camere",0,100,1);
-    bathrooms=numeric("manualCandidateBathrooms","Bagni",0,100,1);
+    price=numeric("archiveManualPrice","Prezzo",0,1000000000);
+    surface=numeric("archiveManualSurface","Superficie",1,100000,true);
+    rooms=numeric("archiveManualRooms","Locali",0.5,100);
+    bedrooms=numeric("archiveManualBedrooms","Camere",0,100,true);
+    bathrooms=numeric("archiveManualBathrooms","Bagni",0,100,true);
   }catch(error){
-    msg("manualCandidateMsg",error.message,"error");
+    msg("archiveManualMsg",error.message,"error");
     return;
   }
-  const seller=value("manualCandidateSeller")==="Privato"?"Privato":"Da verificare";
-  const isPrivate=seller==="Privato";
-  const portal=value("manualCandidatePortal")||manualCandidatePortal(cleanUrl);
-  const listingKey=canonicalCandidateUrl(cleanUrl);
-  const formValues={
-    titolo:title,
-    comune:town,
-    prezzo:price,
-    contatto:value("manualCandidateContact")||null,
-    tipologia_immobile:value("manualCandidateType")||null,
-    superficie_mq:surface,
-    locali:rooms,
-    camere:bedrooms,
-    bagni
-  };
   const originalButton=button.textContent;
   button.disabled=true;
-  button.textContent="Salvataggio…";
+  button.textContent="Analisi e salvataggio…";
   try{
-    const identity=await manualCandidateIdentity(cleanUrl);
-    const dedupKey=await manualCandidateDedupKey(identity);
-    const archived=await findManualOpportunityDuplicate("annunci",listingKey,cleanUrl);
-    if(archived){
-      msg("manualCandidateMsg","Questo annuncio risulta già presente nell’Archivio: non è stata creata una seconda scheda.","error");
+    const duplicate=await findManualArchiveDuplicate(cleanUrl);
+    if(duplicate){
+      msg("archiveManualMsg","Questo link risulta già presente nell’Archivio ("+(duplicate.titolo||"annuncio già salvato")+"). Nessun duplicato creato.","error");
       return;
     }
-    const existing=await findManualOpportunityDuplicate("annunci_candidati",listingKey,cleanUrl);
-    if(existing){
-      const state=existing.stato==="confermato"?"già trasferito nell’Archivio":existing.stato==="scartato"?"già scartato":"già presente tra le opportunità";
-      msg("manualCandidateMsg","Questo link è "+state+". Non ho creato un duplicato.","error");
-      if(existing.stato==="da_verificare"){
-        $("manualCandidatePanel").hidden=true;
-        $("manualCandidateToggle").setAttribute("aria-expanded","false");
-        await loadCandidates();
-        openDashboardCandidate(existing.id);
+    const manual={
+      titolo:value("archiveManualTitle"),
+      comune:value("archiveManualTown"),
+      prezzo:price,
+      indirizzo:value("archiveManualAddress")||null,
+      contatto:value("archiveManualContact")||null,
+      tipologia_immobile:value("archiveManualType")||null,
+      superficie_mq:surface,
+      locali:rooms,
+      camere:bedrooms,
+      bagni
+    };
+    const portal=value("archiveManualPortal")||manualArchivePortal(cleanUrl);
+    const seller=value("archiveManualSeller")||"Da verificare";
+    let enrichment=null;
+    let enrichmentWarning="";
+    if(cleanUrl.startsWith("https://")){
+      try{
+        const {data,error}=await supabase.functions.invoke("nmre-candidate-enrich",{body:{url:cleanUrl}});
+        if(error)throw new Error(error.message||"Analisi pubblica non disponibile.");
+        if(data?.success)enrichment=data;
+        else throw new Error(data?.error||"Il portale non ha restituito dati analizzabili.");
+      }catch(error){
+        enrichmentWarning=error.message||"Analisi automatica non disponibile.";
       }
+    }else{
+      enrichmentWarning="Il recupero automatico richiede un link HTTPS.";
+    }
+    const suggestions=enrichment?.suggestions&&typeof enrichment.suggestions==="object"?enrichment.suggestions:{};
+    const pick=(field,current)=>current!==null&&current!==undefined&&String(current).trim()!==""
+      ?current:(suggestions[field]??null);
+    const title=String(pick("titolo",manual.titolo)||"").trim();
+    const town=String(pick("comune",manual.comune)||"").trim();
+    if(!title||!town){
+      msg("archiveManualMsg","Non ho trovato titolo e comune in modo affidabile. Inserisca almeno questi due dati e salvi di nuovo. "+(enrichmentWarning?"Dettaglio: "+enrichmentWarning:""),"error");
       return;
     }
+    const finalUrl=validUrl(enrichment?.final_url)||cleanUrl;
+    const finalPrice=pick("prezzo",manual.prezzo);
+    const finalType=pick("tipologia_immobile",manual.tipologia_immobile);
+    const finalSurface=pick("superficie_mq",manual.superficie_mq);
+    const finalRooms=pick("locali",manual.locali);
+    const finalBedrooms=pick("camere",manual.camere);
+    const finalBathrooms=pick("bagni",manual.bagni);
     const now=new Date().toISOString();
-    const row={
-      owner_id:currentUser.id,
-      ...formValues,
-      tipo_venditore:seller,
-      portale:portal,
-      url:cleanUrl,
-      url_originale:cleanUrl,
-      data_pubblicazione:null,
-      notification_sender:null,
-      email_subject:null,
-      source_email_id:null,
-      dedup_key:dedupKey,
-      listing_key:listingKey,
-      deduplication_version:1,
-      stato:"da_verificare",
-      seller_confidence:isPrivate?100:null,
-      seller_evidence:isPrivate?"Verificato manualmente: venditore privato":"Annuncio inserito manualmente; identità del venditore da verificare",
-      seller_classification_version:isPrivate?100:null,
-      seller_manual_override:isPrivate,
-      seller_identity:value("manualCandidateSellerIdentity")||null,
-      data_extraction_version:1,
+    const suggestionsStored={
+      ...suggestions,titolo:title,comune:town,
+      prezzo:finalPrice===null?null:Number(finalPrice),
+      tipologia_immobile:finalType,
+      superficie_mq:finalSurface===null?null:Number(finalSurface),
+      locali:finalRooms===null?null:Number(finalRooms),
+      camere:finalBedrooms===null?null:Number(finalBedrooms),
+      bagni:finalBathrooms===null?null:Number(finalBathrooms)
+    };
+    const record={
+      titolo:title,comune:town,prezzo:finalPrice,
+      indirizzo:manual.indirizzo||suggestions.indirizzo||null,
+      contatto:manual.contatto,tipo_venditore:seller,portale:portal,
+      url:finalUrl,url_originale:cleanUrl,
+      tipologia_immobile:finalType,superficie_mq:finalSurface,
+      locali:finalRooms,camere:finalBedrooms,bagni:finalBathrooms,
+      data_extraction_version:enrichment?2:1,
       dati_fonte:{
-        origine:"inserimento_manuale",
-        inserito_il:now,
-        url_inserimento:cleanUrl
+        origine:"inserimento_manuale",inserito_il:now,
+        url_originale:cleanUrl,url_finale:finalUrl,portale:portal,
+        recuperato_il:enrichment?.retrieved_at||null,evidenza:enrichment?.evidence||null
+      },
+      dati_estratti:{
+        pagina_pubblica:{
+          url_originale:cleanUrl,url_finale:finalUrl,portale:portal,
+          recuperato_il:enrichment?.retrieved_at||null,
+          evidenza:enrichment?.evidence||"Dati inseriti manualmente",
+          suggestions:suggestionsStored
+        }
       }
     };
-    const {data:created,error}=await supabase.from("annunci_candidati").insert(row).select("*").single();
-    if(error){
-      if(error.code==="23505"){
-        msg("manualCandidateMsg","Questo annuncio risulta già registrato. Aggiorni le Opportunità prima di riprovare.","error");
-        await loadCandidates();
-        return;
-      }
-      throw error;
-    }
-    $("manualCandidateForm").reset();
-    $("manualCandidatePanel").hidden=true;
-    $("manualCandidateToggle").setAttribute("aria-expanded","false");
-    if(isPrivate){
-      const prepared=await prepareCandidateForArchive(created,formValues);
-      if(!prepared.persisted){
-        await loadCandidates();
-        msg("candidateMsg","Opportunità salvata, ma non ancora archiviata: "+(prepared.persistError||prepared.error||"verifichi i dati e riprovi."),"error");
-        openDashboardCandidate(created.id);
-        return;
-      }
-      const {data:archiveResult,error:archiveError}=await supabase.rpc("nmre_auto_archive_private_candidate",{p_candidate_id:created.id});
-      if(archiveError){
-        await loadCandidates();
-        msg("candidateMsg","Opportunità salvata, ma l’archiviazione non è riuscita: "+archiveError.message,"error");
-        openDashboardCandidate(created.id);
-        return;
-      }
-      if(archiveResult?.archived===true){
-        await loadListings();
-        await loadCandidates();
-        const enrichment=prepared.enriched?" I dati pubblici disponibili sono stati aggiunti alla scheda."
-          :prepared.error?" Il link originale è stato conservato; alcuni dati non erano accessibili."
-          :" Il link originale è stato conservato.";
-        msg("candidateMsg","Annuncio inserito e archiviato correttamente."+enrichment,"success");
-        return;
-      }
-      await loadCandidates();
-      msg("candidateMsg","Opportunità salvata, ma l’archiviazione richiede un controllo: "+String(archiveResult?.reason||"verifichi la scheda")+".","error");
-      openDashboardCandidate(created.id);
+    const {data:sessionData,error:sessionError}=await supabase.auth.getSession();
+    if(sessionError)throw sessionError;
+    const token=sessionData.session?.access_token;
+    if(!token){
+      msg("archiveManualMsg","Sessione scaduta. Effettui nuovamente l’accesso.","error");
       return;
     }
-    await loadCandidates();
-    msg("candidateMsg","Opportunità aggiunta correttamente. Verifichi il venditore nella scheda appena inserita.","success");
-    openDashboardCandidate(created.id);
+    const {data,error}=await supabase.functions.invoke("nmre-search-engine",{
+      body:record,headers:{Authorization:"Bearer "+token}
+    });
+    if(error||!data?.success){
+      msg("archiveManualMsg",data?.error||error?.message||"Impossibile salvare l’annuncio.","error");
+      return;
+    }
+    $("archiveManualForm").reset();
+    $("archiveManualPanel").hidden=true;
+    $("archiveManualToggle").setAttribute("aria-expanded","false");
+    await loadListings();
+    const detail=enrichment
+      ?" Dati pubblici recuperati e link originale conservato."
+      :" Annuncio salvato con i dati inseriti e link originale conservato."+(enrichmentWarning?" Il portale non ha permesso il recupero automatico.":"");
+    msg("listMsg","Annuncio aggiunto direttamente all’Archivio."+detail,"success");
   }catch(error){
-    msg("manualCandidateMsg",error.message||"Errore durante l’inserimento dell’opportunità.","error");
+    msg("archiveManualMsg",error.message||"Errore durante il salvataggio dell’annuncio.","error");
   }finally{
     button.disabled=false;
     button.textContent=originalButton;
@@ -6235,20 +6189,20 @@ $("candidateResetFilters").addEventListener("click",()=>{
   renderCandidates();
 });
 $("refreshCandidates").addEventListener("click",loadCandidates);
-$("manualCandidateToggle").addEventListener("click",()=>{
-  const panel=$("manualCandidatePanel");
+$("archiveManualToggle").addEventListener("click",()=>{
+  const panel=$("archiveManualPanel");
   panel.hidden=!panel.hidden;
-  $("manualCandidateToggle").setAttribute("aria-expanded",String(!panel.hidden));
-  if(!panel.hidden)$("manualCandidateUrl").focus();
+  $("archiveManualToggle").setAttribute("aria-expanded",String(!panel.hidden));
+  if(!panel.hidden)$("archiveManualUrl").focus();
 });
-const closeManualCandidateForm=()=>{
-  $("manualCandidatePanel").hidden=true;
-  $("manualCandidateToggle").setAttribute("aria-expanded","false");
-  msg("manualCandidateMsg","");
+const closeArchiveManualForm=()=>{
+  $("archiveManualPanel").hidden=true;
+  $("archiveManualToggle").setAttribute("aria-expanded","false");
+  msg("archiveManualMsg","");
 };
-$("manualCandidateClose").addEventListener("click",closeManualCandidateForm);
-$("manualCandidateCancel").addEventListener("click",closeManualCandidateForm);
-$("manualCandidateForm").addEventListener("submit",saveManualCandidate);
+$("archiveManualClose").addEventListener("click",closeArchiveManualForm);
+$("archiveManualCancel").addEventListener("click",closeArchiveManualForm);
+$("archiveManualForm").addEventListener("submit",saveManualArchiveListing);
 
 const listingTextFilters=["listingSearch","listingPriceMin","listingPriceMax","listingSurfaceMin","listingSurfaceMax","listingRoomsMin","listingRoomsMax"];
 const listingSelectFilters=["listingTownFilter","listingTypeFilter","listingPortalFilter","sellerFilter","contactFilter"];
