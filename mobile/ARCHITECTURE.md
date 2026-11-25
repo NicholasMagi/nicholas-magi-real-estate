@@ -113,5 +113,16 @@ Decision:
 
 Platform boundary:
 - The same responsive PWA can be opened from a desktop browser or a mobile browser.
-- The separate Expo client remains a scaffold and is not yet connected to Auth or operational repositories. Native Expo integration of NOVA follows the authentication and read-only data milestones (M3/M4); do not claim the native client has NOVA until those gates are implemented and tested.
+- The Expo client now includes a native NOVA chat tab and a typed deterministic rules engine under `mobile/src/features/nova/`. The assistant UI is usable, but its current context is explicitly `not_connected`; it does not read or invent live records. The same decision rules are ported from the PWA, not bundled as one shared runtime module.
 - The previous `nmre-ai-assistant` Edge Function remains deployed but is not called by the phase-1 PWA assistant. No function deployment or production database change was made.
+
+
+## 15. NOVA — native Expo client (2026-11-25)
+
+- Added the NOVA tab and a React Native chat interface. Text-only in this milestone; no microphone, speech recognition, speech synthesis, wake word or persistent conversation storage.
+- Added a typed, pure TypeScript engine for commercial priority scoring, candidate data quality and duplicate checks, municipality filters, action planning, due/overdue follow-ups, private-seller classification, missing CRM fields and documented price reductions.
+- The native engine accepts a typed context snapshot. It has no Supabase client, network request, API key, storage write or AI provider dependency.
+- The screen deliberately supplies `status: not_connected` until M3 authentication and M4 read-only repositories are implemented. Generic call-script and help prompts work without operational data; data-dependent questions explicitly explain that the archive is not connected.
+- Candidate/listing actions are returned as typed identifiers for a future detail-navigation adapter. Current mobile record screens are placeholders, so the app does not claim those action identifiers open a specific record yet.
+- Added `npm run test:nova` using Node's built-in test runner and TypeScript type stripping (Node 22.13+). Run it in the mobile workspace; the remote repository edit itself does not prove tests passed.
+- No Supabase Auth, production table, Edge Function, PWA file, backend secret or deployment was changed in this native milestone.
