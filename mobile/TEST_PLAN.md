@@ -16,6 +16,12 @@ Required package scripts:
 
 **Current status:** package scripts/config are committed, but commands have NOT RUN because dependencies and lockfile have not yet been installed/generated in a local Windows workspace.
 
+## 2.1 NOVA engine tests
+Run from `mobile/` with Node 22.13 or newer:
+- `npm run test:nova`
+- The suite uses synthetic fixtures only and covers disconnected-data safety, generic call-script generation, parity of the commercial score, unverified seller handling, missing fields/duplicates, action-plan order, exclusive-agency suppression, private-only filtering, follow-ups and documented price reductions.
+- These tests do not prove the Supabase repository mapping, authentication, or live record navigation; those belong to M3/M4 integration tests.
+
 ## 3. Unit tests to add
 - Domain mapping for Italian/English schema fields, nullable values and malformed records.
 - Seller class/manual override; ambiguous seller remains unverified.
@@ -66,6 +72,7 @@ Record EAS build IDs, profile, environment and commit.
 - Mobile does not invoke Gmail worker or Pub/Sub receiver.
 - No schema/migration/secret changes during M0/M1/M2.
 - No production data writes during scaffold phase.
+- NOVA mobile engine has no network client or database access until M3/M4 repositories are reviewed.
 
 ## 9. Milestone reporting
 Report implemented features, files changed, exact tests and results, device evidence, known issues, residual risks, rollback and next milestone. Mark skipped checks NOT RUN with reason.
