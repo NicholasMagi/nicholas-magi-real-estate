@@ -1,356 +1,420 @@
 # Proposta tecnica P0 · Sicurezza, schema e affidabilità
 
+Versione 2 · aggiornata il 25/11/2026 con le verifiche di produzione in sola
+lettura eseguite dal titolare.
+
 Stato: **proposta da approvare**. Nessuna modifica è stata applicata al codice
-dell'applicazione, alle Edge Functions distribuite, al database di produzione o
-alle configurazioni Supabase/Google. Branch di lavoro: `claude/confident-knuth-yvuju7`.
+dell'applicazione, alle Edge Functions distribuite, al database di produzione,
+a Storage o alle configurazioni Supabase/Google. Branch di lavoro:
+`claude/confident-knuth-yvuju7` (nessun merge su `main`, nessuna pull request).
 
-Legenda: ✅ verificato nel codice del repository · 🔎 da verificare in produzione
-(script `supabase/audit/p0_verifica_produzione_sola_lettura.sql` o Dashboard) ·
-⚠️ ipotesi.
-
-> Nota sull'ambiente di analisi: l'host Supabase del progetto non è raggiungibile
-> dall'ambiente cloud in cui è stato preparato questo documento (connessione
-> rifiutata dal proxy di rete). Tutte le verifiche di produzione sono quindi
-> preparate come query in sola lettura da eseguire nel SQL Editor o come
-> controlli nella Dashboard. Nessuna credenziale è stata richiesta o usata.
+Legenda delle fonti:
+- ✅ **Codice**: verificato nel repository.
+- 🟢 **Produzione**: verificato dal titolare sul progetto Supabase, in sola lettura.
+- 🔎 **Da verificare**: script `supabase/audit/p0_verifica_produzione_sola_lettura.sql` o Dashboard.
+- ⚠️ **Ipotesi**: deduzione ragionata, non ancora confermata.
 
 ---
 
-## Principi vincolanti per tutti gli interventi P0
+## 0. Esiti delle verifiche di produzione
 
-1. **Nessuna cancellazione di dati.** Le eventuali pulizie (per esempio il testo
-   delle email già salvato) saranno proposte separatamente, con backup e
-   approvazione esplicita.
-2. **Nessuna modifica diretta alla produzione** finché ogni intervento non è
-   approvato. Ordine di rilascio: repository → test → Supabase branch / progetto
-   di prova (se disponibile) → produzione, una funzione alla volta.
-3. **Il proprietario non deve mai restare chiuso fuori**: ogni passo ha un piano
-   di ritorno e un accesso di emergenza (vedi §5).
-4. **Nel repository entrano solo schema e codice**: mai dati, token, chiavi,
-   password, valori di Vault o contenuti di email. Ogni file esportato dalla
-   produzione passa da un controllo automatico anti-segreti prima del commit.
-5. **Lavoro su branch**, mai su `main`; integrazione tramite pull request
-   approvata.
-
----
-
-## 1. Autenticazione, registrazione, autorizzazioni e RLS
-
-### 1.1 Situazione verificata nel codice ✅
-
-**Frontend**
-
-| Elemento | File e righe | Osservazione |
+| # | Esito | Fonte |
 |---|---|---|
-| Registrazione pubblica | `index.html:614`, `index.html:4288-4303` | Il pulsante "Crea account" chiama `supabase.auth.signUp`. Chiunque raggiunga l'URL pubblico può tentare di registrarsi. |
-| Accesso | `index.html:4274-4286` | Email + password; nessun limite lato client, nessuna MFA, nessun recupero password. |
-| Recupero password | — | Assente. `detectSessionInUrl:true` (`index.html:2589`) accetta il link di recupero, ma non esiste una schermata per impostare la nuova password: un'email di recupero oggi non basta a rientrare. |
-| Sessione | `index.html:2585-2592` | Salvata in `localStorage`; esposta a qualsiasi script caricato nella pagina (vedi CSP, §1.4). |
-| Configurazione progetto | `index.html:2596-2607`, `#setup` | URL e Publishable Key sono pubblici per natura; la schermata permette però di puntare l'app a un altro progetto Supabase (non un rischio per i dati, ma una superficie inutile). |
+| V1 | Tutte le tabelle dello schema `public` hanno RLS attiva | 🟢 |
+| V2 | `private.gmail_sync_lock` e `private.gmail_push_watch_state` hanno RLS disattivata; `anon` e `authenticated` non hanno USAGE sullo schema `private` né privilegi sulle tabelle | 🟢 |
+| V3 | `private.gmail_oauth_tokens`, `private.gmail_oauth_states`, `private.gmail_sync_state` hanno RLS attiva e nessuna policy; inaccessibili ai ruoli client | 🟢 |
+| V4 | `nmre_auto_archive_private_candidate` è SECURITY INVOKER, eseguibile solo da `authenticated`, usa `auth.uid()` e `owner_id` | 🟢 |
+| V5 | `nmre-ai-assistant` è attiva in produzione alla versione 14 e verifica `NMRE_ALLOWED_USER_ID`; il codice non è nel repository | 🟢 + ✅ |
+| V6 | `nmre-push-send`, `nmre-search-engine`, `nmre-candidate-enrich` verificano il token utente ma non `NMRE_ALLOWED_USER_ID` | 🟢 + ✅ |
+| V7 | Il job `nmre-gmail-hourly-sync` gira **ogni minuto**; 48 ore: 2.086 esecuzioni cron, nessuna fallita, intervallo mediano ~1 minuto | 🟢 |
+| V8 | 48 ore di registro Gmail: 2.207 sincronizzazioni incrementali riuscite, 16 in errore | 🟢 |
+| V9 | Protezione contro le password compromesse **disattivata** | 🟢 |
+| V10 | Supabase Storage: nessun bucket | 🟢 |
+| V11 | Impostazione **"Allow new users to sign up": non ancora verificata** | 🔎 |
 
-**Edge Functions** (nessun `supabase/config.toml` nel repository: lo stato reale di
-"Enforce JWT" per ciascuna funzione è 🔎)
+---
 
-| Funzione | Autenticazione nel codice | Limitata a `NMRE_ALLOWED_USER_ID` | Valutazione |
+## 1. Classificazione: problemi effettivi, avvisi degli advisor, punti aperti
+
+### 1.1 Problemi effettivi (richiedono un intervento)
+
+| ID | Problema | Gravità | Fonte | Riferimenti |
+|---|---|---|---|---|
+| E1 | Tre Edge Functions accessibili a qualsiasi utente autenticato, non solo al titolare. Il rischio concreto dipende da V11: con la registrazione aperta, chiunque può creare un account e usarle | **Alta se V11 = aperta**, media altrimenti | 🟢 V6 | `nmre-push-send/index.ts:22-55`, `nmre-search-engine/index.ts:76-105`, `nmre-candidate-enrich/index.ts:176-188` |
+| E2 | Registrazione proposta dall'interfaccia ("Crea account") | Alta se V11 = aperta | ✅ | `index.html:614`, `index.html:4288-4303` |
+| E3 | Protezione password compromesse disattivata | Media | 🟢 V9 | Dashboard → Authentication |
+| E4 | Codice di `nmre-ai-assistant` (v14) assente dal repository: non è revisionabile, non è versionato, non è ripristinabile in caso di errore | Media | 🟢 V5 | §3 |
+| E5 | Recupero password assente nell'app: rischio di restare chiusi fuori | Media | ✅ | `index.html:605-617`, `4231-4239` |
+| E6 | Risoluzione automatica dei link di tracciamento (GET verso domini arbitrari, link d'azione inclusi) | Alta per l'obiettivo commerciale | ✅ | §5 |
+| E7 | Il monitor in Impostazioni legge solo le ultime 200 sincronizzazioni: con un'esecuzione al minuto coprono circa **3 ore e 20 minuti**, quindi i contatori "ultime 24h" (esecuzioni, errori) sono **sottostimati** | Media | ✅ + 🟢 V7 | `index.html` funzione `loadGmailSyncStatus` (`.limit(200)`) |
+| E8 | Documentazione e file cron del repository non corrispondono alla produzione (repository: ogni ora / ogni 10 minuti; produzione: ogni minuto) | Media | ✅ + 🟢 V7 | §4.1 |
+| E9 | Contenuto delle email (testo, mittente, oggetto) conservato e mostrato, contrariamente a quanto dichiarato | Media (minimizzazione dei dati) | ✅ | §6 |
+| E10 | Schema di produzione non ricostruibile dal repository | Media | ✅ | §2 |
+
+### 1.2 Avvisi degli advisor (nessun rischio effettivo, nessuna correzione automatica)
+
+| ID | Avviso | Perché non è un rischio effettivo | Azione proposta |
 |---|---|---|---|
-| `nmre-gmail-oauth-start` | `withSupabase({auth:"user"})` | ✅ sì | Corretta |
-| `nmre-gmail-oauth-callback` | `auth:"none"` + stato monouso + controllo casella | ✅ (lo stato è legato all'utente autorizzato) | Corretta |
-| `nmre-gmail-reader` | `auth:"user"` | ✅ sì | Dismessa (410) |
-| `nmre-gmail-scheduled` | `auth:"secret"` | n/a (server-to-server) | Corretta |
-| `nmre-gmail-push` | `auth:"none"` + verifica OIDC Google | n/a | Corretta |
-| `nmre-insights-sync` | JWT utente via `getUser()` | ✅ sì (`index.ts:127-134`) | Corretta |
-| `nmre-push-send` | chiave service **oppure** qualunque JWT utente | ❌ no | Qualsiasi utente registrato può generare notifiche di prova per sé; il confronto della chiave usa `===` (`index.ts:31`). |
-| `nmre-search-engine` | JWT utente via `getUser()` | ❌ no | Qualsiasi utente registrato può inserire annunci (isolati dalla RLS); l'URL non è validato come `https` (`index.ts:153-157`). |
-| `nmre-candidate-enrich` | JWT utente via `getUser()` | ❌ no | Qualsiasi utente registrato può far scaricare al server pagine dei portali (consumo di risorse, possibile blocco dell'IP da parte dei portali). |
-| `nmre-ai-assistant` | **non presente nel repository** | 🔎 (la documentazione dichiara di sì) | Va esportata e verificata. |
+| W1 | `private.gmail_sync_lock`, `private.gmail_push_watch_state` senza RLS | I ruoli client non hanno USAGE su `private` né privilegi sulle tabelle (V2); l'accesso avviene solo tramite funzioni `security definer` eseguibili da `service_role` (migrazione `20261124120000`) | **Nessuna modifica ora.** Facoltativo in futuro, come difesa in profondità e per azzerare l'avviso: `enable row level security` senza policy (le funzioni `security definer` ne sono proprietarie e continuano a funzionare). Da provare prima in locale |
+| W2 | Tabelle `private.*` con RLS attiva e nessuna policy | È il comportamento voluto: negare tutto ai client (V3) | Nessuna. Documentare l'intenzione nello schema di base (§2) |
 
-**Database**: le migrazioni del repository mostrano RLS corrette solo per
-`nmre_sales_goals`, `nmre_property_contacts` e le tabelle `private.*`. Per le
-tabelle principali (`annunci`, `annunci_candidati`, `annunci_interazioni`,
-`annunci_candidati_notifiche`, `nmre_contacts`, `nmre_properties`,
-`nmre_appointments`, `nmre_contact_interactions`, `nmre_notifications`,
-`nmre_notification_preferences`, `nmre_push_subscriptions`,
-`seller_identity_registry`, `nmre_gmail_sync_runs`, `nmre_omi_quotazioni`,
-`nmre_compravendite_atti`) le policy non sono nel repository → 🔎.
-Punto da chiarire con priorità: `nmre_auto_archive_private_candidate(uuid)` è
-chiamata sia dal frontend con il JWT utente (`index.html:5276`) sia dal backend
-con la service role (`nmre-gmail-scheduled/index.ts:860`). Se è
-`security definer`, **deve** verificare internamente che il candidato
-appartenga a `auth.uid()` quando chiamata da un utente (Q6c dello script).
+### 1.3 Punti chiusi dalle verifiche
 
-### 1.2 Verifiche di produzione da eseguire 🔎
+- RLS sulle tabelle `public`: attiva ovunque (V1). Resta da revisionare il **contenuto** delle policy (`owner_id = auth.uid()`), con la query Q3 che restituisce solo indicatori.
+- Funzioni critiche non eseguibili da `anon` (V4 per l'archiviazione automatica; da completare con Q5b per tutte).
+- Storage: nessun bucket, quindi nessuna esposizione di file oggi (V10).
 
-Script: `supabase/audit/p0_verifica_produzione_sola_lettura.sql`.
+### 1.4 Punti ancora aperti
 
-| Verifica | Query / luogo | Esito atteso |
+| ID | Punto | Come verificarlo |
 |---|---|---|
-| Tabelle `public` senza RLS | Q2 | Nessuna riga |
-| Policy di ogni tabella | Q3 | Ogni tabella ha select/insert/update/delete limitati a `auth.uid() = owner_id`; `nmre_gmail_sync_runs` e `annunci_candidati_notifiche` solo lettura per l'utente |
-| Privilegi a `anon` | Q5 | Nessun privilegio di scrittura a `anon` sulle tabelle applicative |
-| RPC `security definer` | Q6, Q6b | Nessuna eseguibile da `anon`; tutte con `search_path` fissato |
-| Definizione RPC critiche | Q6c | `nmre_auto_archive_private_candidate` controlla il proprietario; le RPC dei token sono eseguibili solo da `service_role` |
-| Utenti esistenti | Q12, Q13 | 1 utente, 1 proprietario per tabella |
-| Registrazioni | Dashboard → Authentication → Sign In / Providers → "Allow new users to sign up" | Da disattivare (§5) |
-| Conferma email, protezione password compromesse, lunghezza minima | Dashboard → Authentication | Conferma email attiva; protezione password compromesse attiva |
-| Enforce JWT per funzione | Dashboard → Edge Functions → ogni funzione → Details | Attivo per tutte tranne `nmre-gmail-oauth-callback`, `nmre-gmail-push`, `nmre-gmail-scheduled` (che usano altri meccanismi) |
-| Nomi dei segreti (non i valori) | Dashboard → Edge Functions → Secrets | Presenti: `NMRE_ALLOWED_USER_ID`, `GOOGLE_CLIENT_ID/SECRET`, `INTEGRATION_TOKEN_ENCRYPTION_KEY`, VAPID, eventuali Pub/Sub e `OPENAI_API_KEY` |
-| Schemi esposti dall'API | Dashboard → Project Settings → Data API | Solo `public` (e `graphql_public`); **non** `private` |
-| 2FA sugli account di amministrazione | Account Supabase, GitHub, Google | Attiva su tutti e tre |
+| O1 | "Allow new users to sign up" | Dashboard → Authentication → Sign In / Providers |
+| O2 | `nmre_auto_archive_private_candidate` è chiamata anche dal backend con la service role (`nmre-gmail-scheduled/index.ts:860`). Risulta "eseguibile solo da authenticated" e usa `auth.uid()`, che con la service role è nullo. ⚠️ Se la service role non ha EXECUTE o la funzione non gestisce `auth.uid()` nullo, l'archiviazione automatica dal backend fallisce e l'intera sincronizzazione va in errore | Q5 (`esegue_service_role`, `distingue_ruolo`) e Q11 (categoria `archiviazione_privato`). I dati attuali (2.207 successi) indicano che, se il problema esiste, si manifesta raramente, cioè solo quando arriva un privato con prova esplicita |
+| O3 | Contenuto delle policy RLS | Q3 |
+| O4 | "Enforce JWT" per ciascuna Edge Function | Dashboard → Edge Functions → Details |
+| O5 | Gmail Push attivo o no | Logs di `nmre-gmail-push` (vedi §4.2) |
+| O6 | Corrispondenza tra codice distribuito e repository per le altre 8 funzioni | `supabase functions download` + confronto (§3.3) |
+| O7 | Utenti esistenti e proprietari distinti | Q13, Q14 |
+| O8 | 2FA su Supabase, GitHub, Google | Impostazioni dei rispettivi account |
 
-### 1.3 Modifiche proposte (da approvare)
+---
+
+## 2. Autenticazione, registrazione e autorizzazioni
+
+### 2.1 Stato per Edge Function
+
+| Funzione | Autenticazione | Limitata al titolare | Stato |
+|---|---|---|---|
+| `nmre-gmail-oauth-start` | utente (`withSupabase auth:"user"`) | sì | ✅ corretta |
+| `nmre-gmail-oauth-callback` | stato OAuth monouso legato al titolare + controllo casella | sì | ✅ corretta |
+| `nmre-gmail-reader` | utente | sì | ✅ dismessa (410) |
+| `nmre-gmail-scheduled` | chiave segreta | n/a | ✅ corretta |
+| `nmre-gmail-push` | OIDC Google | n/a | ✅ corretta |
+| `nmre-insights-sync` | utente | sì | ✅ corretta |
+| `nmre-ai-assistant` (v14) | utente | sì | 🟢 corretta in produzione; codice da recuperare (§3) |
+| `nmre-push-send` | chiave service **o** utente | **no** | 🟢 E1 |
+| `nmre-search-engine` | utente | **no** | 🟢 E1 |
+| `nmre-candidate-enrich` | utente | **no** | 🟢 E1 |
+
+### 2.2 Modifiche proposte (da approvare)
 
 | ID | Modifica | File coinvolti | Rischio | Mitigazione |
 |---|---|---|---|---|
-| A1 | Rimuovere il pulsante "Crea account" e il relativo handler; testo "Accesso riservato al titolare" | `index.html:605-617`, `4288-4303` | Nessuno per l'account esistente | Gli account si creano solo dalla Dashboard |
-| A2 | Disattivare le registrazioni in Supabase Auth | Dashboard (nessun file) | Basso: non tocca gli utenti esistenti | Si riattiva con un clic; il titolare può sempre creare/invitare utenti dalla Dashboard |
-| A3 | Modulo condiviso `_shared/auth.ts` con `requireOwner(req)`: verifica JWT con `getUser()`, confronta con `NMRE_ALLOWED_USER_ID`, risponde 401/403 uniformi | nuovo `supabase/functions/_shared/auth.ts`; `nmre-push-send`, `nmre-search-engine`, `nmre-candidate-enrich` (e `nmre-ai-assistant` dopo l'esportazione) | Medio: un errore blocca la funzione per il titolare | Test automatici con JWT simulati; distribuzione una funzione per volta; ritorno alla versione precedente dalla Dashboard |
-| A4 | `nmre-push-send`: confronto a tempo costante della chiave service; percorso utente limitato al titolare | `supabase/functions/nmre-push-send/index.ts:22-52` | Basso | Test della notifica di prova dopo il rilascio |
-| A5 | `nmre-search-engine`: accettare solo URL `https` dei portali riconosciuti (riuso di `canonicalListingKey`) | `supabase/functions/nmre-search-engine/index.ts:153-157` | Basso: un URL non-portale verrebbe rifiutato | Il campo resta facoltativo; messaggio chiaro all'utente |
-| A6 | Recupero password in app: "Password dimenticata" + schermata per l'evento `PASSWORD_RECOVERY` | `index.html` (sezione `#auth` e handler `onAuthStateChange`, `index.html:4231-4239`) | Basso | È il principale strumento anti-blocco (§5) |
-| A7 | MFA TOTP facoltativa per l'account del titolare (Supabase Auth MFA), attivata solo dopo A6 | `index.html` (Impostazioni → Account) | Medio: perdere il dispositivo TOTP | Codici di recupero conservati offline; possibilità di rimuovere il fattore dalla Dashboard |
-| A8 | Content-Security-Policy via `<meta>`, Leaflet con SRI, versioni fissate di supabase-js e xlsx | `index.html:1-15`, `583`, `1381`, `3892`, `6318` | Medio: una CSP troppo stretta rompe mappa/OMI/Nominatim | Prima in modalità solo-segnalazione su un'anteprima; elenco esplicito dei domini usati |
-| A9 | Rimuovere la schermata di configurazione libera del progetto Supabase (URL/chiave fissi nel codice) mantenendo un ripristino nascosto in Impostazioni | `index.html:594-603`, `2581-2607`, `4245-4270` | Basso | Il valore predefinito è già quello di produzione |
-| A10 | (Difesa in profondità, fase successiva) policy RLS **restrittive** che, oltre a `owner_id = auth.uid()`, richiedono che l'utente sia nella tabella `private.nmre_allowed_users` | nuova migrazione | **Alto** se sbagliata: blocca l'app | Solo dopo A1–A6; prima su progetto di prova; script di rimozione pronto; si applica una tabella alla volta |
+| A1 | Rimuovere "Crea account"; testo "Accesso riservato" | `index.html:605-617`, `4288-4303` | Nessuno per l'account esistente | Gli account si creano solo dalla Dashboard |
+| A2 | Verificare (O1) e, se aperta, disattivare la registrazione | Dashboard | Basso | Riattivabile con un clic |
+| A3 | Modulo condiviso `requireOwner(req)` (verifica token, confronto con `NMRE_ALLOWED_USER_ID`, risposte 401/403/503 uniformi) applicato alle tre funzioni di E1 | nuovo `supabase/functions/_shared/auth.ts`; `nmre-push-send/index.ts`, `nmre-search-engine/index.ts`, `nmre-candidate-enrich/index.ts` | Medio | Test automatici; rilascio di una funzione per volta; ritorno alla versione precedente dalla Dashboard |
+| A4 | `nmre-push-send`: confronto a tempo costante della chiave service | `nmre-push-send/index.ts:31` | Basso | Notifica di prova dopo il rilascio |
+| A5 | `nmre-search-engine`: solo URL `https` dei portali riconosciuti | `nmre-search-engine/index.ts:153-157` | Basso | Campo facoltativo, messaggio chiaro |
+| A6 | Recupero password in app (richiesta + schermata per `PASSWORD_RECOVERY`) | `index.html` (`#auth`, `onAuthStateChange` a riga 4231) | Basso | È lo strumento principale contro il blocco dell'accesso |
+| A7 | **Attivare la protezione password compromesse** (E3). Non invalida la password attuale: si applica alle nuove password e ai cambi password. ⚠️ La disponibilità dipende dal piano Supabase: da verificare nella Dashboard | Dashboard → Authentication | Basso | Prima di attivarla, verificare di conoscere la password; se quella attuale risultasse compromessa, cambiarla subito con A6 |
+| A8 | MFA TOTP facoltativa per il titolare | `index.html` (Impostazioni → Account) | Medio | Codici di recupero offline; fattore rimovibile dalla Dashboard |
+| A9 | CSP, Leaflet con SRI, versioni fissate di supabase-js e xlsx | `index.html:1-15`, `583`, `1381`, `3892`, `6318` | Medio | Prima in sola segnalazione su anteprima |
+| A10 | Rimuovere la configurazione libera del progetto Supabase | `index.html:594-603`, `2581-2607`, `4245-4270` | Basso | Ripristino nascosto in Impostazioni |
+| A11 | (Fase successiva) policy RLS restrittive con elenco di utenti autorizzati | nuova migrazione | **Alto** se errata | Solo dopo A1–A6; prima in locale; script di rimozione pronto |
 
-### 1.4 Test necessari
+### 2.3 Test
 
-- Deno: test per `_shared/auth.ts` (senza token → 401; token di altro utente → 403; titolare → 200; segreto mancante → 503).
-- Deno: test `nmre-push-send` (chiave service valida/non valida; utente non titolare).
-- Deno: test `nmre-search-engine` per URL `javascript:`, `http:`, host non portale, URL portale valido.
-- Workflow CI: estendere `deno check` a **tutte** le funzioni e includere `_shared/parser.test.ts`.
-- Playwright (manuale su anteprima, poi automatico): accesso, uscita, recupero password, assenza del pulsante di registrazione, apertura di ogni sezione senza errori in console con la CSP attiva.
-- Produzione, dopo ogni rilascio: accesso del titolare, notifica di prova, ricollegamento Gmail, inserimento manuale, arricchimento di un candidato.
+- Deno: `_shared/auth_test.ts` (senza token → 401; altro utente → 403; titolare → 200; segreto mancante → 503).
+- Deno: `nmre-push-send` (chiave valida/non valida, utente non titolare); `nmre-search-engine` (URL `javascript:`, `http:`, host non portale, portale valido).
+- CI: `deno check` su **tutte** le funzioni, inclusa `nmre-ai-assistant`; esecuzione di `_shared/parser.test.ts`; scansione segreti.
+- Playwright su anteprima: accesso, uscita, recupero password, assenza della registrazione, tutte le sezioni senza errori con la CSP.
+- Produzione, dopo ogni rilascio: accesso del titolare, notifica di prova, inserimento manuale, arricchimento di un candidato, una domanda all'assistente.
 
 ---
 
-## 2. Schema effettivo di produzione nel repository
+## 3. Recupero e versionamento di `nmre-ai-assistant`
 
-### 2.1 Problema ✅
-Il repository contiene solo migrazioni incrementali: non è possibile ricostruire
-il database né revisionare le policy. La migrazione
-`20261125014133_archive_candidate_full_extraction_data.sql` riscrive funzioni
-con sostituzioni di testo su `pg_get_functiondef`, quindi non è riapplicabile su
-un database nuovo.
+### 3.1 Obiettivo
+Portare nel repository il codice **esattamente** distribuito (v14), senza
+modificarne il comportamento, e stabilire una regola di versionamento valida per
+tutte le funzioni.
 
-### 2.2 Procedura proposta (eseguita dal titolare sul proprio computer, oppure da me se verrà fornito un accesso adeguato)
+### 3.2 Procedura di recupero (sola lettura sulla produzione)
+1. Sul computer del titolare, con la CLI Supabase collegata al progetto:
+   ```bash
+   supabase functions download nmre-ai-assistant
+   ```
+   Il codice viene scritto in `supabase/functions/nmre-ai-assistant/`. In
+   alternativa si copia il sorgente dalla Dashboard → Edge Functions →
+   `nmre-ai-assistant` → Code.
+2. Controllo anti-segreti prima di qualsiasi commit:
+   ```bash
+   grep -nEi 'sk-[A-Za-z0-9_-]{20,}|sb_secret_|service_role|eyJhbGci|-----BEGIN' -r supabase/functions/nmre-ai-assistant
+   ```
+   Atteso: nessun valore. La chiave OpenAI deve essere letta solo con
+   `Deno.env.get("OPENAI_API_KEY")`.
+3. Commit sul branch di lavoro con messaggio "Import nmre-ai-assistant v14 from
+   production (no behaviour change)", **senza ridistribuire** la funzione.
+4. Revisione del codice: controllo del titolare, limiti di frequenza,
+   oscuramento di telefoni, email e indirizzi, `store:false`, colonne lette,
+   gestione degli errori, modello configurato.
+5. Inclusione in `deno check` nel CI.
 
-1. Esportare **solo lo schema**, senza dati:
+### 3.3 Versionamento di tutte le Edge Functions
+- **Regola**: il repository è l'unica fonte. Nessuna modifica dall'editor della
+  Dashboard; ogni distribuzione parte da un commit di `main`.
+- **Allineamento iniziale**: scaricare tutte le 9 funzioni distribuite e
+  confrontarle con il repository (`git diff --no-index`). Le differenze vengono
+  riportate in un rapporto prima di decidere quale versione tenere (O6).
+- **Registro delle distribuzioni**: `docs/deploy/edge-functions.md` con funzione,
+  versione Supabase, commit, data e motivo (riga iniziale:
+  `nmre-ai-assistant · v14 · importata dalla produzione`).
+- **Identificativo di build**: costante `BUILD` nel codice di ogni funzione,
+  restituita nell'intestazione `x-nmre-build`, per sapere sempre quale commit
+  risponde in produzione.
+- **Distribuzione automatica (fase successiva, da approvare)**: workflow GitHub
+  Actions che esegue `supabase functions deploy` solo da `main`, dopo i test, con
+  il token di accesso conservato nei segreti di GitHub.
+
+### 3.4 Rischi
+- Il codice scaricato potrebbe differire dalla documentazione
+  `docs/nmre-ai-assistant.md` → si aggiorna la documentazione, non il codice.
+- Una ridistribuzione accidentale potrebbe cambiare versione → nessuna
+  distribuzione in questa fase; la prima avverrà solo con approvazione esplicita.
+
+---
+
+## 4. Sincronizzazione Gmail: frequenza effettiva ed errori
+
+### 4.1 Frequenza
+🟢 La produzione esegue il job **ogni minuto**. Il repository dice altro:
+
+| Fonte | Dichiarato | Da allineare |
+|---|---|---|
+| `supabase/cron/gmail-hourly-sync.sql:30` | `*/10 * * * *` | sì: il file non riflette la produzione |
+| `supabase/cron/README.md` | 10 minuti | sì |
+| `README.md` | ogni ora al minuto 15 | sì |
+| `docs/gmail-push-setup.md` | 1 minuto | corretto |
+| `index.html:727` | "ogni minuto" | corretto |
+| Polling interfaccia `index.html:3330` | 60 secondi (il README dice 5 minuti) | sì |
+
+### 4.2 Lettura dei numeri delle ultime 48 ore
+- **2.086** esecuzioni cron, contro **2.223** sincronizzazioni registrate
+  (2.207 riuscite + 16 in errore): circa **137** sincronizzazioni in più sono state
+  avviate da altri canali. ⚠️ La causa più probabile è **Gmail Push** (o
+  invocazioni manuali): va confermata con i log di `nmre-gmail-push` (O5).
+- "Nessuna esecuzione cron fallita" indica solo che pg_net ha accodato la
+  richiesta HTTP, non che la funzione abbia risposto con successo. L'esito reale
+  è in `net._http_response` (Q9) e nel registro (Q10).
+- Nessuna sincronizzazione completa nelle 48 ore: il cursore della cronologia
+  Gmail è sano.
+- **Errori: 16 su 2.223 (0,72%).** Il cursore viene salvato solo a sincronizzazione
+  riuscita, quindi un errore isolato **non fa perdere messaggi**: vengono riletti
+  al ciclo successivo. Il rischio nasce solo se gli errori sono consecutivi o
+  ricorrenti sullo stesso messaggio.
+- Le sincronizzazioni saltate per blocco già attivo rispondono 202 e **non** sono
+  registrate: non sono comprese nei 16 errori.
+
+### 4.3 Analisi dei 16 errori (senza leggere messaggi testuali)
+Lo script v2 riconduce ogni errore a una categoria fissa, con il solo codice
+HTTP quando presente (Q11), e calcola il massimo di errori consecutivi e la
+distribuzione oraria (Q11b).
+
+| Categoria | Possibile causa ⚠️ | Intervento previsto |
+|---|---|---|
+| `api_gmail` con 429/5xx | limiti o indisponibilità temporanea di Google | ritentativo con attesa crescente nella stessa esecuzione |
+| `token_oauth_o_casella` | rinnovo del token non riuscito | ritentativo; se persistente, notifica "Ricollega Gmail" |
+| `timeout` | richieste lente (anche per la risoluzione dei link, §5) | timeout più brevi e limiti di concorrenza |
+| `database` | conflitti o errori transitori | ritentativo mirato; analisi dei vincoli coinvolti |
+| `archiviazione_privato` | caso O2 | correzione della funzione o del suo permesso, dopo verifica |
+| `blocco_sincronizzazione` | errore della RPC di blocco | analisi del lease |
+| `altro` | — | analisi caso per caso dai log della funzione, senza riportare testi in chat |
+
+**Criterio di accettazione**: nessuna sequenza di 3 o più errori consecutivi e
+tasso di errore sotto lo 0,5% su 7 giorni.
+
+### 4.4 Proposta sulla frequenza (decisione dopo Q9–Q11b e O5)
+- **Se Gmail Push è attivo e affidabile**: Push come canale principale (latenza di
+  pochi secondi) e cron **ogni 5 minuti** come rete di sicurezza. Invocazioni
+  ridotte da ~1.440 a ~288 al giorno, senza ritardi apprezzabili.
+- **Se Push non è attivo**: mantenere **1 minuto**, che è coerente con l'obiettivo
+  di vedere subito i privati, ma rendere economici i cicli senza novità. Oggi ogni
+  ciclo legge comunque la coda da rielaborare e, quando ci sono avvisi
+  immobiliari, il registro venditori; se la cronologia non contiene messaggi
+  nuovi, il ciclo deve uscire subito dopo il controllo del cursore.
+- In entrambi i casi:
+  - rinominare il job da `nmre-gmail-hourly-sync` a `nmre-gmail-sync` (scrittura su
+    `cron.job`, **da approvare**);
+  - aggiornare `supabase/cron/gmail-hourly-sync.sql` affinché descriva la
+    produzione (solo file, nessuna esecuzione);
+  - **monitor corretto (E7)**: riepilogo calcolato dal database (vista o RPC
+    `nmre_gmail_sync_summary(p_hours)`, con aggregati e nessun testo) al posto
+    delle ultime 200 righe;
+  - **conservazione del registro**: circa 1.440 righe al giorno (Q12). Proposta:
+    dettaglio per 30 giorni e riepilogo giornaliero oltre. La rimozione delle righe
+    di dettaglio sarà una decisione separata, con backup;
+  - **avviso automatico** (categoria esistente "Errori di sincronizzazione") solo
+    dopo 3 errori consecutivi o con il token da ricollegare, per evitare notifiche
+    inutili;
+  - **ritentativi**: attesa crescente sulle chiamate Google con risposta 429/5xx
+    (massimo 3 tentativi, entro il lease di 300 secondi).
+
+### 4.5 File coinvolti
+`supabase/functions/nmre-gmail-scheduled/index.ts` (uscita anticipata, ritentativi,
+conteggi), `supabase/cron/gmail-hourly-sync.sql`, `supabase/cron/README.md`,
+`README.md`, `index.html` (monitor e polling), nuova migrazione con vista/RPC di
+riepilogo (**solo file**, applicazione da approvare).
+
+### 4.6 Test
+- Deno: ritentativi su 429/503 simulati; nessun ritentativo su 400/401/403.
+- Deno: ciclo senza novità → nessuna lettura di coda o registro, nessuna scrittura.
+- SQL in locale: la vista di riepilogo restituisce gli stessi conteggi di Q10 sui dati di prova.
+- Produzione, 7 giorni dopo il rilascio: Q10/Q11/Q11b rispettano il criterio di accettazione.
+
+---
+
+## 5. Link di tracciamento: rischio e soluzione
+
+### 5.1 Comportamento attuale ✅
+`resolveListingUrl()` (`supabase/functions/nmre-gmail-scheduled/_shared/parser.ts:233-250`),
+chiamata per ogni email in parallelo (`index.ts:578-580`, dentro `Promise.all`):
+- considera "tracker" qualsiasi host che inizi con `click.`, `clicks.`, `track.`,
+  `tracking.`, `redirect.`, `link.`, `links.`, oltre a `google.com` e `t.co`,
+  **di qualunque dominio** (`parser.ts:238-240`);
+- esegue fino a **20** `GET` per email con `redirect:"follow"`, seguendo la catena
+  verso **qualunque** dominio e scaricando la pagina finale;
+- non ha limiti di concorrenza o tetti per esecuzione.
+
+Con la frequenza effettiva di un minuto il rischio non aumenta per messaggio,
+ma i messaggi da rielaborare (versioni del parser) vengono ripresentati più
+spesso finché non sono aggiornati.
+
+### 5.2 Rischi
+| Rischio | Gravità |
+|---|---|
+| Visita di link d'azione (disiscrizione, conferma, "elimina ricerca"): un avviso di ricerca può spegnersi e si perdono annunci senza accorgersene | **Alta** |
+| Clic falsi registrati dai portali e dai mittenti | Media |
+| Blocco o limitazione dell'IP da parte dei portali | Media |
+| Richieste verso domini scelti dal contenuto di un'email | Media |
+| Sincronizzazioni lente, possibili timeout (vedi §4.3) | Media |
+| Incoerenza con `docs/property-map-and-subito.md` e `supabase/cron/README.md` | Media |
+
+### 5.3 Soluzione
+1. Prima la risoluzione **senza rete** (destinazione incorporata nei parametri, link diretti).
+2. Rete solo per **host tracker in elenco esatto** (iniziale: `clicks.immobiliare.it`).
+3. **Esclusione dei link d'azione** prima di ogni richiesta (URL e testo d'ancora con
+   `unsubscribe|disiscriv|cancella|annulla|optout|opt-out|preferenz|impostazioni|notification|login|logout|account|verify|verifica|conferma|password|elimina|rimuovi|feedback|segnala`);
+   solo i link con contesto "annuncio" sono ammessi.
+4. `redirect:"manual"`, `HEAD` (ripiego `GET` annullando subito il corpo), massimo 4
+   salti; ogni `Location` deve essere `https`, senza credenziali né porte, con host
+   in elenco; **ci si ferma appena l'host è un portale**, senza richiederne la pagina.
+5. Limiti: 2 tracker per email, concorrenza globale 3, tetto di 150 per esecuzione,
+   timeout 5 s, cache nella stessa esecuzione; oltre il tetto si rielabora al ciclo successivo.
+6. Interruttore `NMRE_LINK_RESOLUTION` = `off` | `embedded_only` | `allowlist`
+   (predefinito proposto `allowlist`); nel riepilogo solo **conteggi** e nomi di
+   dominio dei tracker sconosciuti, mai URL completi.
+7. Fallback manuale: "Apri l'annuncio dall'email" dal browser del titolare.
+8. `dati_estratti.link_resolution` con metodo (`embedded`, `redirect`, `none`) e numero di salti.
+
+**File**: `_shared/parser.ts`, `nmre-gmail-scheduled/index.ts:578-600`,
+`parser_test.ts` (i due test attuali sul `GET` vanno aggiornati), migrazione
+facoltativa per i conteggi (solo file), documentazione.
+
+**Test**: link di disiscrizione su tracker in elenco → nessuna richiesta (fetch
+simulato che fa fallire il test se chiamato); tracker non in elenco → nessuna
+richiesta; catena verso il portale → un solo `HEAD`, nessuna richiesta al
+portale; `http:`/porta/credenziali/dominio non autorizzato → `null`; più di 4
+salti → `null`; rispetto di tetto e concorrenza; regressione completa del parser.
+Produzione: confronto per 48 ore della quota di candidati con link diretto.
+
+---
+
+## 6. Contenuto delle email conservato (decisione richiesta)
+
+✅ `nmre-gmail-scheduled/index.ts:623-635` salva mittente, oggetto, anteprima e
+fino a 30.000 caratteri di testo in `annunci_candidati.dati_fonte`; la
+migrazione `20261125014133` li copia in `annunci`; l'interfaccia li mostra
+(`index.html:4682-4693`, `4877-4881`), mentre `index.html:724`, il README e
+`supabase/cron/README.md` dichiarano il contrario. Q15 misura il volume senza
+mostrare testo.
+
+Opzioni (nessuna cancellazione senza ulteriore approvazione):
+1. **Conservazione limitata (consigliata)**: estratto di massimo 2.000 caratteri
+   attorno all'annuncio, senza intestazioni personali, per 90 giorni in coda;
+   in archivio solo i campi estratti. Si aggiornano testi e documentazione.
+2. **Conservazione completa dichiarata**: comportamento attuale, documentazione corretta, scadenza.
+3. **Nessuna conservazione**: soli campi estratti.
+
+In ogni caso la coda deve caricare solo le colonne necessarie e il testo sorgente
+solo all'apertura del dettaglio (`index.html:4950-4965`).
+
+---
+
+## 7. Schema di produzione nel repository
+
+1. Esportazione del **solo schema** sul computer del titolare:
    ```bash
    supabase db dump --linked --schema public,private -f supabase/schema/produzione_schema.sql
    ```
-   (`supabase db dump` esporta lo schema per impostazione predefinita; i dati
-   richiederebbero l'opzione `--data-only`, che **non** va usata.)
-2. Esportare le Edge Functions distribuite che mancano (`nmre-ai-assistant`) con
-   `supabase functions download nmre-ai-assistant`.
-3. Controllo anti-segreti obbligatorio prima del commit:
+   (lo schema è il comportamento predefinito; non usare `--data-only`).
+2. Controllo anti-segreti obbligatorio:
    ```bash
-   grep -nEi 'sb_secret_|service_role|eyJhbGci|GOCSPX-|-----BEGIN|sk-[A-Za-z0-9]{20,}|password\s*=' supabase/schema/produzione_schema.sql supabase/functions -r
+   grep -nEi 'sb_secret_|service_role|eyJhbGci|GOCSPX-|-----BEGIN|sk-[A-Za-z0-9]{20,}|password\s*=' supabase/schema/produzione_schema.sql
    ```
-   Se compare qualcosa, il file non si committa: si rimuove il valore e si ruota
-   la chiave.
-4. Aggiungere al CI un passaggio di scansione segreti (per esempio `gitleaks`) su
-   ogni push.
-5. Trasformare l'esportazione in **migrazione di base** (`supabase/migrations/00000000000000_baseline.sql`)
-   e marcarla come già applicata in produzione con
-   `supabase migration repair --status applied <versione>` (operazione che scrive
-   solo nella tabella della cronologia migrazioni: **da approvare separatamente**).
-6. Sostituire le migrazioni a "sostituzione di testo" con definizioni complete
-   (`create or replace function ...`) nelle migrazioni future.
+3. Scansione segreti nel CI (per esempio gitleaks).
+4. Migrazione di base `supabase/migrations/00000000000000_baseline.sql`, poi
+   `supabase migration repair --status applied` (scrive solo nella cronologia
+   migrazioni: **da approvare separatamente**).
+5. Commento esplicito nello schema per W1 e W2 ("nessuna policy: accesso solo da
+   funzioni `security definer`").
+6. Le migrazioni future usano definizioni complete (`create or replace function`),
+   non sostituzioni di testo come in `20261125014133`.
 
-### 2.3 Rischi e test
-- Rischio: includere per errore dati o segreti → mitigato da `--schema-only`
-  implicito, controllo `grep`, gitleaks, revisione della pull request.
-- Rischio: divergenza tra schema esportato e migrazioni esistenti → si confronta
-  con `supabase db diff` su un database locale (`supabase start`) prima della
-  pull request.
-- Test: `supabase db reset` in locale deve ricostruire l'intero schema senza
-  errori; le query Q1–Q7 eseguite in locale devono dare lo stesso risultato
-  della produzione.
+**Test**: `supabase db reset` in locale ricostruisce tutto senza errori; le query
+Q1–Q7 in locale danno gli stessi indicatori della produzione.
 
 ---
 
-## 3. Frequenza reale della sincronizzazione Gmail
+## 8. Strategia per proteggere l'app senza perdere l'accesso
 
-### 3.1 Cosa dice oggi il repository ✅
+### 8.1 Accesso di emergenza (prima di tutto)
+- La Dashboard Supabase è indipendente dall'app: da lì si riattiva la
+  registrazione, si invia un link di recupero, si crea un utente, si modifica
+  `NMRE_ALLOWED_USER_ID` o si torna a una versione precedente di una funzione.
+  Va protetta con 2FA e codici di recupero offline (O8).
+- Confermare personalmente in Dashboard che il proprio UID coincide con
+  `NMRE_ALLOWED_USER_ID` (l'assistente v14 lo verifica già: se l'assistente
+  risponde al titolare, il valore è corretto ⚠️).
+- Verificare di conoscere la password dell'app prima di qualsiasi passo.
 
-| Fonte | Frequenza dichiarata |
-|---|---|
-| `README.md` | ogni ora al minuto 15 |
-| `supabase/cron/gmail-hourly-sync.sql:30` | ogni 10 minuti (`*/10 * * * *`) |
-| `supabase/cron/README.md` | ogni 10 minuti |
-| `index.html:727` | "ogni minuto" |
-| `docs/gmail-push-setup.md` | "one-minute fallback" |
-| Polling del frontend (`index.html:3330`) | 60 secondi (il README dice 5 minuti) |
+### 8.2 Ordine di rilascio (ogni passo è reversibile)
 
-### 3.2 Come stabilire la frequenza reale 🔎
-- **Q8**: pianificazione effettiva dei job `cron.job`.
-- **Q9**: intervallo mediano reale tra le esecuzioni del cron nelle ultime 48 ore.
-- **Q10**: esiti HTTP di `pg_net` (in particolare `timed_out`, dato il timeout di 30 s).
-- **Q11**: intervallo reale tra le sincronizzazioni registrate in
-  `nmre_gmail_sync_runs`, che comprende anche quelle avviate da Gmail Push.
-- Dashboard → Edge Functions → `nmre-gmail-push` → Logs: se ci sono invocazioni,
-  Gmail Push è attivo e la latenza effettiva è di pochi secondi.
-
-### 3.3 Proposta (dopo la verifica)
-- Obiettivo commerciale: vedere gli annunci privati il prima possibile. Proposta:
-  **Gmail Push come canale principale + cron ogni 10 minuti come rete di
-  sicurezza**; se Push non è configurato, cron ogni 5 minuti.
-- Rinominare il job in `nmre-gmail-sync` (con `cron.unschedule` +
-  `cron.schedule`: scrittura sul database, **da approvare**).
-- Portare `timeout_milliseconds` a un valore coerente con la durata misurata (Q11).
-- Allineare `README.md`, `supabase/cron/README.md`, `docs/gmail-push-setup.md`,
-  `index.html:727` e la riga del polling; mostrare in Impostazioni la frequenza
-  **misurata** (dall'ultimo intervallo in `nmre_gmail_sync_runs`) invece di un
-  testo fisso.
-
----
-
-## 4. Rischio dei reindirizzamenti automatici dei link di tracciamento
-
-### 4.1 Comportamento attuale ✅
-`resolveListingUrl()` (`supabase/functions/nmre-gmail-scheduled/_shared/parser.ts:233-250`),
-chiamata per ogni email in parallelo (`index.ts:578-580`, dentro `Promise.all`):
-
-1. considera "tracker" qualsiasi host che inizi con `click.`, `clicks.`,
-   `track.`, `tracking.`, `redirect.`, `link.`, `links.`, oltre a `google.com` e
-   `t.co`, **di qualunque dominio** (`parser.ts:238-240`);
-2. per fino a **20 link per email** esegue `fetch(..., {method:"GET", redirect:"follow"})`;
-3. segue **tutta** la catena di reindirizzamenti verso **qualunque** dominio, scarica la
-   pagina finale (incluso il portale) e ne guarda solo l'URL;
-4. non c'è un limite di concorrenza globale né un tetto per esecuzione.
-
-### 4.2 Rischi
-| Rischio | Gravità | Note |
-|---|---|---|
-| Visita automatica di link d'azione (disiscrizione, conferma, "non mi interessa", "elimina ricerca") | **Alta** per l'obiettivo commerciale | Un GET su un link di disiscrizione può spegnere un avviso di ricerca: si perderebbero annunci senza accorgersene. |
-| Segnali di "clic" falsi al portale e al mittente | Media | Il portale registra interazioni non fatte dal titolare; profilazione dell'account. |
-| Blocco o limitazione dell'IP Supabase da parte dei portali | Media | Molte richieste concorrenti alle pagine di dettaglio. |
-| Richieste verso domini arbitrari scelti dal contenuto di un'email | Media | Chiunque può inviare un'email che fa interrogare al server un dominio `click.qualcosa`; esfiltrazione minima (l'ID di un link), possibile uso come amplificatore. |
-| Sincronizzazioni lente o in timeout | Media | Fino a 20 × 8 s per email, senza limiti globali. |
-| Incoerenza con la documentazione | Media | `docs/property-map-and-subito.md` e `supabase/cron/README.md` dichiarano che i link non vengono visitati. |
-
-### 4.3 Soluzione proposta
-Obiettivo: **non perdere** il link diretto all'annuncio (utile alla
-deduplicazione e al lavoro commerciale) eliminando i rischi.
-
-1. **Prima la risoluzione senza rete** (già presente): destinazione incorporata nei
-   parametri (`url`, `u`, `q`, `target`…) e link diretti ai portali.
-2. **Risoluzione di rete solo per tracker in elenco esplicito** di host esatti
-   (iniziale: `clicks.immobiliare.it`; altri aggiunti solo dopo averli osservati,
-   vedi punto 6). Niente più regole del tipo "qualsiasi host che inizia per click.".
-3. **Filtro sui link d'azione prima di qualsiasi richiesta**: si scartano URL e
-   testo d'ancora che contengono `unsubscribe|disiscriv|cancella|annulla|optout|opt-out|preferenz|impostazioni|notification|alert/(?:delete|stop)|login|logout|account|verify|verifica|conferma|password|elimina|rimuovi|feedback|segnala`.
-   Solo i link il cui contesto indica un annuncio ("vedi annuncio", "dettagli",
-   foto/titolo) sono ammessi alla risoluzione.
-4. **Richiesta minima e controllata**: `redirect:"manual"`, metodo `HEAD` (con
-   ripiego `GET` annullando subito il corpo), al massimo 4 salti; a ogni salto
-   l'header `Location` deve essere `https`, senza credenziali né porte, e con host
-   nell'elenco dei tracker o dei portali. **Appena l'host è un portale ci si ferma
-   senza richiedere la pagina del portale.**
-5. **Limiti**: al massimo 2 tracker per email, concorrenza globale 3, tetto di 150
-   risoluzioni per esecuzione, timeout 5 s, cache per URL nella stessa esecuzione.
-   Oltre il tetto il candidato resta con `url_originale` e viene rielaborato al
-   ciclo successivo (oggi esiste già il meccanismo di rielaborazione per versione).
-6. **Interruttore e osservabilità**: variabile `NMRE_LINK_RESOLUTION` =
-   `off` | `embedded_only` | `allowlist` (predefinito proposto: `allowlist`). Nel
-   riepilogo `nmre_gmail_sync_runs` si aggiungono solo **conteggi** (risolti
-   senza rete, risolti con rete, scartati come link d'azione, host tracker
-   sconosciuti incontrati per nome di dominio, senza URL completi).
-7. **Fallback manuale**: se il link non è risolvibile, la scheda mostra "Apri
-   l'annuncio dall'email" e il titolare apre il link dal proprio browser (la
-   funzione per aprire link non verificati esiste già, commit `6cdcf6f`).
-8. **Tracciabilità**: in `dati_estratti.link_resolution` si salva il metodo usato
-   (`embedded`, `redirect`, `none`) e il numero di salti.
-
-**File coinvolti**
-- `supabase/functions/nmre-gmail-scheduled/_shared/parser.ts` (`listingUrls`, `resolveListingUrl`, nuove funzioni `isActionLink`, `resolveTrackedUrl`).
-- `supabase/functions/nmre-gmail-scheduled/index.ts:575-600` (limitatore di concorrenza, conteggi, interruttore).
-- `supabase/functions/nmre-gmail-scheduled/parser_test.ts` (i due test che oggi verificano il `GET` vanno aggiornati).
-- Migrazione che aggiunge le colonne di conteggio a `nmre_gmail_sync_runs` (**scrittura su schema, da approvare**; in alternativa i conteggi vanno in una colonna JSON esistente, se presente 🔎).
-- Documentazione: `docs/property-map-and-subito.md`, `supabase/cron/README.md`, `README.md`.
-
-**Test**
-- Link di disiscrizione su host tracker in elenco → nessuna richiesta di rete (fetch simulato che fallisce il test se chiamato).
-- Tracker non in elenco → nessuna richiesta.
-- Catena `clicks.immobiliare.it` → `www.immobiliare.it/annunci/123456/` → si ferma senza richiedere il portale; un solo `HEAD`.
-- Catena verso dominio non autorizzato, `http:`, porta non standard, credenziali nell'URL → `null`.
-- Più di 4 salti → `null`.
-- Tetto per esecuzione e concorrenza massima rispettati (contatore nel fetch simulato).
-- Regressione: tutti i test attuali del parser e della cronologia passano.
-- Verifica in produzione dopo il rilascio: confronto per 48 ore della percentuale di candidati con link diretto prima e dopo (Q11 + conteggi nuovi).
-
----
-
-## 5. Strategia per proteggere l'app senza perdere l'accesso
-
-### 5.1 Accesso di emergenza (da predisporre per primo)
-- L'accesso alla **Dashboard Supabase** è indipendente dall'accesso all'app: da lì
-  si può sempre riattivare la registrazione, inviare un link di recupero, creare
-  un utente, modificare `NMRE_ALLOWED_USER_ID` o tornare a una versione precedente
-  di una funzione. Va protetto con 2FA e con codici di recupero conservati offline.
-- Annotare in un luogo sicuro (non nel repository) l'UID del proprio utente
-  (Dashboard → Authentication → Users) e confermare che coincide con
-  `NMRE_ALLOWED_USER_ID` (confronto da fare personalmente nella Dashboard).
-- Verificare di conoscere la password dell'app; in caso contrario reimpostarla
-  **prima** di qualsiasi altro passo.
-
-### 5.2 Ordine di rilascio proposto (ogni passo è reversibile)
-
-| Passo | Azione | Verifica subito dopo | Ritorno indietro |
+| Passo | Azione | Verifica | Ritorno indietro |
 |---|---|---|---|
-| 0 | Eseguire lo script di audit (sola lettura) e condividere gli esiti | — | — |
-| 1 | Recupero password in app (A6) su branch, anteprima, poi `main` | Test completo del recupero con il proprio account | Revert del commit |
-| 2 | Rimozione del pulsante di registrazione (A1) | Accesso del titolare | Revert |
-| 3 | Disattivazione registrazioni in Supabase (A2) | Accesso del titolare; tentativo di registrazione rifiutato | Riattivare l'opzione |
-| 4 | `requireOwner` su `nmre-candidate-enrich`, poi `nmre-search-engine`, poi `nmre-push-send` (A3–A5), una per volta | Funzione usata dall'app con il proprio account | Ridistribuire la versione precedente |
-| 5 | Allineamento frequenza Gmail e documentazione (§3) | Q9/Q11 dopo 24 ore | Ripristino pianificazione precedente |
-| 6 | Nuova risoluzione dei link (§4), prima con `embedded_only` per 24 ore, poi `allowlist` | Conteggi nel monitor di sincronizzazione | `NMRE_LINK_RESOLUTION=off` |
-| 7 | CSP in sola segnalazione, poi attiva (A8) | Tutte le sezioni senza errori | Rimozione del meta tag |
-| 8 | MFA facoltativa (A7) | Accesso con TOTP | Rimozione del fattore dalla Dashboard |
-| 9 | Policy RLS restrittive con elenco utenti autorizzati (A10) | Q3 + uso completo dell'app | Script di `drop policy` pronto |
+| 0 | Script v2 (Q2–Q16) e punti aperti O1–O8 | — | — |
+| 1 | Import di `nmre-ai-assistant` v14 nel repository (§3), senza ridistribuzione | Revisione | — |
+| 2 | Recupero password in app (A6) | Test del recupero con il proprio account | Revert |
+| 3 | Rimozione "Crea account" (A1) | Accesso del titolare | Revert |
+| 4 | Registrazione disattivata, se risulta aperta (A2) | Tentativo rifiutato; accesso del titolare | Riattivazione |
+| 5 | Protezione password compromesse (A7) | Accesso del titolare | Disattivazione |
+| 6 | `requireOwner` su `nmre-candidate-enrich`, poi `nmre-search-engine`, poi `nmre-push-send` (A3–A5) | Uso della funzione dall'app | Versione precedente |
+| 7 | Gmail: monitor corretto, uscita anticipata, ritentativi, frequenza decisa (§4) | Q10/Q11 dopo 7 giorni | Pianificazione precedente |
+| 8 | Link di tracciamento: `embedded_only` per 24 ore, poi `allowlist` (§5) | Conteggi | `NMRE_LINK_RESOLUTION=off` |
+| 9 | CSP (A9), MFA facoltativa (A8) | Tutte le sezioni | Rimozione |
+| 10 | RLS restrittive (A11) e, facoltativamente, RLS su W1 | Q1–Q3 + uso completo | Script di rimozione |
 
-### 5.3 Se lo script rivela altri utenti (Q12/Q13)
-Nessuna cancellazione. Opzioni da valutare insieme: sospensione dell'utente dalla
-Dashboard (reversibile), oppure lasciarlo isolato dalla RLS. I dati di altri
-proprietari non vengono letti né esportati.
-
----
-
-## 6. Minimizzazione del contenuto email (decisione richiesta)
-
-✅ `nmre-gmail-scheduled/index.ts:623-635` salva mittente, oggetto, anteprima e fino
-a 30.000 caratteri di testo in `annunci_candidati.dati_fonte`; la migrazione
-`20261125014133` li copia in `annunci`; l'interfaccia li mostra
-(`index.html:4682-4693`, `4877-4881`), mentre `index.html:724`, il README e
-`supabase/cron/README.md` dichiarano il contrario.
-
-Opzioni (nessuna cancella dati senza ulteriore approvazione):
-1. **Conservazione limitata (consigliata)**: si conserva un estratto di massimo
-   2.000 caratteri attorno all'annuncio, senza intestazioni personali, per 90
-   giorni in coda; in archivio restano solo i campi estratti. Si aggiornano i
-   testi dell'interfaccia e della documentazione.
-2. **Conservazione completa dichiarata**: si mantiene il comportamento attuale e
-   si corregge la documentazione, aggiungendo una scadenza.
-3. **Nessuna conservazione**: si torna ai soli campi estratti.
-
-La scelta incide sul Motore di acquisizione (modulo A): il testo sorgente aiuta a
-riclassificare i casi dubbi quando il parser migliora. Per questo l'opzione 1 è
-il compromesso proposto.
-
-Inoltre `loadCandidates()` (`index.html:4950-4965`) scarica `dati_fonte` di tutti i
-candidati ogni 60 secondi: in ogni caso la lista deve selezionare solo le colonne
-necessarie e caricare il testo sorgente solo all'apertura del dettaglio.
+### 8.3 Se risultano altri utenti
+Nessuna cancellazione: sospensione reversibile dalla Dashboard oppure
+isolamento tramite RLS, da decidere insieme.
 
 ---
 
-## 7. Riepilogo dei file che verranno toccati (dopo approvazione)
+## 9. Storage
+🟢 Nessun bucket: nessuna esposizione di file oggi. Il primo bucket nascerà con il
+modulo "Documentazione immobiliare" (piano di sviluppo, B.9): **privato**, con
+policy su `storage.objects` limitate al proprietario e URL firmati a scadenza
+breve. Nessun bucket verrà creato senza approvazione.
+
+---
+
+## 10. File che verranno toccati (dopo approvazione)
 
 | Area | File |
 |---|---|
-| Frontend | `index.html` (auth, recupero password, CSP, versioni dipendenze, testi frequenza/email, colonne caricate) |
-| Funzioni | `supabase/functions/_shared/auth.ts` (nuovo), `nmre-push-send/index.ts`, `nmre-search-engine/index.ts`, `nmre-candidate-enrich/index.ts`, `nmre-gmail-scheduled/index.ts`, `nmre-gmail-scheduled/_shared/parser.ts`, `nmre-ai-assistant/` (da esportare) |
-| Test | `nmre-gmail-scheduled/parser_test.ts`, nuovi `_shared/auth_test.ts`, `nmre-search-engine/validation_test.ts` |
-| Database (solo file, applicazione separata) | `supabase/schema/produzione_schema.sql`, `supabase/migrations/…_baseline.sql`, migrazione conteggi di sincronizzazione |
-| Cron | `supabase/cron/gmail-hourly-sync.sql` → `gmail-sync.sql` |
-| CI | `.github/workflows/validate-app.yml` (tutte le funzioni, tutti i test, scansione segreti) |
-| Documentazione | `README.md`, `supabase/cron/README.md`, `docs/gmail-push-setup.md`, `docs/property-map-and-subito.md`, `docs/nmre-ai-assistant.md` |
+| Frontend | `index.html` (auth, recupero password, CSP, dipendenze, monitor Gmail, polling, colonne caricate, testi) |
+| Funzioni | `_shared/auth.ts` (nuovo), `nmre-push-send`, `nmre-search-engine`, `nmre-candidate-enrich`, `nmre-gmail-scheduled` (+ `_shared/parser.ts`), `nmre-ai-assistant/` (import v14) |
+| Test | `parser_test.ts`, `_shared/auth_test.ts`, test di validazione di `nmre-search-engine`, test dei ritentativi Gmail |
+| Database (solo file) | `supabase/schema/produzione_schema.sql`, migrazione di base, vista/RPC riepilogo Gmail |
+| Cron | `supabase/cron/gmail-hourly-sync.sql` (allineamento alla produzione) |
+| CI | `.github/workflows/validate-app.yml` |
+| Documentazione | `README.md`, `supabase/cron/README.md`, `docs/gmail-push-setup.md`, `docs/property-map-and-subito.md`, `docs/nmre-ai-assistant.md`, nuovo `docs/deploy/edge-functions.md` |

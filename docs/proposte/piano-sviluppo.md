@@ -20,18 +20,28 @@ fino all'acquisizione.
 
 ## Fase 0 · P0 Sicurezza, schema e affidabilità
 
-Dettaglio: `docs/proposte/P0-sicurezza-e-affidabilita.md`.
+Dettaglio: `docs/proposte/P0-sicurezza-e-affidabilita.md` (versione 2, con gli
+esiti delle verifiche di produzione del 25/11/2026).
+
+Esiti già verificati in produzione: RLS attiva su tutte le tabelle `public`;
+tabelle `private` inaccessibili ai ruoli client (gli avvisi degli advisor su di
+esse non sono rischi effettivi); archiviazione automatica SECURITY INVOKER;
+`nmre-ai-assistant` v14 attiva e limitata al titolare; job Gmail ogni minuto con
+16 errori su circa 2.223 sincronizzazioni in 48 ore; protezione password
+compromesse disattivata; nessun bucket Storage. Ancora da verificare:
+"Allow new users to sign up".
 
 | # | Intervento | Dipendenze |
 |---|---|---|
-| P0.0 | Audit di produzione in sola lettura (`supabase/audit/p0_verifica_produzione_sola_lettura.sql` + controlli Dashboard) | — |
-| P0.1 | Recupero password in app, rimozione della registrazione, registrazioni disattivate in Supabase | P0.0 |
-| P0.2 | Controllo del titolare (`requireOwner`) su tutte le Edge Functions; validazione degli URL | P0.1 |
-| P0.3 | Schema di produzione e `nmre-ai-assistant` nel repository; scansione segreti nel CI | P0.0 |
-| P0.4 | Frequenza Gmail verificata e allineata (Push + cron di sicurezza) | P0.0 |
+| P0.0 | Audit v2 in sola lettura (indicatori e categorie, nessun testo sensibile) + punti aperti O1–O8 | — |
+| P0.1 | Import e versionamento di `nmre-ai-assistant` v14; allineamento codice distribuito ↔ repository per tutte le funzioni | P0.0 |
+| P0.2 | Recupero password in app, rimozione della registrazione, verifica/disattivazione di "Allow new users to sign up", protezione password compromesse | P0.0 |
+| P0.3 | Controllo del titolare (`requireOwner`) su `nmre-push-send`, `nmre-search-engine`, `nmre-candidate-enrich`; validazione degli URL | P0.2 |
+| P0.4 | Gmail: monitor corretto (oggi i contatori 24h sono sottostimati), analisi dei 16 errori, ritentativi, uscita anticipata, frequenza decisa in base a Gmail Push | P0.0 |
 | P0.5 | Risoluzione sicura dei link di tracciamento | — |
 | P0.6 | Decisione sul contenuto email conservato e caricamento leggero della coda | Sua decisione |
-| P0.7 | CSP, dipendenze con versione fissata, MFA facoltativa | P0.1 |
+| P0.7 | Schema di produzione nel repository (solo schema) e scansione segreti nel CI | P0.0 |
+| P0.8 | CSP, dipendenze con versione fissata, MFA facoltativa | P0.2 |
 
 ---
 
@@ -156,7 +166,95 @@ Fasi proposte (configurabili):
 
 ### B.8 Assistente (NMRE Intelligence / "NOVA")
 - Da definire con Lei: nome, ruolo e limiti. Proposta: assistente in sola lettura che prepara la giornata (chi chiamare e perché), riassume lo storico prima di una telefonata e suggerisce le risposte alle obiezioni; nessuna azione automatica senza conferma.
-- Prerequisito: esportazione e revisione della funzione `nmre-ai-assistant` (P0.3).
+- Prerequisito: import e revisione della funzione `nmre-ai-assistant` v14 (P0.1).
+- I documenti del modulo B.9 sono **esclusi** per impostazione predefinita dal contesto inviato all'assistente.
+
+### B.9 Documentazione immobiliare
+
+**Obiettivo:** sapere in ogni momento, per ogni immobile, quali documenti
+servono, quali sono arrivati e quali mancano, così da arrivare
+all'appuntamento e alla proposta di incarico con la pratica in ordine.
+
+Situazione attuale: 🟢 Supabase Storage non ha bucket; ✅ nel codice non esiste
+alcuna gestione documentale. Il modulo parte da zero.
+
+#### B.9.1 Checklist documentale personalizzabile
+- Ogni immobile ha la propria checklist, generata da un **modello** e poi modificabile (aggiungere, togliere, rinominare, cambiare livello).
+- Ogni voce ha un **livello**:
+  - **Necessario**: senza di esso la pratica non procede;
+  - **Consigliato**: utile per valutazione e trattativa;
+  - **Dipende dal caso**: attivato da condizioni dell'immobile o del proprietario (es. eredità, mutuo in corso, condominio, terreno, società proprietaria).
+- Le voci "Dipende dal caso" si attivano rispondendo a poche domande nella scheda (C'è un mutuo? È un'eredità? È in condominio?…), con la possibilità di forzarle a mano.
+- **Stati** di ogni voce: `da_richiedere` → `ricevuto` → `da_verificare` → `verificato`, oppure `non_necessario` (con motivo obbligatorio).
+- Per ogni voce: a chi è stato richiesto (contatto collegato), data di richiesta, scadenza attesa, note, data di verifica, data di scadenza del documento (es. validità dell'attestato energetico).
+- Indicatore di completezza nella scheda immobile: "Necessari verificati 6/9 · Consigliati 2/5".
+
+**Modello iniziale proposto** (vendita residenziale; da validare con il Suo notaio o tecnico di fiducia, non costituisce consulenza legale):
+
+| Livello | Documenti |
+|---|---|
+| Necessario | Documento d'identità e codice fiscale dei proprietari · Atto di provenienza · Visura catastale aggiornata · Planimetria catastale · Attestato di prestazione energetica (APE) |
+| Consigliato | Titoli edilizi e verifica di conformità urbanistica · Certificato o segnalazione di agibilità · Dichiarazioni di conformità degli impianti · Ultime spese condominiali, regolamento e verbali recenti · Fotografie e planimetria quotata |
+| Dipende dal caso | Dichiarazione di successione e accettazione dell'eredità (eredità) · Contratto di mutuo e conteggio estintivo (mutuo in corso) · Certificato di destinazione urbanistica (terreni) · Procura (vendita tramite procuratore) · Documenti societari (proprietario società) · Provvedimenti di separazione/divorzio (se incidono sulla proprietà) · Contratto di locazione in essere (immobile locato) |
+
+#### B.9.2 Caricamento e archivio privato
+- Caricamento diretto di **PDF, immagini e scansioni** dalla scheda immobile, anche dal telefono (fotocamera o file).
+- Tipi ammessi: `application/pdf`, `image/jpeg`, `image/png`, `image/heic`, `image/webp`, `image/tiff`; dimensione massima proposta 25 MB per file (configurabile sul bucket).
+- **Bucket Supabase Storage privato** `nmre-documenti` (`public = false`), da creare solo con approvazione.
+- Percorso dei file senza dati personali: `{owner_id}/{property_id}/{voce_id}/{versione}-{uuid}.{estensione}`. Il nome originale del file è salvato solo nei metadati.
+- Caricamento con la sessione del titolare (le policy Storage si applicano), con ripresa per i file grandi.
+
+#### B.9.3 Metadati e versioni
+- Per ogni file: nome originale, tipo, dimensione, impronta SHA-256 (rileva i doppioni), data e ora di caricamento, autore, note, numero di versione, versione corrente sì/no.
+- Un nuovo caricamento sulla stessa voce crea una **nuova versione**; le precedenti restano consultabili.
+- Eliminazione **logica** (`deleted_at`): il file resta in Storage finché non viene deciso diversamente, in coerenza con la regola di non cancellare dati.
+
+#### B.9.4 Visualizzazione e download sicuri
+- Anteprima e download tramite **URL firmati temporanei** (`createSignedUrl`, scadenza proposta 2 minuti), generati al clic e mai salvati nel database o nei log.
+- Nessun URL pubblico, nessuna condivisione esterna in questa fase; un'eventuale condivisione con notaio o tecnico sarà una funzione separata, con scadenza e revoca.
+
+#### B.9.5 Collegamento alla scheda immobile
+- Nuova scheda **Documenti** dentro "Immobili e incarichi", con checklist, file e storico.
+- Integrazione con la pipeline (B.1): prima di passare a "Proposta di incarico" NMRE mostra i documenti necessari mancanti (avviso, non blocco).
+- Collegamento con i contatti (B.2): ogni richiesta di documento indica a quale proprietario è stata fatta.
+
+#### B.9.6 Sicurezza: RLS e Storage
+- Tabelle con `owner_id` e chiavi esterne composte `(owner_id, property_id)`, come in `nmre_property_contacts`: un documento non può essere collegato a un immobile di un altro utente.
+- RLS su tutte le nuove tabelle: select/insert/update/delete solo con `auth.uid() = owner_id`; nessun privilegio ad `anon`.
+- Policy su `storage.objects` per il solo bucket `nmre-documenti`: lettura, inserimento, aggiornamento ed eliminazione consentiti solo se `(storage.foldername(name))[1] = auth.uid()::text`; nessuna policy per `anon`.
+- Se verrà approvata la difesa in profondità (A11 della proposta P0), le stesse policy richiederanno anche che l'utente sia nell'elenco degli autorizzati.
+- I documenti contengono dati personali (documenti d'identità): esclusi dall'assistente AI, dalle esportazioni CSV/Excel e dalle notifiche push (che riportano solo "Documento mancante: APE · Via …").
+- Politica di conservazione da decidere con Lei (per esempio: conservazione fino a X anni dalla chiusura della pratica), con elenco dei documenti in scadenza di conservazione; nessuna cancellazione automatica.
+
+#### B.9.7 Promemoria
+- Job giornaliero lato server che genera notifiche (nuova categoria "Documentazione" nelle preferenze esistenti, con fascia di silenzio):
+  - voci `da_richiedere` oltre la scadenza attesa;
+  - voci `ricevuto` / `da_verificare` non verificate dopo N giorni;
+  - documenti in scadenza entro 30 giorni (es. APE) o da aggiornare (es. visura più vecchia di 6 mesi, soglia configurabile);
+  - appuntamento entro 48 ore con documenti necessari mancanti.
+- Riepilogo nella Panoramica: "Documenti mancanti per gli appuntamenti di questa settimana".
+
+#### B.9.8 Dati (indicativo, solo migrazioni additive)
+| Tabella | Contenuto |
+|---|---|
+| `nmre_document_types` | Catalogo dei tipi: codice, nome, livello predefinito, condizione di attivazione, validità in mesi; voci di sistema + voci personalizzate del titolare |
+| `nmre_document_templates` / `_items` | Modelli di checklist (es. "Vendita residenziale", "Terreno") |
+| `nmre_property_document_items` | Voce di checklist per immobile: tipo o nome libero, livello, stato, contatto, date, note, motivo di "non necessario" |
+| `nmre_property_document_files` | Versioni dei file: percorso Storage, metadati, impronta, versione, corrente, `deleted_at` |
+| `nmre_property_document_events` | Storico dei cambi di stato (chi, quando, da → a) |
+
+#### B.9.9 Test necessari
+- RLS: con un secondo utente di prova, nessuna lettura, scrittura o elenco di voci e file del titolare; `anon` respinto.
+- Storage: il secondo utente non può caricare nella cartella del titolare, né scaricare o elencarne i file; un URL firmato scaduto viene rifiutato; percorsi con `..` o cartelle di altri utenti rifiutati.
+- Tipi e dimensioni: file oltre il limite o di tipo non ammesso rifiutati dal bucket.
+- Versioni: due caricamenti sulla stessa voce producono versione 1 e 2, con una sola corrente.
+- Promemoria: dati di prova con scadenze passate generano una sola notifica per voce e rispettano la fascia di silenzio.
+- Interfaccia (Playwright): caricamento da telefono emulato, anteprima PDF e immagine, avanzamento degli stati, indicatore di completezza.
+
+#### B.9.10 Dipendenze e rilascio
+- Prerequisiti: P0.2–P0.3 (accesso limitato al titolare), scheda immobile del CRM (B.2).
+- Rilascio in due fasi: (1) checklist, stati, caricamento, versioni e URL firmati; (2) promemoria, modelli multipli, integrazione con pipeline e appuntamenti.
+- Creazione del bucket, delle policy Storage e delle tabelle **solo dopo approvazione**, prima su un progetto di prova o in locale (`supabase start`).
 
 ---
 
@@ -164,16 +262,17 @@ Fasi proposte (configurabili):
 
 | Ordine | Blocco | Motivo |
 |---|---|---|
-| 1 | P0.0 → P0.7 | Sicurezza e affidabilità prima di aggiungere funzioni |
+| 1 | P0.0 → P0.8 | Sicurezza e affidabilità prima di aggiungere funzioni |
 | 2 | **A.1** Nessuna perdita automatica | Massimo impatto sul numero di privati individuati, basso sforzo |
 | 3 | P1.1–P1.4 | Velocità percepita e dati coerenti |
 | 4 | **B.1** Pipeline unica + **B.3** registro rapido delle chiamate | Cuore del lavoro quotidiano |
 | 5 | **A.2** Classificazione migliorata + **A.6** coda unica | Meno tempo per opportunità |
 | 6 | **B.5** Richiami automatici lato server + **B.6** agenda | Nessun contatto dimenticato |
-| 7 | **A.4** Deduplicazione tra portali + **A.5** storico prezzi per opportunità | Qualità dei dati |
-| 8 | **A.3** Nuove fonti (copertura avvisi → API ufficiali) | Crescita del volume |
-| 9 | **B.2**, **B.4**, **B.7**, **B.8** | Completamento CRM e analisi |
-| 10 | P1.5–P1.6 | Manutenibilità a lungo termine (può procedere in parallelo) |
+| 7 | **B.2** Schede proprietario/immobile + **B.9** Documentazione immobiliare (fase 1) | Pratica in ordine prima dell'incarico; B.9 richiede la scheda immobile di B.2 |
+| 8 | **A.4** Deduplicazione tra portali + **A.5** storico prezzi per opportunità | Qualità dei dati |
+| 9 | **A.3** Nuove fonti (copertura avvisi → API ufficiali) | Crescita del volume |
+| 10 | **B.9** fase 2 (promemoria, modelli, integrazione pipeline), **B.4**, **B.7**, **B.8** | Completamento CRM e analisi |
+| 11 | P1.5–P1.6 | Manutenibilità a lungo termine (può procedere in parallelo) |
 
 Ogni blocco verrà presentato con: file coinvolti, modifiche allo schema (sempre
 additive, senza cancellazioni), rischi, test e piano di ritorno indietro, prima
