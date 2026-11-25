@@ -185,21 +185,42 @@ export function bathrooms(s:string):number|null {
 
 
 function listingUrls(s:string):string[] {
-  const source=String(s||"");
-  const urls=source.match(/https?:\/\/[^\s<>"']+/gi)||[];
+  const source=String(s||"").replace(/&amp;/gi,"&").replace(/&#x2f;|&#47;/gi,"/");
+  const queue:string[]=[...(source.match(/https?:\\/\\/[^\\s<>"']+/gi)||[])];
   const found:Array<{url:string;score:number}>=[];
+  const seen=new Set<string>();
   const allowed=(h:string)=>PORTALS.some(d=>h===d||h.endsWith("."+d));
-  for(const raw of urls){
+  const trackerHost=(host:string)=>/^(?:click|clicks|tracking|track|redirect|links?)\\./i.test(host)
+    ||host==="google.com"||host.endsWith(".google.com")||host==="t.co";
+  const redirectKeys=["url","u","q","target","dest","destination","redirect","redirect_url","redirect_uri","to","link","adurl","deep_link"];
+  while(queue.length&&seen.size<80){
+    const raw=queue.shift()!;
+    if(seen.has(raw))continue;
+    seen.add(raw);
     try{
-      const u=new URL(raw.replace(/[),.;\]]+$/,""));
-      const host=u.hostname.toLowerCase().replace(/^www\./,"");
-      const tracker=/^(?:click|clicks|tracking|track|redirect|links?)\./i.test(host)||/(?:^|\/)(?:f\/a|track|click|redirect)\//i.test(u.pathname);
-      if(!allowed(host)&&!tracker)continue;
+      const cleaned=raw.replace(/[),.;\\]]+$/,"").replace(/&amp;/gi,"&");
+      const u=new URL(cleaned);
+      const host=u.hostname.toLowerCase().replace(/^www\\./,"");
+      const isPortal=allowed(host);
+      const isTracker=trackerHost(host)||/(?:^|\\/)(?:f\\/a|track|click|redirect)\\//i.test(u.pathname)||((host==="google.com"||host.endsWith(".google.com"))&&u.pathname==="/url");
+      if(!isPortal&&!isTracker)continue;
       const position=source.indexOf(raw);
-      const context=source.slice(Math.max(0,position-100),Math.min(source.length,position+raw.length+180)).toLowerCase();
-      const label=/(?:vai|vedi|visualizza|scopri|guarda|apri|dettagli).{0,45}(?:annuncio|immobile|casa|appartamento)|(?:annuncio|immobile|casa|appartamento).{0,45}(?:vai|vedi|visualizza|scopri|guarda|apri|dettagli)/i.test(context);
-      const detail=/\/(?:annunci|immobile)\/[^/]*\d{5,}/i.test(u.pathname)||/\/\d{6,}(?:\/|$)/.test(u.pathname);
-      found.push({url:u.toString(),score:detail?1000:tracker?(label?500:10):300});
+      const context=source.slice(Math.max(0,position-160),Math.min(source.length,position+raw.length+220)).toLowerCase();
+      const label=/(?:vai|vedi|visualizza|scopri|guarda|apri|dettagli).{0,60}(?:annuncio|immobile|casa|appartamento)|(?:annuncio|immobile|casa|appartamento).{0,60}(?:vai|vedi|visualizza|scopri|guarda|apri|dettagli)/i.test(context);
+      const detail=/\\/(?:annunci|immobile)\\/[^/]*\\d{5,}/i.test(u.pathname)||/\\/\\d{6,}(?:\\/|$)/.test(u.pathname);
+      if(isPortal)found.push({url:u.toString(),score:detail?1200:300+(label?80:0)});
+      if(isTracker){
+        for(const key of redirectKeys){
+          const value=u.searchParams.get(key);
+          if(value&&/^https?:\\/\\//i.test(value)){
+            queue.push(value);
+            try{
+              const nested=new URL(value);
+              if(allowed(nested.hostname.toLowerCase().replace(/^www\\./,"")))found.push({url:nested.toString(),score:1400});
+            }catch{}
+          }
+        }
+      }
     }catch{}
   }
   const unique=new Map<string,number>();
@@ -210,16 +231,18 @@ export function listingUrl(s:string):string|null {
   return listingUrls(s)[0]||null;
 }
 export async function resolveListingUrl(s:string):Promise<string|null> {
-  for(const candidate of listingUrls(s).slice(0,12)){
+  for(const candidate of listingUrls(s).slice(0,20)){
     try{
       const initial=new URL(candidate);
-      const host=initial.hostname.toLowerCase().replace(/^www\./,"");
-      const tracked=/^(?:click|clicks|tracking|track|redirect|links?)\./i.test(host)||/(?:^|\/)(?:f\/a|track|click|redirect)\//i.test(initial.pathname);
+      const host=initial.hostname.toLowerCase().replace(/^www\\./,"");
+      const tracked=/^(?:click|clicks|tracking|track|redirect|links?)\\./i.test(host)
+        ||host==="google.com"||host.endsWith(".google.com")
+        ||/(?:^|\\/)(?:f\\/a|track|click|redirect)\\//i.test(initial.pathname);
       if(!tracked){
         if(isSpecificListingUrl(initial))return initial.toString();
         continue;
       }
-      const response=await fetch(candidate,{method:"GET",redirect:"follow",headers:{Accept:"text/html"},signal:AbortSignal.timeout(6000)});
+      const response=await fetch(candidate,{method:"GET",redirect:"follow",headers:{Accept:"text/html"},signal:AbortSignal.timeout(8000)});
       const finalUrl=new URL(response.url||candidate);
       if(isSpecificListingUrl(finalUrl))return finalUrl.toString();
     }catch{}
