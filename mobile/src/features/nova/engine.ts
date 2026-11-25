@@ -522,7 +522,7 @@ function respondWithData(message: string, context: NovaReadyContext): NovaReply 
   }
 
   if (normalized.includes("incomplet") || normalized.includes("dati mancanti") || normalized.includes("da completare")) {
-    const rows: Array<{ kind: "candidate" | "listing"; id: string; title: string; town: string; gaps: string[] }> = [];
+    const rows: { kind: "candidate" | "listing"; id: string; title: string; town: string; gaps: string[] }[] = [];
     context.listings.filter(item => !town || normalizeNovaText(item.municipality) === normalizeNovaText(town))
       .filter(item => !["incarico_acquisito", "non_interessato"].includes(item.status))
       .forEach(item => {
@@ -560,7 +560,7 @@ function respondWithData(message: string, context: NovaReadyContext): NovaReply 
   }
 
   if (normalized.includes("ribass") || normalized.includes("prezzo sceso")) {
-    const rows: Array<{ kind: "candidate" | "listing"; id: string; title: string; town: string; observation: NovaPriceObservation; age: number; seller: string }> = [];
+    const rows: { kind: "candidate" | "listing"; id: string; title: string; town: string; observation: NovaPriceObservation; age: number; seller: string }[] = [];
     context.candidates.filter(item => item.sellerClass !== "Agenzia")
       .filter(item => !town || normalizeNovaText(item.municipality) === normalizeNovaText(town))
       .forEach(item => {

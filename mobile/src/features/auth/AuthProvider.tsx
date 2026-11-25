@@ -30,10 +30,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<AuthState>(INITIAL_STATE);
 
   useEffect(() => {
-    if (!supabase) {
-      setState({ status: "unconfigured", session: null, user: null, errorMessage: null });
-      return;
-    }
+    if (!supabase) return;
 
     let mounted = true;
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {

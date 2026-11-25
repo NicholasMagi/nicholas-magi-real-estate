@@ -59,7 +59,7 @@ export function DashboardScreen() {
           </View>
           <Text style={styles.heroTitle}>Un nuovo modo di lavorare.</Text>
           <Text style={styles.heroBody}>
-            Stiamo preparando il collegamento sicuro al Suo gestionale. L'archivio attuale resta invariato.
+            Stiamo preparando il collegamento sicuro al Suo gestionale. L&apos;archivio attuale resta invariato.
           </Text>
           <View style={styles.heroBottom}>
             <Text style={styles.heroFoot}>FASE 02 · STRUTTURA MOBILE</Text>
@@ -95,7 +95,7 @@ export function DashboardScreen() {
           <Text style={styles.noticeLabel}>PROSSIMA TAPPA</Text>
           <Text style={styles.noticeTitle}>Collegamento sicuro a Supabase</Text>
           <Text style={styles.noticeBody}>
-            Dopo l'autenticazione vedrà gli annunci e i contatti già presenti, senza creare un secondo archivio.
+            Dopo l&apos;autenticazione vedrà gli annunci e i contatti già presenti, senza creare un secondo archivio.
           </Text>
         </View>
         <Text style={styles.footer}>NMRE MOBILE · VERSIONE 0.1.0 · DATI NON COLLEGATI</Text>

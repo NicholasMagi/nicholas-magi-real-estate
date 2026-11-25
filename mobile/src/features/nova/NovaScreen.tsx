@@ -84,7 +84,7 @@ export function NovaScreen() {
             <View style={styles.connectionCopy}>
               <Text style={styles.connectionTitle}>Archivio mobile non ancora collegato</Text>
               <Text style={styles.connectionBody}>
-                NOVA è attiva. Per analizzare annunci, proprietari e richiami serve prima l'accesso sicuro in sola lettura.
+                NOVA è attiva. Per analizzare annunci, proprietari e richiami serve prima l&apos;accesso sicuro in sola lettura.
               </Text>
             </View>
           </View>

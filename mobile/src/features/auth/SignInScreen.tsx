@@ -47,7 +47,7 @@ export function SignInScreen() {
               <View style={styles.notice}>
                 <Text style={styles.noticeTitle}>Configurazione necessaria</Text>
                 <Text style={styles.noticeBody}>
-                  Il collegamento Supabase non è ancora configurato. Nel file locale mobile/.env inserisca l'URL del progetto e la chiave publishable. Non inserisca mai una service_role o una secret key.
+                  Il collegamento Supabase non è ancora configurato. Nel file locale mobile/.env inserisca l&apos;URL del progetto e la chiave publishable. Non inserisca mai una service_role o una secret key.
                 </Text>
               </View>
             ) : null}
@@ -82,7 +82,7 @@ export function SignInScreen() {
               {submitting ? <ActivityIndicator color={theme.colors.white} /> : <Text style={styles.submitText}>Accedi in sicurezza</Text>}
             </Pressable>
             <Text style={styles.helper}>
-              L'app non crea nuovi account e non modifica i dati del gestionale durante l'accesso.
+              L&apos;app non crea nuovi account e non modifica i dati del gestionale durante l&apos;accesso.
             </Text>
           </View>
           <Text style={styles.footer}>NMRE MOBILE · ACCESSO RISERVATO</Text>
