@@ -588,15 +588,57 @@ cataloghi di sistema e sono state eseguite con successo dentro una transazione
 - Le altre query del file non servono per questa verifica.
 
 ### 14.2 Come eseguirle
+Ogni query va eseguita dentro una **transazione esplicitamente di sola lettura**,
+aperta e chiusa nella stessa esecuzione:
+
+```sql
+BEGIN TRANSACTION READ ONLY;
+
+-- Qui la SELECT AQ17 oppure AQ17b
+
+ROLLBACK;
+```
+
+Non usare `SET TRANSACTION READ ONLY;` da solo. Senza un `BEGIN` o uno
+`START TRANSACTION` precedente non garantisce una transazione di sola lettura.
+
 1. Supabase Dashboard → progetto NMRE → **SQL Editor** → **New query**.
-2. Come prima riga scrivere `set transaction read only;`. Poi incollare **solo**
-   la `select` di AQ17, fino al punto e virgola. Le righe di commento (`--`) si
-   possono includere.
-3. **Run**. L'editor mostra il risultato dell'ultima istruzione, cioè la `select`.
-4. Ripetere con una nuova query per AQ17b, sempre preceduta da
-   `set transaction read only;`.
-5. Non eseguire altro. In particolare non eseguire i file di `supabase/migrations/`
+2. Nella stessa query scrivere, in quest'ordine:
+   - `BEGIN TRANSACTION READ ONLY;`
+   - la `select` di **AQ17**, copiata dal file fino al suo punto e virgola
+     (le righe di commento `--` si possono includere);
+   - `ROLLBACK;`
+3. Premere **Run** una sola volta, **senza selezionare una parte del testo**:
+   le tre istruzioni devono partire insieme. Se si seleziona solo la `select`,
+   l'editor esegue solo quella, fuori dalla transazione di sola lettura.
+4. Il risultato mostrato è quello della `select`, consultabile anche dopo il
+   `ROLLBACK`. Il `ROLLBACK` chiude la transazione senza toccare nulla e non
+   cancella le righe già restituite.
+5. Ripetere con una **nuova query** per **AQ17b**, nella stessa cornice
+   `BEGIN TRANSACTION READ ONLY;` … `ROLLBACK;`.
+6. Se compare un errore, non rieseguire nulla di diverso e segnalarlo (§14.5).
+   La transazione si chiude da sola alla fine dell'esecuzione.
+7. Non eseguire altro. In particolare non eseguire i file di `supabase/migrations/`
    né quelli di `supabase/rollback/`.
+
+**Verifica locale della procedura** (PostgreSQL 16, database di prova con i
+trigger nello stato precedente alle migrazioni):
+- ogni query è stata eseguita in un unico invio, come fa il SQL Editor, sia con
+  `psql` sia con il driver Node.js `pg` (8.13.1). La sequenza dei comandi è
+  `BEGIN` → `SELECT` (2 righe per AQ17, 1 per AQ17b) → `ROLLBACK`;
+- le righe della `SELECT` sono state restituite e lette **dopo** il `ROLLBACK`,
+  con i valori attesi del §14.3;
+- controllo negativo: nella stessa cornice un `CREATE TABLE` è stato rifiutato
+  (`cannot execute CREATE TABLE in a read-only transaction`) e la tabella non
+  esisteva dopo l'esecuzione;
+- dopo l'esecuzione la sessione non aveva transazioni aperte ed era tornata in
+  modalità normale (`transaction_read_only = off`).
+
+Non è stato possibile provare il SQL Editor di Supabase da qui. L'editor
+dovrebbe mostrare l'ultimo risultato che contiene righe, cioè quello della
+`select`. Se invece mostrasse solo «Success. No rows returned», non vuol dire
+che manchino trigger: segnalarlo e cercheremo un altro modo di leggere il
+risultato.
 
 Cosa si può condividere: definizioni dei trigger, nomi delle funzioni e valori
 true/false sono schema, non dati personali. Il codice delle funzioni

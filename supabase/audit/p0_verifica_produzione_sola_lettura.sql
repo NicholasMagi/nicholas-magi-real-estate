@@ -15,8 +15,10 @@
 --        categorie fisse e, quando presente, al solo codice HTTP;
 --      - nessuna email, nome, telefono, testo di email, token, UID di
 --        utenti o valore di Vault.
---  * Esegua le query una alla volta nel SQL Editor di Supabase. Per
---    sicurezza può anteporre a ciascuna:  set transaction read only;
+--  * Esegua le query una alla volta nel SQL Editor di Supabase, ciascuna
+--    dentro una transazione di sola lettura eseguita in un'unica esecuzione:
+--        BEGIN TRANSACTION READ ONLY;  <la select>  ROLLBACK;
+--    (vedi docs/proposte/A1-nessuna-opportunita-persa.md §14.2).
 --  * Se un indicatore "possibile_segreto_in_chiaro" risulta TRUE, non
 --    cerchi il valore e non lo incolli: lo segnali e la chiave verrà
 --    ruotata con una procedura dedicata.
