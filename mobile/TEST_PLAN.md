@@ -76,3 +76,18 @@ Record EAS build IDs, profile, environment and commit.
 
 ## 9. Milestone reporting
 Report implemented features, files changed, exact tests and results, device evidence, known issues, residual risks, rollback and next milestone. Mark skipped checks NOT RUN with reason.
+
+
+## 10. M3 authentication checks
+Automated source tests:
+- Run npm run test:auth (Node 22.13+) for friendly handling of invalid credentials, unconfirmed email, rate limiting, network errors and unknown provider errors.
+- Run npm run test for the NOVA and auth unit suites.
+
+Still required after local dependency installation:
+- npm run typecheck, npm run lint, and npm run check:expo.
+- npx expo export --platform ios and npx expo export --platform android.
+- Verify the app refuses missing configuration and rejects legacy JWT/service-role keys.
+- Verify valid and invalid email/password, offline startup, expired refresh token, failed refresh, restart persistence and device-local sign-out.
+- Exercise SecureStore chunked read/write/remove paths, interrupted writes and storage errors on iOS and Android.
+- Confirm sign-out removes the Auth session and returns to the sign-in route; no CRM PII is persisted.
+- Cross-owner RLS isolation remains an M4 staging integration test and has not been inferred from client-side route protection.

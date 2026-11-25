@@ -126,3 +126,15 @@ Platform boundary:
 - Candidate/listing actions are returned as typed identifiers for a future detail-navigation adapter. Current mobile record screens are placeholders, so the app does not claim those action identifiers open a specific record yet.
 - Added `npm run test:nova` using Node's built-in test runner and TypeScript type stripping (Node 22.13+). Run it in the mobile workspace; the remote repository edit itself does not prove tests passed.
 - No Supabase Auth, production table, Edge Function, PWA file, backend secret or deployment was changed in this native milestone.
+
+
+## 16. M3 — Native authentication foundation (2026-11-25)
+
+- The Expo client initializes one Supabase JS v2 client only when a valid HTTPS project URL and a modern sb_publishable key are present. Legacy JWT-shaped keys are rejected because a legacy service-role JWT must never be allowed into a public app bundle.
+- Existing users authenticate with email and password. The app does not expose self-registration or alter Auth settings.
+- Supabase Auth persists its session using an adapter backed exclusively by Expo SecureStore. Values are split into bounded chunks using Unicode code points; a generation pointer is written only after all chunks are stored. A read retries once if it detects a concurrent session-pointer replacement.
+- The root navigation waits for session initialization, then protects the tab group. Sign-out is local to this device and does not revoke the user's other sessions.
+- Native AppState changes start and stop Supabase's automatic token refresh while the app is foregrounded/backgrounded.
+- No listing, candidate, CRM or other application table is queried in this milestone. No Supabase database, Auth setting, Edge Function, production secret, PWA file or deployment is changed.
+- The local environment file must contain only the project URL and modern publishable key and must remain untracked. Dependency installation, npm lockfile, static checks and physical-device validation remain release gates; committed source is not evidence that those checks passed.
+- Future user-scoped query caches must be cleared on sign-out. No persistent application-data cache exists yet; only the Auth session is persisted.

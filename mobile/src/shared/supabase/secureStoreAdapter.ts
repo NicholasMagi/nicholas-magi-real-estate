@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 
-const CHUNK_SIZE = 512;
+const CHUNK_SIZE = 384;
 const MAX_CHUNKS = 256;
 const CHUNK_PREFIX = "nmre-secure-chunks:v1:";
 type ChunkReference = { generation: string; count: number };
@@ -15,53 +15,72 @@ function parseChunkReference(value: string | null): ChunkReference | null {
   }
   return { generation: match[1], count };
 }
+
 function chunkKey(key: string, generation: string, index: number): string {
   return key + ".v." + generation + ".chunk." + index;
 }
+
 async function removeChunks(key: string, reference: ChunkReference): Promise<void> {
-  for (let i = 0; i < reference.count; i += 1) {
-    await SecureStore.deleteItemAsync(chunkKey(key, reference.generation, i));
+  for (let index = 0; index < reference.count; index += 1) {
+    await SecureStore.deleteItemAsync(chunkKey(key, reference.generation, index));
   }
 }
 
-export const secureStoreAdapter = {
-  async getItem(key: string): Promise<string | null> {
-    const stored = await SecureStore.getItemAsync(key);
-    if (stored === null) return null;
-    const reference = parseChunkReference(stored);
-    if (!reference) return stored;
-    const chunks: string[] = [];
-    for (let i = 0; i < reference.count; i += 1) {
-      const chunk = await SecureStore.getItemAsync(chunkKey(key, reference.generation, i));
-      if (chunk === null) {
-        throw new Error("La sessione protetta è incompleta. Effettui nuovamente l'accesso.");
-      }
-      chunks.push(chunk);
+async function readValue(key: string, retryOnConcurrentUpdate: boolean): Promise<string | null> {
+  const stored = await SecureStore.getItemAsync(key);
+  if (stored === null) return null;
+
+  const reference = parseChunkReference(stored);
+  if (!reference) return stored;
+
+  const chunks: string[] = [];
+  for (let index = 0; index < reference.count; index += 1) {
+    const chunk = await SecureStore.getItemAsync(chunkKey(key, reference.generation, index));
+    if (chunk === null) {
+      const latestPointer = await SecureStore.getItemAsync(key);
+      if (retryOnConcurrentUpdate && latestPointer !== stored) return readValue(key, false);
+      throw new Error("La sessione protetta è incompleta. Effettui nuovamente l'accesso.");
     }
-    return chunks.join("");
+    chunks.push(chunk);
+  }
+  return chunks.join("");
+}
+
+function splitIntoChunks(value: string): string[] {
+  const codePoints = Array.from(value);
+  const chunks: string[] = [];
+  for (let offset = 0; offset < codePoints.length; offset += CHUNK_SIZE) {
+    chunks.push(codePoints.slice(offset, offset + CHUNK_SIZE).join(""));
+  }
+  return chunks;
+}
+
+export const secureStoreAdapter = {
+  getItem(key: string): Promise<string | null> {
+    return readValue(key, true);
   },
 
   async setItem(key: string, value: string): Promise<void> {
     const previousValue = await SecureStore.getItemAsync(key);
     const previousReference = parseChunkReference(previousValue);
-    if (value.length <= CHUNK_SIZE) {
+
+    if (Array.from(value).length <= CHUNK_SIZE) {
       await SecureStore.setItemAsync(key, value);
-      if (previousReference) await removeChunks(key, previousReference);
+      if (previousReference) {
+        await removeChunks(key, previousReference).catch(() => undefined);
+      }
       return;
     }
 
-    const chunks: string[] = [];
-    for (let offset = 0; offset < value.length; offset += CHUNK_SIZE) {
-      chunks.push(value.slice(offset, offset + CHUNK_SIZE));
-    }
+    const chunks = splitIntoChunks(value);
     if (chunks.length > MAX_CHUNKS) {
       throw new Error("La sessione supera la capacità di archiviazione protetta.");
     }
 
     const generation = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     try {
-      for (let i = 0; i < chunks.length; i += 1) {
-        await SecureStore.setItemAsync(chunkKey(key, generation, i), chunks[i]);
+      for (let index = 0; index < chunks.length; index += 1) {
+        await SecureStore.setItemAsync(chunkKey(key, generation, index), chunks[index]);
       }
       // Publish the new pointer only after every encrypted chunk has been stored.
       await SecureStore.setItemAsync(key, CHUNK_PREFIX + generation + ":" + chunks.length);
@@ -69,7 +88,10 @@ export const secureStoreAdapter = {
       await removeChunks(key, { generation, count: chunks.length }).catch(() => undefined);
       throw error;
     }
-    if (previousReference) await removeChunks(key, previousReference);
+
+    if (previousReference) {
+      await removeChunks(key, previousReference).catch(() => undefined);
+    }
   },
 
   async removeItem(key: string): Promise<void> {

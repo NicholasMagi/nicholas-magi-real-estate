@@ -43,3 +43,11 @@ No service-role or secret in bundle; no cross-owner access; critical/high depend
 
 ## 11. Incident response and rollback
 If a key leaks, revoke/rotate server-side; a new app binary alone is insufficient. If RLS regresses, disable the feature and restore reviewed policies; never work around with service_role in client. Record impact, remediation and verification.
+
+
+## 12. Native session storage implementation (2026-11-25)
+- The mobile client accepts only the modern sb_publishable public key format. Legacy JWT-shaped keys are rejected because the client cannot safely infer that a JWT is the public anon role rather than service_role.
+- The mobile client stores only Supabase Auth session material through Expo SecureStore. It does not persist listings, seller details, phone numbers, addresses, CRM notes or NOVA conversation history.
+- Larger session strings are split into small SecureStore entries (384 Unicode code points per chunk) and a final pointer is written only after the new encrypted chunks exist. Reads detect a concurrent pointer update and retry once.
+- Local sign-out removes the current device session only. Any future application-data/query cache must be user-scoped and cleared on sign-out.
+- The adapter and real-device session behavior have not yet been tested on iOS or Android. Source implementation must not be treated as release-verified.
