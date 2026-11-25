@@ -3341,10 +3341,11 @@ function novaFindTown(message){
   return towns.find(town=>query.includes(" "+normalizedMatchText(town)+" "))||null;
 }
 
-function novaRankCandidates(town){
+function novaRankCandidates(town,privateOnly=false){
   const data=Array.isArray(candidateCache)?candidateCache:[];
   return data
-    .filter(item=>!town||normalizedMatchText(item.comune)===normalizedMatchText(town))
+    .filter(item=>(!town||normalizedMatchText(item.comune)===normalizedMatchText(town))
+      &&(!privateOnly||item.tipo_venditore==="Privato"))
     .map(item=>({item,priority:candidatePriority(item)}))
     .sort((a,b)=>b.priority.score-a.priority.score
       ||(Date.parse(b.item.created_at||"")||0)-(Date.parse(a.item.created_at||"")||0));
@@ -3363,9 +3364,13 @@ function novaOpportunityText(row,index){
   const seller=item.tipo_venditore==="Privato"?"Privato riconosciuto":"Venditore da verificare";
   const price=Number(item.prezzo)>0?euro(item.prezzo):"Prezzo non indicato";
   const reasons=priority.reasons.slice(0,2).join(" · ")||priority.description;
+  const quality=candidateQuality(item,Array.isArray(candidateCache)?candidateCache:[],Array.isArray(listingCache)?listingCache:[]);
+  const dataNotes=["completezza dati "+quality.qualityScore+"/100"];
+  if(quality.duplicate)dataNotes.push("possibile duplicato da verificare");
+  if(quality.missing.length)dataNotes.push("da completare: "+quality.missing.slice(0,3).join(", "));
   return (index+1)+". "+title+"\n   "+(details||"Caratteristiche da completare")
     +"\n   "+seller+" · "+price+" · priorità "+priority.score+"/100"
-    +"\n   Motivo: "+reasons;
+    +"\n   Motivo: "+reasons+"\n   Dati: "+dataNotes.join(" · ");
 }
 
 function novaGetFollowups(days=7,town=null){
@@ -3394,17 +3399,24 @@ function novaFollowupText(row,index){
   return (index+1)+". "+property+"\n   "+[kind,when,date,details].filter(Boolean).join(" · ");
 }
 
-function novaReplyOpportunities(message,town){
-  const ranked=novaRankCandidates(town);
+function novaReplyOpportunities(message,town,privateOnly=false){
+  const ranked=novaRankCandidates(town,privateOnly);
   if(!ranked.length){
+    if(privateOnly){
+      const unverified=(Array.isArray(candidateCache)?candidateCache:[]).filter(item=>item.tipo_venditore==="Da verificare").length;
+      return "Non risultano privati già riconosciuti"+(town?" a "+town:"")+" nella coda attuale."
+        +(unverified?" Sono presenti "+unverified+" venditori ancora da verificare, che non considero privati finché la classificazione non viene confermata.":"");
+    }
     if(town)return "Nella coda attuale non risultano opportunità da verificare a "+town+". Non deduco annunci che non sono presenti nei dati caricati.";
     return "Al momento la coda delle opportunità da verificare è vuota nei dati caricati da NMRE.";
   }
   const count=Math.min(novaLimit(message,5),ranked.length);
-  const title=town?"Le opportunità a "+town:"Le "+count+" opportunità con priorità commerciale più alta";
+  const title=privateOnly
+    ?"I privati già riconosciuti"+(town?" a "+town:"")
+    :(town?"Le opportunità a "+town:"Le "+count+" opportunità con priorità commerciale più alta");
   const lines=ranked.slice(0,count).map(novaOpportunityText);
   return title+":\n\n"+lines.join("\n\n")
-    +"\n\nIl punteggio ordina il lavoro commerciale: non misura la probabilità di acquisire l'incarico e non certifica il venditore.";
+    +"\n\nIl punteggio ordina il lavoro commerciale: non misura la probabilità di acquisire l'incarico. La completezza dati segnala campi mancanti e possibili duplicati, senza modificare o scartare record.";
 }
 
 function novaReplyFollowups(town){
@@ -3492,7 +3504,11 @@ function novaRespond(message){
   if(query.includes("telefon")||query.includes("copion")||query.includes("script")||query.includes("prepara")||query.includes("contattare un proprietario")||query.includes(" chiama "))intent="call";
   else if(query.includes("richiam")||query.includes("scadenz")||query.includes("appuntament")||query.includes("agenda"))intent="followups";
   else if(query.includes("priorit")||query.includes("oggi")||query.includes("cosa devo fare")||query.includes("cosa dovrei fare")||query.includes("da dove comincio"))intent="priorities";
-  else if(query.includes("privat")||query.includes("venditor"))intent="private";
+  else if(query.includes("privat")||query.includes("venditor")){
+    const asksCount=query.includes("quanti")||query.includes("conta")||query.includes("numero");
+    const asksList=!!town||query.includes("mostra")||query.includes("miglior")||query.includes("elenca")||query.includes("lista")||query.includes("opportunit");
+    intent=asksList&&!asksCount?"private-opportunities":"private";
+  }
   else if(query.includes("opportunit")||query.includes("candidat")||query.includes("lead")||query.includes("miglior")||query.includes("punteggio")||query.includes("da verificare"))intent="opportunities";
   else if(query.includes("archiv")||query.includes("riepilog")||query.includes("quanti immobili")||query.includes("annunci in totale"))intent="archive";
   else if(query.includes("aiuto")||query.includes("aiutami")||query.includes("comandi")||query.includes("cosa sai fare")||query.includes("come funziona"))intent="help";
@@ -3508,6 +3524,7 @@ function novaRespond(message){
   if(intent==="followups")return novaReplyFollowups(scope);
   if(intent==="priorities")return novaReplyPriorities(scope);
   if(intent==="private")return novaReplyPrivateCounts();
+  if(intent==="private-opportunities")return novaReplyOpportunities(message,scope,true);
   if(intent==="opportunities")return novaReplyOpportunities(message,scope);
   if(intent==="archive")return novaReplyArchive();
   return novaHelp();
