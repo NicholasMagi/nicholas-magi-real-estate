@@ -429,7 +429,7 @@ export function buildNovaActionPlan(
 function unavailableDataMessage(context: NovaContext): string {
   if (context.status === "loading") return "Sto attendendo il collegamento ai dati NMRE. Non mostrerò risultati finché il caricamento non sarà completato.";
   if (context.status === "error") return "Non riesco a leggere i dati NMRE in questo momento. " + (context.message || "Riprovi quando il collegamento sarà disponibile.");
-  return "NOVA è pronta nell'app, ma l'archivio NMRE non è ancora collegato a questa versione mobile. Non inventerò conteggi, proprietari o opportunità. La connessione sicura in sola lettura sarà attivata dopo il modulo di autenticazione.";
+  return "NOVA è pronta nell'app, ma l'archivio NMRE non è ancora collegato a questa versione mobile. Non inventerò conteggi, proprietari o opportunità. La connessione sicura in sola lettura sarà attivata dopo il modulo di autenticazione. NOVA non invia richieste a OpenAI.";
 }
 
 function helpText(): string {
