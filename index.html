@@ -3533,8 +3533,8 @@ function nmreCrmRender(){
  $("nmreCrmStatAgenda").textContent=nmreCrmAppointments.filter(x=>x.status==="programmato").length;
  nmreCrmRenderContacts();nmreCrmRenderProperties();nmreCrmRenderAgenda();
 }
-function nmreIdentityKey(value){return String(value||"").normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLocaleLowerCase("it").replace(/[^a-z0-9@.]+/g," ").trim().replace(/\\s+/g," ");}
-function nmrePhoneKey(value){return String(value||"").replace(/\\D/g,"");}
+function nmreIdentityKey(value){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("it").replace(/[^a-z0-9@.]+/g," ").trim().replace(/\s+/g," ");}
+function nmrePhoneKey(value){return String(value||"").replace(/\D/g,"");}
 function nmreMatchContactForListing(item){
  const contacts=nmreCrmContacts||[],identity=[item?.contatto,item?.seller_identity].map(nmreIdentityKey).filter(Boolean),sender=String(item?.notification_sender||"").trim().toLowerCase(),phones=identity.map(nmrePhoneKey).filter(x=>x.length>=7);
  const matches=contacts.filter(contact=>{const name=nmreIdentityKey(contact.full_name),email=String(contact.email||"").trim().toLowerCase(),phone=nmrePhoneKey(contact.phone);return(sender&&email&&sender===email)||(phone&&phones.includes(phone))||(name&&identity.includes(name));});
@@ -3643,7 +3643,7 @@ function nmreCrmRenderContacts(){
  });
  const roleLabels={proprietario:"Proprietario",comproprietario:"Comproprietario",referente:"Referente",familiare:"Familiare",altro:"Altro"};
  $("nmreCrmContactList").innerHTML=rows.length?rows.map(x=>{
-  const properties=nmreCrmPropertiesForContact(x.id),linkedIds=new Set(properties.map(p=>String(p.id)));
+  const properties=nmreCrmPropertiesForContact(x.id),archiveListings=(listingCache||[]).filter(a=>String(a.contact_id||"")===String(x.id)),linkedIds=new Set(properties.map(p=>String(p.id)));
   const availableProperties=nmreCrmProperties.filter(p=>!linkedIds.has(String(p.id)));
   const availableArchive=(listingCache||[]).filter(a=>!nmreCrmProperties.some(p=>String(p.source_listing_id||"")===String(a.id)));
   const propertyHtml=properties.length?properties.map(p=>{
@@ -3680,7 +3680,7 @@ function nmreCrmRenderContacts(){
    '<label class="wide">Note immobile<textarea name="notes" rows="2" maxlength="4000"></textarea></label>'+
    '<div class="wide"><button class="gold" type="submit">Salva collegamento</button><span class="status" data-contact-property-msg></span></div></form></details></details>';
   return '<article class="nmre-crm-item"><div class="nmre-crm-contact-main"><h4>'+safe(x.full_name)+'</h4><p>'+safe(nmreCrmLabels.contact[x.contact_type]||x.contact_type)+' · '+safe(x.municipality||"Comune non indicato")+(x.address?" · "+safe(x.address):"")+'</p><p>'+safe(x.phone||"")+(x.phone&&x.email?" · ":"")+safe(x.email||"")+'</p>'+(x.notes?'<p>'+safe(x.notes)+'</p>':"")+
-   propertyManager+editForm+
+   '<details class="nmre-contact-properties"><summary>Annunci in Archivio <b>'+archiveListings.length+'</b></summary><div class="nmre-contact-property-list">'+(archiveListings.length?archiveListings.map(a=>'<article class="nmre-contact-property"><div><strong>'+safe(a.titolo||"Annuncio")+'</strong><small>'+safe(a.comune||"Comune non indicato")+' · '+euro(a.prezzo)+'</small>'+(a.url?'<a href="'+safe(validUrl(a.url)||"#")+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>':"")+'</div></article>').join(""):'<div class="nmre-crm-empty">Nessun annuncio collegato.</div>')+'</div></details>'+propertyManager+editForm+
    '<details class="nmre-sales-coach" data-sales-coach="'+safe(x.id)+'"><summary>Prepara telefonata · Sales Coach</summary><div class="nmre-sales-coach-output" data-sales-coach-output="'+safe(x.id)+'"><div class="hint">Apra per preparare la conversazione.</div></div></details>'+
    '<details class="nmre-crm-history" data-crm-history="'+safe(x.id)+'"><summary>Storico conversazioni e interazioni</summary>'+
    '<form class="nmre-crm-history-form" data-crm-history-form="'+safe(x.id)+'">'+
