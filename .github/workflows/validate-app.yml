@@ -57,6 +57,9 @@ jobs:
       - name: Test automatic contact matching and safe property linking
         run: node tests/frontend/contact_autolink_test.mjs
 
+      - name: Test unified search across opportunities and archive
+        run: node tests/frontend/listing_search_test.mjs
+
       - name: Check migration layout (phase 2 not applicable, production versions)
         run: |
           bash supabase/tests/check_migration_layout.sh
