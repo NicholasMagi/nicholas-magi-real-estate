@@ -12,7 +12,7 @@ import { canonicalListingKey, bedrooms, bathrooms, extractAdditionalPropertyDeta
 import { DATA_EXTRACTION_VERSION, SELLER_CLASSIFICATION_VERSION } from "./retention.ts";
 import type { SellerResult } from "./retention.ts";
 import {
-  identifyNewSubitoListings, isBlockedSubitoPage, normalizeSubitoSearchUrl, parseSubitoResultsPage, SUBITO_REASON_TEXT
+  identifyNewSubitoListings, isBlockedSubitoPage, normalizeSubitoSearchUrl, parseSubitoResultsPage, subitoSearchKey, SUBITO_REASON_TEXT
 } from "./subito.ts";
 import type { NewListingsDecision, SubitoDigest, SubitoItem, SubitoPage } from "./subito.ts";
 
@@ -85,7 +85,11 @@ export async function acquireSubitoDigest(
   } else {
     try {
       const response = await deps.fetchPage(digest.searchUrl);
-      const finalOk = !!normalizeSubitoSearchUrl(response.finalUrl) || response.finalUrl === digest.searchUrl;
+      const finalSearchUrl = normalizeSubitoSearchUrl(response.finalUrl);
+      // Un redirect verso un'altra ricerca Subito (per esempio con filtri persi) non è
+      // una risposta valida: non dobbiamo classificare annunci di una ricerca diversa.
+      // kxconfid e i parametri di ordinamento restano irrilevanti per l’identità della ricerca.
+      const finalOk = !!finalSearchUrl && subitoSearchKey(finalSearchUrl) === digest.searchKey;
       if (isBlockedSubitoPage(response.status, response.html)) pageError = "pagina_bloccata";
       else if (response.status < 200 || response.status >= 300) pageError = "errore_http";
       else if (!finalOk) pageError = "pagina_vuota";
