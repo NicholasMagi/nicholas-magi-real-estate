@@ -296,6 +296,27 @@ Deno.test("10 · pagina protetta da CAPTCHA, errore di rete, errore HTTP, pagina
     eq(result.advanced, true, reason + ": notifica salvata, le altre email non vengono bloccate");
   }
 });
+Deno.test("10 · redirect Subito che perde i filtri: non acquisisce annunci di un'altra ricerca", async () => {
+  const db = fakeSupabase();
+  const redirected = pages({
+    finalUrl: "https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?order=datedesc"
+  });
+  const result = await syncCycle(db, [EMAIL_26], redirected.fetchPage);
+  const digest = digestOf(db, EMAIL_26.id)!;
+  eq(digest.dati_estratti.ricerca_subito.stato, "errore", "redirect non equivalente: errore");
+  eq(digest.dati_estratti.ricerca_subito.motivo, "pagina_vuota", "redirect con filtri persi: da verificare");
+  eq(candidates(db).filter(row => String(row.dedup_key || "").startsWith("subito:")).length, 0, "nessun annuncio da ricerca diversa");
+  eq(result.advanced, true, "la notifica di errore è stata salvata e può essere ritentata");
+});
+Deno.test("10 · redirect Subito con solo kxconfid diverso: la stessa ricerca resta valida", async () => {
+  const db = await afterPreviousDigest();
+  const redirected = pages({
+    finalUrl: "https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&kxconfid=token-ruotato&order=datedesc"
+  });
+  const result = await syncCycle(db, [EMAIL_26], redirected.fetchPage);
+  eq(result.counters.inserted, 3, "stessa ricerca: i tre annunci vengono recuperati");
+  eq(digestOf(db, EMAIL_26.id), undefined, "nessuna notifica riepilogativa superflua");
+});
 Deno.test("10 · recupero parziale o incerto: nessuna opportunità certa, annunci plausibili da verificare", async () => {
   // Struttura diversa: soli link, senza date → impossibile sapere quali sono i nuovi.
   let db = await afterPreviousDigest();
