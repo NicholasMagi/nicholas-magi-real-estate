@@ -4,8 +4,11 @@
 // espone esclusivamente select() e i filtri di lettura; insert, update, upsert, delete e
 // qualsiasi altro metodo non esistono sull'oggetto restituito (la chiamata solleva un
 // errore). Le RPC sono limitate a un elenco esplicito e vengono sempre inviate in GET
-// ({ get: true }): PostgREST le esegue in una transazione READ ONLY, quindi anche una
-// funzione che tentasse una scrittura fallirebbe invece di scrivere.
+// ({ get: true }): PostgREST esegue le richieste GET in una transazione READ ONLY, quindi
+// una scrittura fallirebbe invece di essere eseguita. PostgREST accetta in GET solo
+// funzioni STABLE o IMMUTABLE: ogni RPC dell'elenco deve esserlo (per
+// nmre_get_gmail_tokens: migrazione 20261127090000_gmail_tokens_rpc_stable, da applicare).
+// Se la chiamata in GET viene rifiutata, l'errore arriva al chiamante: nessun ripiego su POST.
 //
 // Gmail è raggiungibile solo con richieste GET verso il profilo e i messaggi
 // (elenco e singolo messaggio). Nessun endpoint di modifica, cronologia o watch.
@@ -13,6 +16,10 @@
 
 export const READ_TABLES = ["annunci_candidati", "annunci"] as const;
 export const READ_RPCS = ["nmre_get_gmail_tokens"] as const;
+/** Migrazione che rende STABLE ciascuna RPC ammessa (verificata dai test). */
+export const READ_RPC_STABLE_MIGRATION: Record<(typeof READ_RPCS)[number], string> = {
+  nmre_get_gmail_tokens: "20261127090000_gmail_tokens_rpc_stable.sql"
+};
 const READ_METHODS = new Set([
   "eq", "neq", "is", "in", "like", "ilike", "gt", "gte", "lt", "lte", "not",
   "order", "limit", "range", "maybeSingle", "single", "abortSignal"

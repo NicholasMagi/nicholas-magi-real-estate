@@ -2,8 +2,10 @@
 //
 // Garanzie (verificate anche dai test strutturali in index_guard_test.ts):
 //  - accesso al database solo tramite readOnlyDb(): select su annunci_candidati e annunci,
-//    RPC nmre_get_gmail_tokens in GET (transazione READ ONLY); nessun insert/update/upsert/
-//    delete, nessun lock, nessuna RPC di salvataggio;
+//    RPC nmre_get_gmail_tokens in GET (transazione READ ONLY di PostgREST; richiede che la
+//    funzione sia STABLE, migrazione 20261127090000 in supabase/migrations_pending/). Se la
+//    chiamata in GET è rifiutata la prova si ferma: nessun ripiego su POST. Nessun insert/
+//    update/upsert/delete, nessun lock, nessuna RPC di salvataggio;
 //  - Gmail solo in lettura (profilo, elenco limitato a 10, un messaggio): nessuna lettura o
 //    scrittura del cursore, nessuna cronologia, nessun watch, nessuna modifica di etichette;
 //  - token di accesso rinnovato solo in memoria, mai salvato;
@@ -14,7 +16,7 @@
 import { withSupabase } from "npm:@supabase/server@^1";
 import { readOnlyDb, readOnlyGmail } from "./readonly.ts";
 import type { ReadLog } from "./readonly.ts";
-import { accessTokenInMemory, decryptTokens } from "./gmail_auth.ts";
+import { accessTokenInMemory, decryptTokens, readTokenRow } from "./gmail_auth.ts";
 import { failureReport, reportText, selectEmail, subitoDryRun, validateRequest } from "./dry_run.ts";
 import type { DryRunReport } from "./dry_run.ts";
 
@@ -70,11 +72,10 @@ export default {
       if (!encryptionSecret) throw new Error("Configurazione server incompleta");
       const db = readOnlyDb(ctx.supabaseAdmin, readLog);
 
-      const { data, error } = await db.rpc("nmre_get_gmail_tokens");
-      if (error || !data?.[0]?.token_ciphertext) throw new Error("Collegamento Gmail non trovato");
-      if (String(data[0].email || "").toLowerCase() !== ACCOUNT) throw new Error("Casella Gmail non autorizzata");
-      const tokens = await decryptTokens(data[0].token_ciphertext, encryptionSecret);
-      const access = await accessTokenInMemory(tokens, data[0].expires_at,
+      const tokenRow = await readTokenRow(db, ACCOUNT);
+      if (!tokenRow.ok) return respond(failureReport(tokenRow.esito, tokenRow.messaggio), guarantees(), 503);
+      const tokens = await decryptTokens(tokenRow.row.token_ciphertext, encryptionSecret);
+      const access = await accessTokenInMemory(tokens, tokenRow.row.expires_at,
         { clientId: Deno.env.get("GOOGLE_CLIENT_ID"), clientSecret: Deno.env.get("GOOGLE_CLIENT_SECRET") }, fetch);
       refreshedInMemory = access.refreshedInMemory;
 

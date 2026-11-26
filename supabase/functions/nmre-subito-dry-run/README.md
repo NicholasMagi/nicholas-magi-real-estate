@@ -15,7 +15,7 @@ modificata: le funzioni condivise per Subito sono riusate così come sono.
 
 | Vincolo | Come è garantito | Test |
 |---|---|---|
-| Nessuna scrittura su Supabase | Il database passa solo da `readOnlyDb()`: per `annunci_candidati` e `annunci` esistono soltanto `select()` e i filtri di lettura; `insert`, `update`, `upsert`, `delete` e qualsiasi altro metodo sollevano un errore. L'unica RPC ammessa (`nmre_get_gmail_tokens`) è inviata in GET, quindi PostgREST la esegue in una transazione READ ONLY | `readonly_test.ts`, `index_guard_test.ts`; nei test di `dry_run_test.ts` il contatore delle scritture del database simulato resta 0 e le tabelle restano identiche |
+| Nessuna scrittura su Supabase | Il database passa solo da `readOnlyDb()`: per `annunci_candidati` e `annunci` esistono soltanto `select()` e i filtri di lettura, inviati in GET; `insert`, `update`, `upsert`, `delete` e qualsiasi altro metodo sollevano un errore. L'unica RPC ammessa (`nmre_get_gmail_tokens`) è inviata in GET: PostgREST la esegue in una transazione READ ONLY. Richiede che la funzione sia **STABLE** (migrazione `20261127090000_gmail_tokens_rpc_stable`, non applicata). Finché resta VOLATILE la chiamata in GET viene rifiutata e la prova si ferma con l'esito `token_non_leggibili_in_sola_lettura`: **non esiste un ripiego su POST** | `readonly_test.ts`, `index_guard_test.ts`; nei test di `dry_run_test.ts` il contatore delle scritture del database simulato resta 0 e le tabelle restano identiche |
 | Nessuna modifica di annunci o dati manuali | Come sopra; gli annunci già presenti, anche scartati o con decisione manuale, vengono solo letti e segnalati | `dry_run_test.ts` («annunci già presenti») |
 | Nessun avanzamento del cursore Gmail | Il cursore non viene né letto né scritto; non si usano la cronologia, il lock della sincronizzazione o il watch | `index_guard_test.ts` |
 | Nessun salvataggio del token | Un token scaduto viene rinnovato solo in memoria; `nmre_save_gmail_tokens` non è raggiungibile | `readonly_test.ts`, `index_guard_test.ts` |
@@ -40,7 +40,41 @@ Se un confronto con Opportunità o Archivio non riesce, **nessun** annuncio vien
 - Il registro dei venditori verificati non viene consultato: il tipo di inserzionista è
   quello indicato da Subito, più la classificazione del testo.
 
+## Prerequisiti (solo lettura)
+
+**A · Corpo e volatilità della funzione dei token.** Da eseguire nel SQL Editor; la
+transazione è in sola lettura e si chiude con `ROLLBACK`:
+
+```sql
+BEGIN TRANSACTION READ ONLY;
+select p.provolatile as volatilita, p.prosecdef as security_definer, l.lanname as linguaggio,
+       p.proconfig as impostazioni, pg_get_function_result(p.oid) as risultato,
+       p.prosrc ~* '\m(insert|update|delete|merge|truncate|call|copy|perform|execute|nextval|setval|set_config)\M' as contiene_scritture,
+       btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')) ~* '^select\M' as inizia_con_select
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace join pg_language l on l.oid = p.prolang
+ where n.nspname = 'public' and p.proname = 'nmre_get_gmail_tokens';
+ROLLBACK;
+```
+
+Atteso prima della migrazione: `volatilita = v`, `linguaggio = sql`,
+`contiene_scritture = false`, `inizia_con_select = true`. Dopo la migrazione:
+`volatilita = s`.
+
+**B · Secret `NMRE_ALLOWED_USER_ID`.** Controllare solo il nome, mai il valore:
+Dashboard → Edge Functions → Secrets, oppure dalla riga di comando, che mostra nomi e
+impronte ma non i valori:
+
+```bash
+supabase secrets list --project-ref <project-ref>
+```
+
+I secret valgono per tutto il progetto: lo stesso nome è già usato da
+`nmre-gmail-scheduled`.
+
 ## Procedura (solo dopo approvazione esplicita)
+
+0. Prerequisiti A e B verificati; migrazione `supabase/migrations_pending/20261127090000_gmail_tokens_rpc_stable.sql`
+   applicata dal SQL Editor (solo quel file), poi di nuovo la query A: `volatilita = s`.
 
 1. **Distribuzione della sola funzione di prova.** Non tocca `nmre-gmail-scheduled`.
    Senza `--no-verify-jwt`.

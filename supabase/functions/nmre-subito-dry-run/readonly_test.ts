@@ -1,8 +1,8 @@
 // Garanzie degli involucri di sola lettura: database, Gmail e token.
 // deno-lint-ignore-file no-explicit-any
 import { fakeSupabase } from "../nmre-gmail-scheduled/fake_supabase.ts";
-import { allowedGmailUrl, readOnlyDb, readOnlyGmail, WriteAttemptError } from "./readonly.ts";
-import { accessTokenInMemory } from "./gmail_auth.ts";
+import { allowedGmailUrl, READ_RPC_STABLE_MIGRATION, READ_RPCS, readOnlyDb, readOnlyGmail, WriteAttemptError } from "./readonly.ts";
+import { accessTokenInMemory, readTokenRow } from "./gmail_auth.ts";
 
 function eq<T>(actual: T, expected: T, message: string) {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
@@ -72,4 +72,51 @@ Deno.test("token: valido → nessuna richiesta; scaduto → rinnovo solo in memo
   const expired = await accessTokenInMemory({ access_token: "a", refresh_token: "r" }, "2026-11-27T09:00:00Z", { clientId: "c", clientSecret: "s" }, fetcher, now);
   eq([expired.token, expired.refreshedInMemory], ["nuovo", true], "token rinnovato in memoria");
   eq(calls, ["POST https://oauth2.googleapis.com/token"], "una sola richiesta, al servizio dei token Google");
+});
+
+// PostgREST simulato: le richieste GET verso funzioni VOLATILE sono rifiutate; le
+// funzioni STABLE vengono eseguite (in una transazione READ ONLY).
+function postgrestRpc(volatility: "v" | "s", calls: any[]) {
+  return {
+    from: () => { throw new Error("non usato"); },
+    rpc(name: string, params: any, options: any = {}) {
+      calls.push({ name, method: options.get ? "GET" : "POST", params });
+      if (options.get && volatility !== "s") {
+        return Promise.resolve({ data: null, error: { code: "PGRST", message: "GET non ammesso su una funzione VOLATILE" } });
+      }
+      return Promise.resolve({ data: [{ email: "nicholasmagirealestate@gmail.com", token_ciphertext: "v1.a.b", expires_at: "2026-11-27T11:00:00Z" }], error: null });
+    }
+  };
+}
+
+Deno.test("token: con la funzione ancora VOLATILE la prova si ferma, senza ripiego su POST", async () => {
+  const calls: any[] = [];
+  const result = await readTokenRow(readOnlyDb(postgrestRpc("v", calls)), "nicholasmagirealestate@gmail.com");
+  eq(result.ok, false, "prova interrotta");
+  if (!result.ok) eq(result.esito, "token_non_leggibili_in_sola_lettura", "esito esplicito");
+  eq(calls.map(c => c.method), ["GET"], "una sola chiamata, in GET; nessuna chiamata POST");
+});
+
+Deno.test("token: con la funzione STABLE la lettura in GET riesce", async () => {
+  const calls: any[] = [];
+  const result = await readTokenRow(readOnlyDb(postgrestRpc("s", calls)), "nicholasmagirealestate@gmail.com");
+  eq(result.ok, true, "lettura riuscita");
+  eq(calls.map(c => c.method), ["GET"], "solo GET");
+  const other = await readTokenRow(readOnlyDb(postgrestRpc("s", [])), "altra@example.com");
+  eq(other.ok, false, "casella diversa rifiutata");
+});
+
+Deno.test("contratto: ogni RPC ammessa in GET ha una migrazione che la rende STABLE, con rollback", () => {
+  const root = new URL("../../", import.meta.url);
+  for (const name of READ_RPCS) {
+    const file = READ_RPC_STABLE_MIGRATION[name];
+    const locations = ["migrations_pending/", "migrations/"].map(dir => new URL(dir + file, root));
+    const found = locations.find(url => { try { Deno.statSync(url); return true; } catch { return false; } });
+    if (!found) throw new Error("migrazione STABLE mancante per " + name + ": " + file);
+    const sql = Deno.readTextFileSync(found).toLowerCase();
+    eq(sql.includes("alter function public." + name + "() stable"), true, "la migrazione rende STABLE " + name);
+    eq(sql.includes("raise exception"), true, "la migrazione si ferma se il corpo non è sicuro");
+    const rollback = new URL("rollback/" + file.replace(/\.sql$/, ".rollback.sql"), root);
+    eq(Deno.readTextFileSync(rollback).toLowerCase().includes("alter function public." + name + "() volatile"), true, "rollback presente per " + name);
+  }
 });
