@@ -39,7 +39,7 @@ function grabConst(name) {
 
 const FUNCTIONS = ["safe", "euro", "validUrl", "isSpecificCandidateUrl", "canonicalCandidateUrl", "nmreTime",
   "nmreFetchAllById", "nmreFetchAllPages", "nmreNormalizeRecoveryRow", "nmreLastStatusEntry", "nmreDiscardEntry",
-  "nmreAgencyDecisionOrigin", "candidateRecoveryGroup", "nmreNotificationsAfterDiscard", "nmreAgencyReopenUpdates",
+  "nmreAgencyDecisionOrigin", "candidateRecoveryGroup", "nmreLastSeenEntry", "nmreNotificationsAfterDiscard", "nmreAgencyReopenUpdates",
   "nmreRecoveryAlertIds", "loadCandidateRecovery", "renderCandidateRecovery"];
 const CONSTANTS = ["NMRE_PAGE_SIZE", "NMRE_RECOVERY_FULL_TTL", "NMRE_RECOVERY_PAGE", "NMRE_RECOVERY_COLUMNS",
   "NMRE_RECOVERY_GROUP_LABELS", "NMRE_DISCARD_ACTIONS"];

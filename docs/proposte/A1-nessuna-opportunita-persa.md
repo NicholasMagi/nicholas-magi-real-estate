@@ -12,14 +12,14 @@ lo stato di produzione è quello riferito dal titolare, non verificato da qui):
 
 | Componente | Stato in produzione |
 |---|---|
-| Migrazione protezione `new_opportunities` (file `20261125200000`) | **Applicata**, registrata come versione `20261126004257` |
-| Migrazione protezione `price_drop` (file `20261125202000`) | **Applicata**, registrata come versione `20261126004310` |
+| Migrazione protezione `new_opportunities` | **Applicata**, versione `20261126004257` (file rinominato di conseguenza; nome originale `20261125200000`) |
+| Migrazione protezione `price_drop` | **Applicata**, versione `20261126004310` (file rinominato di conseguenza; nome originale `20261125202000`) |
 | Edge Function `nmre-gmail-scheduled` | **Versione 68 attiva** |
-| Tabella Fase 2 `nmre_gmail_avvisi_dubbi` (file `20261125201000`) | **Non applicata**; `NMRE_CAPTURE_DUBIOUS_ALERTS` non impostato |
+| Tabella Fase 2 `nmre_gmail_avvisi_dubbi` | **Non applicata**; `NMRE_CAPTURE_DUBIOUS_ALERTS` non impostato. Il file è in `supabase/migrations_pending/`: nessun `db push` può applicarlo |
 | Frontend (`index.html`, `sw.js`) | **Non distribuito**: in produzione resta la versione di `main` |
 
-Le versioni registrate delle migrazioni non coincidono con i nomi dei file: vedi
-§16 prima di usare qualsiasi comando `supabase db`. Finché il frontend non è
+Le versioni dei file delle protezioni sono state riallineate a quelle di produzione e
+la Fase 2 è stata spostata fuori dalle migrazioni applicabili (§16.6). Finché il frontend non è
 distribuito, quello attuale continua a riscartare i duplicati (§16.5). Le regole
 del classificatore e del filtro avvisi sono **invariate**.
 
@@ -131,8 +131,8 @@ trigger delle notifiche (§3.2), da applicare **prima** della funzione.
 | 15 | Ribasso su un'agenzia scartata (revisione finale) | L'agenzia riaperta per ribasso è evidenziata come "Ribasso dopo lo scarto" e conteggiata nell'avviso in cima alla coda | L13 |
 
 ### 3.2 Migrazione del trigger delle notifiche (AQ12)
-File: `supabase/migrations/20261125200000_guard_agency_candidate_notifications.sql`
-· rollback: `supabase/rollback/20261125200000_guard_agency_candidate_notifications.rollback.sql`.
+File: `supabase/migrations/20261126004257_guard_agency_candidate_notifications.sql`
+· rollback: `supabase/rollback/20261126004257_guard_agency_candidate_notifications.rollback.sql`.
 
 **Scelta:** la funzione `private.nmre_notify_candidate_insert()` **non viene
 riscritta**. Il suo codice non è nel repository e ricostruirlo a memoria
@@ -179,8 +179,8 @@ produzione. Prima dell'applicazione: AQ17 per confermare forma e nome del
 trigger (la migrazione comunque si ferma se non corrispondono).
 
 ### 3.3 Migrazione del trigger dei ribassi (L24)
-File: `supabase/migrations/20261125202000_guard_agency_price_drop_notifications.sql`
-· rollback: `supabase/rollback/20261125202000_guard_agency_price_drop_notifications.rollback.sql`.
+File: `supabase/migrations/20261126004310_guard_agency_price_drop_notifications.sql`
+· rollback: `supabase/rollback/20261126004310_guard_agency_price_drop_notifications.rollback.sql`.
 
 **Problema:** in produzione un trigger separato su `annunci_candidati_notifiche`
 crea una push `price_drop` quando una riga dello storico riporta un ribasso. La
@@ -272,7 +272,7 @@ originale, **senza cambiare** le regole del filtro né del classificatore.
    "da verificare" con la spiegazione.
 
 ### 4.2 Sicurezza e protezione dei dati
-Migrazione `supabase/migrations/20261125201000_gmail_dubious_alerts.sql`:
+Migrazione `supabase/migrations_pending/20261125201000_gmail_dubious_alerts.sql`:
 - RLS attiva;
 - l'utente **legge** solo i propri avvisi e può **aggiornare solo** `stato`,
   `decisione_motivo`, `deciso_il` (privilegi per colonna);
@@ -387,13 +387,13 @@ Vedi §13 per l'esito dettagliato, con i link alle esecuzioni.
 | Passo | Azione | Come | Verifica | Se qualcosa non va |
 |---|---|---|---|---|
 | 0 | Controlli finali in sola lettura | **AQ17 e AQ17b** secondo la procedura del §14; AQ6 (base delle rielaborazioni), AQ10 (base delle esclusioni) | Tutte le condizioni del §14.4 soddisfatte | Fermarsi nei casi del §14.5 |
-| 1 ✅ | **Migrazione del trigger** `20261125200000_guard_agency_candidate_notifications.sql` (applicata, versione `20261126004257`) | SQL Editor di Supabase, **solo questo file**. Non usare `supabase db push`: la cronologia delle migrazioni di produzione non è allineata al repository (P0 §7) e il comando potrebbe tentare di applicare altri file | Messaggio "Trigger … protetto"; `pg_get_triggerdef` contiene `WHEN ((new.tipo_venditore IS DISTINCT FROM 'Agenzia'::text))`; una riga in `private.nmre_trigger_definition_backups` | Rollback 7.2-A |
-| 1-bis ✅ | **Migrazione del trigger dei ribassi** `20261125202000_guard_agency_price_drop_notifications.sql` (applicata, versione `20261126004310`) | SQL Editor, solo questo file | Messaggio "Trigger … protetto"; AQ17: `gia_protetto = true` su entrambe le tabelle; la definizione contiene `nmre_candidate_is_agency` e l'eventuale condizione originale | Rollback 7.2-E, poi eventualmente A |
+| 1 ✅ | **Migrazione del trigger** `20261126004257_guard_agency_candidate_notifications.sql` (applicata; nome originale del file `20261125200000_…`) | SQL Editor di Supabase, **solo questo file**. Non usare `supabase db push`: la cronologia delle migrazioni di produzione non è allineata al repository (P0 §7) e il comando potrebbe tentare di applicare altri file | Messaggio "Trigger … protetto"; `pg_get_triggerdef` contiene `WHEN ((new.tipo_venditore IS DISTINCT FROM 'Agenzia'::text))`; una riga in `private.nmre_trigger_definition_backups` | Rollback 7.2-A |
+| 1-bis ✅ | **Migrazione del trigger dei ribassi** `20261126004310_guard_agency_price_drop_notifications.sql` (applicata; nome originale del file `20261125202000_…`) | SQL Editor, solo questo file | Messaggio "Trigger … protetto"; AQ17: `gia_protetto = true` su entrambe le tabelle; la definizione contiene `nmre_candidate_is_agency` e l'eventuale condizione originale | Rollback 7.2-E, poi eventualmente A |
 | 2 ✅ | **Funzione `nmre-gmail-scheduled`** dal commit approvato (versione 68 attiva) | `supabase functions deploy nmre-gmail-scheduled`; `NMRE_CAPTURE_DUBIOUS_ALERTS` **non impostato**; `NMRE_KEEP_AGENCY_CANDIDATES` non impostato (conserva le agenzie) | Risposte 200 con `keptForReview`, `reopenedOnPriceDrop`, `notificationsAfterDiscard`, `propertyFilterRules`; registro senza errori per 24 ore; nessuna notifica "Nuove opportunità" per agenzie | Rollback 7.2-B |
 | 3 ⏳ | **Frontend** (prossimo passo) | Merge della PR su `main` (GitHub Pages); service worker `20261126-recovery-panel-2` | Coda, contrassegni, pannello "Annunci fuori dalla coda" | Rollback 7.2-C |
 | 4 | (Facoltativo) funzione `nmre-insights-sync` | `supabase functions deploy nmre-insights-sync` | Il connettore resta bloccato senza autorizzazione | Versione precedente |
 | 5 | Recupero guidato degli scartati «Da verificare» (§8; 88 alla rilevazione AQ2 del 25/11), uno alla volta | Pannello dell'app | AQ13 | Ogni decisione è reversibile dal pannello |
-| 6 | **Fase 2**: migrazione `20261125201000_gmail_dubious_alerts.sql` | SQL Editor, solo questo file | Tabella con RLS attiva; Q2/Q3: solo policy di select e update per il proprietario | Rollback 7.2-D |
+| 6 | **Fase 2**: migrazione `supabase/migrations_pending/20261125201000_gmail_dubious_alerts.sql` (da rinumerare dopo l'ultima versione di produzione, vedi `supabase/migrations_pending/README.md`) | SQL Editor, solo questo file | Tabella con RLS attiva; Q2/Q3: solo policy di select e update per il proprietario | Rollback 7.2-D |
 | 7 | Attivazione della Fase 2 | Secret `NMRE_CAPTURE_DUBIOUS_ALERTS=true` | Sezione "Avvisi dubbi" visibile; AQ15 dopo 48 ore; nessun errore di sincronizzazione | Rollback 7.2-D |
 
 I passi 1 e 1-bis vanno applicati **entrambi** prima del passo 2. Se anche uno
@@ -403,11 +403,11 @@ solo non viene approvato, il passo 2 si distribuisce con
 ### 7.2 Rollback
 | Codice | Cosa annullare | Procedura | Dati |
 |---|---|---|---|
-| A | Migrazione del trigger | Eseguire `supabase/rollback/20261125200000_guard_agency_candidate_notifications.rollback.sql`: ripristina la definizione originale salvata e lo stato di abilitazione; si ferma se il backup manca | Nessun dato toccato; il backup resta |
+| A | Migrazione del trigger | Eseguire `supabase/rollback/20261126004257_guard_agency_candidate_notifications.rollback.sql`: ripristina la definizione originale salvata e lo stato di abilitazione; si ferma se il backup manca | Nessun dato toccato; il backup resta |
 | B | Funzione di sincronizzazione | Dashboard → Edge Functions → `nmre-gmail-scheduled` → ridistribuire la versione precedente (o il commit precedente). In alternativa parziale: `NMRE_KEEP_AGENCY_CANDIDATES=false` | Le righe e lo storico scritti nel frattempo restano: non vanno rimossi |
 | C | Frontend | Revert del commit di merge su `main` | Nessuno |
 | D | Fase 2 | 1) rimuovere `NMRE_CAPTURE_DUBIOUS_ALERTS`; 2) eseguire `supabase/rollback/20261125201000_gmail_dubious_alerts.rollback.sql` (ritira l'accesso dall'app) | Gli avvisi raccolti restano; l'eliminazione della tabella è facoltativa, irreversibile e da approvare |
-| E | Migrazione del trigger dei ribassi | Eseguire `supabase/rollback/20261125202000_guard_agency_price_drop_notifications.rollback.sql`: ripristina la definizione originale e lo stato, rimuove la funzione di supporto se inutilizzata | Storico notifiche intatto; il backup resta |
+| E | Migrazione del trigger dei ribassi | Eseguire `supabase/rollback/20261126004310_guard_agency_price_drop_notifications.rollback.sql`: ripristina la definizione originale e lo stato, rimuove la funzione di supporto se inutilizzata | Storico notifiche intatto; il backup resta |
 
 Ordine dei rollback del database: E prima di A, se si annullano entrambi. Tutti
 i rollback del database sono coperti dai test (§3.2, §3.3, §4.2, §13).
@@ -491,9 +491,9 @@ revoke all on table private.backup_candidati_scartati_20261125 from public, anon
 | `.../_shared/parser.ts` | `propertyEmailDecision()`, `specificPortalListingUrl()` (nessuna regola cambiata) |
 | `.../retention_test.ts`, `property_filter_test.ts`, `dubious_test.ts` | Test |
 | `supabase/functions/nmre-insights-sync/index.ts` | Nessuno scarto automatico dei professionisti (L23) |
-| `supabase/migrations/20261125200000_guard_agency_candidate_notifications.sql` | **Nuovo** · applicato in produzione come versione `20261126004257` (§16) |
-| `supabase/migrations/20261125201000_gmail_dubious_alerts.sql` | **Nuovo** · **non applicato** |
-| `supabase/migrations/20261125202000_guard_agency_price_drop_notifications.sql` | **Nuovo** · applicato in produzione come versione `20261126004310` (§16) |
+| `supabase/migrations/20261126004257_guard_agency_candidate_notifications.sql` | **Nuovo** · applicato in produzione (§16) |
+| `supabase/migrations_pending/20261125201000_gmail_dubious_alerts.sql` | **Nuovo** · **non applicato**, fuori dalle migrazioni applicabili |
+| `supabase/migrations/20261126004310_guard_agency_price_drop_notifications.sql` | **Nuovo** · applicato in produzione (§16) |
 | `supabase/rollback/*.rollback.sql` | **Nuovi** |
 | `supabase/tests/run_migration_tests.sh` | **Nuovo**: test su database usa e getta, rifiuta la produzione |
 | `tests/frontend/recovery_test.mjs` | **Nuovo** |
@@ -852,9 +852,10 @@ modificata perché i file delle migrazioni non vanno toccati senza approvazione.
    `20261125202000_guard_agency_price_drop_notifications` (costante `v_migration` nei
    file). Questi nomi interni **non vanno cambiati**, anche se i file vengono rinominati.
 
-### 16.3 Regole fino al riallineamento
-- Non eseguire `supabase db push` (tanto meno con `--include-all`), `db pull`,
-  `db reset --linked` o `migration repair`.
+### 16.3 Regole (aggiornate dopo il riallineamento del §16.6)
+- Prima di qualsiasi `supabase db push`, eseguire sempre `supabase db push --dry-run`
+  e fermarsi se propone un file inatteso. Restano da evitare `--include-all`,
+  `db pull`, `db reset --linked` e `migration repair`.
 - Ogni migrazione futura si applica solo dal SQL Editor, un file alla volta, come
   per i passi 1 e 1-bis.
 
@@ -941,3 +942,137 @@ Nessun dato va perso: queste righe saranno visibili e recuperabili nel pannello
 «Annunci fuori dalla coda» (gruppo «Scartato con lo stesso link di uno scarto
 precedente») dopo la distribuzione del frontend. Per questo il passo 3 andrebbe
 eseguito presto, dopo la revisione. AQ13 e AQ16 permettono di misurare questi casi.
+
+### 16.6 Riallineamento eseguito nel repository (26/11/2026)
+Passo B del §16.4 eseguito con `git mv`, senza modificare il contenuto dei file
+(verificato con l'impronta SHA-1 prima e dopo):
+
+| Prima | Dopo |
+|---|---|
+| `supabase/migrations/20261125200000_guard_agency_candidate_notifications.sql` | `supabase/migrations/20261126004257_guard_agency_candidate_notifications.sql` |
+| `supabase/migrations/20261125202000_guard_agency_price_drop_notifications.sql` | `supabase/migrations/20261126004310_guard_agency_price_drop_notifications.sql` |
+| `supabase/migrations/20261125201000_gmail_dubious_alerts.sql` | `supabase/migrations_pending/20261125201000_gmail_dubious_alerts.sql` |
+| `supabase/rollback/20261125200000_…rollback.sql` | `supabase/rollback/20261126004257_…rollback.sql` |
+| `supabase/rollback/20261125202000_…rollback.sql` | `supabase/rollback/20261126004310_…rollback.sql` |
+
+- **Nomi interni invariati.** `20261125200000_guard_agency_candidate_notifications` e
+  `20261125202000_guard_agency_price_drop_notifications` restano nelle migrazioni e nei
+  rollback: i backup dei trigger in produzione restano raggiungibili.
+- **Controllo in CI.** `supabase/tests/check_migration_layout.sh` fallisce se un file
+  della Fase 2 torna in `supabase/migrations/`, se una migrazione applicabile tocca
+  `nmre_gmail_avvisi_dubbi`, se mancano le versioni di produzione o se cambiano i nomi
+  interni. La CI esegue anche l'auto-verifica: su una copia con la Fase 2 rimessa nella
+  cartella, il controllo deve fallire.
+- **Il nome dei file coincide con quello indicato dal titolare.** Il passo A (controllo in
+  sola lettura del campo `name` in produzione) e il passo C (`supabase migration list` e
+  `db push --dry-run`) restano da eseguire da parte del titolare: da qui non è stata fatta
+  alcuna operazione su Supabase.
+
+---
+
+## 17. Correzioni dopo la revisione indipendente (26/11/2026)
+
+Ogni correzione è coperta da test automatici in CI. Per ciascuna è stato verificato che i
+test **falliscono** reintroducendo il difetto (mutazione del codice su una copia, oppure
+esecuzione sul codice del commit `858316e`) e passano sul codice corretto.
+
+### 17.1 B1 · Riapertura ripetuta degli annunci scartati
+`discardedNotificationAction()` (`_shared/retention.ts`), usata da
+`applyNotificationToExistingCandidate()` (`_shared/discard_flow.ts`) chiamata da `index.ts`.
+Una notifica su un candidato scartato:
+- **non fa nulla** se è già stata gestita: lo storico contiene già la sua email, perché
+  ogni riapertura e ogni contrassegno registrano ora `source_email_id`;
+- **non fa nulla** se l'email era già acquisita prima dell'ultimo scarto: è una rilettura,
+  e la decisione dell'utente prevale. Lo storico notifiche, con chiave
+  `owner_id + source_email_id`, è la fonte affidabile;
+- **riapre** l'annuncio solo se la notifica è nuova (oppure acquisita dopo l'ultimo scarto e
+  non ancora gestita, per esempio dopo un'interruzione) e porta un ribasso nuovo, cioè un
+  prezzo inferiore all'ultimo già registrato;
+- altrimenti **evidenzia** l'annuncio come «Nuova notifica dopo lo scarto», che resta
+  scartato.
+
+Test (`sync_protection_test.ts`):
+- riapertura, nuovo scarto, tre riletture della stessa email (nessuna azione, storico
+  invariato), nuova email allo stesso prezzo (solo contrassegno) e sua rilettura (nessuna
+  azione), nuova email con nuovo ribasso (riapertura);
+- riaperture registrate dalla versione precedente senza email nello storico;
+- elaborazione interrotta dopo la registrazione della notifica.
+
+Con la regola della v68 i due test principali falliscono.
+
+### 17.2 B2 · Conteggio dopo la presa visione
+- **Funzione.** `recordNotificationAfterDiscard()` conserva tutti i campi del contrassegno,
+  compreso `visto_il`.
+- **Riferimento comune.** Frontend (`nmreNotificationsAfterDiscard`) e funzione
+  (`notificationReviewReference`, `pendingNotificationsAfterDiscard`) usano lo stesso
+  riferimento: il più recente tra ultimo scarto, `visto_il` e ultima voce di storico
+  `notifica_dopo_scarto_vista`. Quest'ultima copre i contrassegni in cui `visto_il` era
+  già andato perso.
+- **Test.** Tre notifiche viste e una sola nuova danno **una** notifica nuova; i
+  contrassegni storici senza `visto_il` vengono gestiti.
+  `frontend_coherence_test.ts` esegue la funzione del pannello estratta da `index.html` e
+  quella di `retention.ts` su 8 casi e verifica che diano lo stesso risultato; sul
+  frontend di `858316e` fallisce.
+
+### 17.3 B3 · Scritture della sincronizzazione protette
+Tutte le scritture di `index.ts` su `annunci_candidati` che dipendono da un valore letto
+passano da `guardedCandidateUpdate()` (`_shared/guarded.ts`):
+- aggiornamento dei candidati esistenti;
+- voce «conservato non riconosciuto»;
+- segni tecnici delle copie storiche;
+- riapertura;
+- contrassegno.
+
+Il meccanismo:
+- **rilettura e ricalcolo:** la funzione rilegge il candidato, ricalcola la modifica e
+  scrive solo se `updated_at` è invariato;
+- **tentativi limitati:** al massimo 3 tentativi;
+- **conflitto persistente:** solleva `CandidateWriteConflict`, il cursore Gmail non avanza
+  e l'email viene rielaborata al ciclo successivo (le operazioni sono idempotenti).
+
+Inoltre una nuova estrazione non cancella più `notifiche_dopo_scarto` e `pagina_pubblica`
+(`preserveStatusHistory`).
+
+Test con una modifica dell'utente tra lettura e scrittura:
+- classificazione manuale;
+- nuovo scarto;
+- recupero;
+- presa visione;
+- conflitto persistente (nessuna scrittura, tentativi limitati).
+
+Senza il controllo su `updated_at`, 5 test falliscono.
+
+### 17.4 B4 · Preparazione all'archiviazione nel frontend
+«Analizza pagina» (`analyzeCandidatePage`) non scrive nel database: propone solo valori
+nei campi della scheda. La scrittura a rischio era `persist` in
+`prepareCandidateForArchive`. Ora:
+- rilegge il candidato prima di scrivere;
+- ricostruisce `dati_estratti` dal valore del database, aggiornando solo `pagina_pubblica`;
+- per i campi che l'utente non ha modificato usa il valore attuale del database, non la
+  copia in memoria;
+- scrive solo se `updated_at` è invariato, con al massimo 3 tentativi e un messaggio di
+  conflitto.
+
+Test (`tests/frontend/archive_persist_test.mjs`, 17 controlli sulla funzione reale):
+- storico e dati scritti dalla sincronizzazione conservati;
+- prezzo aggiornato dalla sincronizzazione non sovrascritto dalla copia in memoria;
+- conflitto risolto con la rilettura;
+- conflitto persistente senza scrittura.
+
+Sul codice di `858316e` falliscono 8 controlli.
+
+### 17.5 Limiti noti
+- **Test della funzione Gmail.** L'orchestrazione completa di `index.ts` (chiamate a Gmail,
+  blocco, cursore) non ha un test end-to-end. I test esercitano le funzioni condivise
+  usate da `index.ts`; le operazioni che le circondano (ricerca della notifica nota,
+  calcolo del ribasso, registrazione della notifica) sono riprodotte nei test seguendo
+  l'ordine del codice.
+- **Ribasso già noto.** Una nuova email che ripete un ribasso già noto (stesso prezzo)
+  non riapre l'annuncio: lo evidenzia come nuova notifica. È una scelta voluta, per non
+  annullare uno scarto a ogni ripetizione dello stesso ribasso.
+- **Scarti senza data.** Gli scarti storici senza data registrata non vengono riaperti
+  dalla rilettura di email già acquisite. Restano recuperabili dal pannello e da ogni
+  notifica nuova.
+- **Distribuzione.** Le correzioni della funzione (B1, B2 lato funzione, B3) **non sono
+  distribuite**: in produzione resta la versione 68 finché non viene approvata e
+  distribuita una nuova versione.

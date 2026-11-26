@@ -15,11 +15,11 @@ if [[ "${PGHOST:-}" == *supabase* || "${DATABASE_URL:-}" == *supabase* ]]; then
 fi
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-GUARD="$ROOT/supabase/migrations/20261125200000_guard_agency_candidate_notifications.sql"
-GUARD_RB="$ROOT/supabase/rollback/20261125200000_guard_agency_candidate_notifications.rollback.sql"
-DUBIOUS="$ROOT/supabase/migrations/20261125201000_gmail_dubious_alerts.sql"
-PRICE="$ROOT/supabase/migrations/20261125202000_guard_agency_price_drop_notifications.sql"
-PRICE_RB="$ROOT/supabase/rollback/20261125202000_guard_agency_price_drop_notifications.rollback.sql"
+GUARD="$ROOT/supabase/migrations/20261126004257_guard_agency_candidate_notifications.sql"
+GUARD_RB="$ROOT/supabase/rollback/20261126004257_guard_agency_candidate_notifications.rollback.sql"
+DUBIOUS="$ROOT/supabase/migrations_pending/20261125201000_gmail_dubious_alerts.sql"
+PRICE="$ROOT/supabase/migrations/20261126004310_guard_agency_price_drop_notifications.sql"
+PRICE_RB="$ROOT/supabase/rollback/20261126004310_guard_agency_price_drop_notifications.rollback.sql"
 DUBIOUS_RB="$ROOT/supabase/rollback/20261125201000_gmail_dubious_alerts.rollback.sql"
 DB="nmre_migration_test_$$"
 

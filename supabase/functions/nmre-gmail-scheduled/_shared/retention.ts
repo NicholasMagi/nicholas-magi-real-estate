@@ -80,9 +80,143 @@ export function sellerFieldsForExisting(
   };
 }
 
-/** Un annuncio scartato in passato torna in revisione quando arriva un ribasso documentato. */
-export function shouldReopenDiscarded(existingStato: unknown, hasPriceDrop: boolean): boolean {
-  return existingStato === "scartato" && hasPriceDrop === true;
+/** Dati necessari per decidere che cosa fare di una notifica su un candidato scartato. */
+export type DiscardedNotificationInput = {
+  /** Stato del candidato appena riletto dal database. */
+  stato: unknown;
+  /** dati_estratti del candidato appena riletto (storico delle decisioni e contrassegno). */
+  datiEstratti: unknown;
+  /** Identificativo dell'email Gmail della notifica (chiave dello storico notifiche). */
+  sourceEmailId: string;
+  /** created_at della notifica se era già nello storico prima di questa elaborazione; null se è nuova. */
+  knownNotificationCreatedAt: string | null;
+  hasPriceDrop: boolean;
+  currentPrice: number | null;
+  /** Ultimo prezzo già registrato per lo stesso candidato da un'altra notifica (null se nessuno). */
+  lastRecordedPrice: number | null;
+};
+
+export type DiscardedNotificationAction = "reopen" | "mark" | "none";
+
+function toTime(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const time = Date.parse(String(value));
+  return Number.isFinite(time) ? time : null;
+}
+function statusHistoryOf(datiEstratti: unknown): Array<Record<string, unknown>> {
+  const base = datiEstratti && typeof datiEstratti === "object" && !Array.isArray(datiEstratti)
+    ? datiEstratti as Record<string, unknown>
+    : {};
+  return Array.isArray(base.storico_stato) ? base.storico_stato as Array<Record<string, unknown>> : [];
+}
+function discardMarkerOf(datiEstratti: unknown): Record<string, unknown> | null {
+  const base = datiEstratti && typeof datiEstratti === "object" && !Array.isArray(datiEstratti)
+    ? datiEstratti as Record<string, unknown>
+    : {};
+  const marker = base.notifiche_dopo_scarto;
+  return marker && typeof marker === "object" && !Array.isArray(marker) ? marker as Record<string, unknown> : null;
+}
+
+export const DISCARD_ACTIONS = ["scartato", "classificato_agenzia_e_scartato"];
+export const SEEN_ACTION = "notifica_dopo_scarto_vista";
+
+/** Data (ms) dell'ultimo scarto registrato nello storico; null per gli scarti senza storico. */
+export function lastDiscardTime(datiEstratti: unknown): number | null {
+  const history = statusHistoryOf(datiEstratti);
+  for (let index = history.length - 1; index >= 0; index--) {
+    if (DISCARD_ACTIONS.includes(String(history[index]?.azione))) return toTime(history[index]?.data);
+  }
+  return null;
+}
+
+/**
+ * Riferimento della revisione delle notifiche dopo lo scarto: il più recente tra
+ * l'ultimo scarto, la presa visione registrata nel contrassegno (visto_il) e l'ultima
+ * voce di storico "notifica_dopo_scarto_vista" (copre i contrassegni storici in cui
+ * visto_il è andato perso). Le notifiche arrivate prima di questo istante non sono
+ * "nuove". La stessa regola è implementata nel frontend (index.html,
+ * nmreNotificationsAfterDiscard) e i test verificano che coincidano.
+ */
+export function notificationReviewReference(datiEstratti: unknown): number | null {
+  const times: number[] = [];
+  const discard = lastDiscardTime(datiEstratti);
+  if (discard !== null) times.push(discard);
+  const seen = toTime(discardMarkerOf(datiEstratti)?.visto_il);
+  if (seen !== null) times.push(seen);
+  const history = statusHistoryOf(datiEstratti);
+  for (let index = history.length - 1; index >= 0; index--) {
+    if (history[index]?.azione === SEEN_ACTION) {
+      const time = toTime(history[index]?.data);
+      if (time !== null) times.push(time);
+      break;
+    }
+  }
+  return times.length ? Math.max(...times) : null;
+}
+
+/**
+ * Numero di notifiche da evidenziare come "nuove dopo lo scarto": stessa logica del
+ * frontend (storico notifiche confrontato con il riferimento, oppure il contrassegno
+ * della sincronizzazione; nel dubbio una notifica in più).
+ */
+export function pendingNotificationsAfterDiscard(
+  datiEstratti: unknown,
+  notificationHistory: Array<{ notified_at?: unknown; created_at?: unknown }>
+): number {
+  const reference = notificationReviewReference(datiEstratti);
+  const timeOf = (entry: { notified_at?: unknown; created_at?: unknown }) => toTime(entry?.notified_at) ?? toTime(entry?.created_at);
+  const after = reference === null ? 0 : notificationHistory.filter(entry => {
+    const time = timeOf(entry);
+    return time !== null && time > reference;
+  }).length;
+  const marker = discardMarkerOf(datiEstratti);
+  const list = marker && Array.isArray(marker.elenco) ? marker.elenco as Array<Record<string, unknown>> : [];
+  const active = !!(marker && marker.da_rivedere === true);
+  const pending = active
+    ? list.filter(entry => { const time = toTime(entry?.data); return reference === null || time === null || time > reference; }).length
+    : 0;
+  const markerOnly = active && !list.length ? 1 : 0;
+  return Math.max(after, pending || markerOnly);
+}
+
+/** La notifica è già stata gestita su questo candidato (riapertura o contrassegno). */
+export function notificationAlreadyHandled(datiEstratti: unknown, sourceEmailId: string): boolean {
+  if (!sourceEmailId) return false;
+  const history = statusHistoryOf(datiEstratti);
+  if (history.some(entry => entry && entry.source_email_id === sourceEmailId)) return true;
+  const marker = discardMarkerOf(datiEstratti);
+  const list = marker && Array.isArray(marker.elenco) ? marker.elenco as Array<Record<string, unknown>> : [];
+  return list.some(entry => entry && entry.source_email_id === sourceEmailId);
+}
+
+/**
+ * Che cosa fare di una notifica su un candidato scartato.
+ * - "none": il candidato non è scartato, oppure la notifica è già stata gestita, oppure
+ *   è una rilettura di un'email già acquisita prima dell'ultimo scarto (la decisione
+ *   dell'utente prevale).
+ * - "reopen": notifica nuova (mai acquisita, o acquisita dopo l'ultimo scarto ma non
+ *   ancora gestita, per esempio dopo un'interruzione) con un ribasso NUOVO: il prezzo è
+ *   inferiore all'ultimo prezzo già registrato.
+ * - "mark": notifica nuova senza un nuovo ribasso: il candidato resta scartato ma viene
+ *   evidenziato nel pannello di recupero.
+ */
+export function discardedNotificationAction(input: DiscardedNotificationInput): DiscardedNotificationAction {
+  if (input.stato !== "scartato") return "none";
+  if (notificationAlreadyHandled(input.datiEstratti, input.sourceEmailId)) return "none";
+  const known = toTime(input.knownNotificationCreatedAt);
+  if (input.knownNotificationCreatedAt !== null && input.knownNotificationCreatedAt !== undefined) {
+    const discard = lastDiscardTime(input.datiEstratti);
+    // Già acquisita: è nuova solo se registrata dopo l'ultimo scarto (elaborazione interrotta).
+    if (known === null || discard === null || known <= discard) return "none";
+  }
+  const newPriceDrop = input.hasPriceDrop === true && input.currentPrice !== null &&
+    (input.lastRecordedPrice === null || input.currentPrice < input.lastRecordedPrice);
+  return newPriceDrop ? "reopen" : "mark";
+}
+
+/** Un annuncio scartato torna in revisione solo per una notifica nuova con un nuovo ribasso. */
+export function shouldReopenDiscarded(input: DiscardedNotificationInput): boolean {
+  return discardedNotificationAction(input) === "reopen";
 }
 
 export type StatusHistoryEntry = {
@@ -93,6 +227,8 @@ export type StatusHistoryEntry = {
   a?: string | null;
   motivo?: string | null;
   regola?: string | null;
+  /** Email che ha causato la voce (riapertura o nuova notifica): evita doppie elaborazioni. */
+  source_email_id?: string | null;
 };
 
 /**
@@ -117,8 +253,16 @@ export function appendStatusHistory(
 }
 
 /**
- * Conserva i dati già estratti quando una nuova estrazione sostituisce
- * dati_estratti: lo storico delle decisioni non deve andare perso.
+ * Chiavi di dati_estratti che non provengono dall'estrazione dell'email e che una
+ * nuova estrazione non deve cancellare: lo storico delle decisioni, il contrassegno
+ * delle notifiche dopo lo scarto e i dati della pagina pubblica salvati dal frontend.
+ */
+export const PRESERVED_EXTRACTED_KEYS = ["storico_stato", "notifiche_dopo_scarto", "pagina_pubblica"];
+
+/**
+ * Conserva i dati già presenti quando una nuova estrazione sostituisce dati_estratti:
+ * le chiavi di PRESERVED_EXTRACTED_KEYS restano quelle del record (l'estrazione
+ * dell'email non le produce); tutto il resto viene dalla nuova estrazione.
  */
 export function preserveStatusHistory(
   previousDatiEstratti: unknown,
@@ -127,8 +271,18 @@ export function preserveStatusHistory(
   const previous = previousDatiEstratti && typeof previousDatiEstratti === "object" && !Array.isArray(previousDatiEstratti)
     ? previousDatiEstratti as Record<string, unknown>
     : {};
-  if (!Array.isArray(previous.storico_stato) || !previous.storico_stato.length) return nextDatiEstratti;
-  return { ...nextDatiEstratti, storico_stato: previous.storico_stato.slice(-STATUS_HISTORY_LIMIT) };
+  let result: Record<string, unknown> = nextDatiEstratti;
+  for (const key of PRESERVED_EXTRACTED_KEYS) {
+    const value = previous[key];
+    if (value === undefined || value === null) continue;
+    if (key === "storico_stato") {
+      if (!Array.isArray(value) || !value.length) continue;
+      result = { ...result, storico_stato: value.slice(-STATUS_HISTORY_LIMIT) };
+    } else {
+      result = { ...result, [key]: value };
+    }
+  }
+  return result;
 }
 
 /** Le email di agenzia vengono conservate (recuperabili) salvo disattivazione esplicita. */
@@ -180,11 +334,106 @@ export function recordNotificationAfterDiscard(
     comune: info.comune ? String(info.comune).slice(0, 120) : null,
     portale: info.portale ? String(info.portale).slice(0, 80) : null
   };
+  // Gli altri campi del contrassegno (per esempio visto_il della presa visione) restano.
   base.notifiche_dopo_scarto = {
+    ...previous,
     conteggio: Number(previous.conteggio || 0) + 1,
     ultima: clean,
     elenco: [...list, clean].slice(-DISCARDED_NOTIFICATION_LIMIT),
     da_rivedere: true
   };
   return base;
+}
+
+/** Prezzo e dati essenziali di una notifica, per le modifiche dei candidati scartati. */
+export type DiscardedNotificationPatchInfo = DiscardedNotificationInfo & { priceDropPercent: number | null };
+
+/** Modifica per riaprire un candidato scartato (da applicare con un aggiornamento protetto). */
+export function reopenDiscardedPatch(current: { dati_estratti?: unknown }, info: DiscardedNotificationPatchInfo, nowIso: string) {
+  return {
+    stato: "da_verificare",
+    dati_estratti: appendStatusHistory(current.dati_estratti, {
+      data: nowIso,
+      origine: "sincronizzazione",
+      azione: "riaperto_per_ribasso",
+      da: "scartato",
+      a: "da_verificare",
+      source_email_id: info.source_email_id,
+      motivo: "Nuovo ribasso documentato" + (info.priceDropPercent !== null ? " (-" + info.priceDropPercent + "%)" : "")
+    }),
+    updated_at: nowIso
+  };
+}
+
+/** Modifica per evidenziare una nuova notifica su un candidato che resta scartato. */
+export function markDiscardedPatch(current: { dati_estratti?: unknown }, info: DiscardedNotificationPatchInfo, nowIso: string) {
+  const { priceDropPercent: _priceDropPercent, ...notice } = info;
+  const marked = recordNotificationAfterDiscard(current.dati_estratti, notice);
+  return {
+    dati_estratti: appendStatusHistory(marked, {
+      data: nowIso,
+      origine: "sincronizzazione",
+      azione: "nuova_notifica_dopo_scarto",
+      source_email_id: info.source_email_id,
+      motivo: "Nuova notifica dello stesso immobile dopo lo scarto"
+    }),
+    updated_at: nowIso
+  };
+}
+
+/** Modifica per un candidato riletto la cui email non è più riconosciuta come avviso. */
+export function keptForReviewPatch(current: RepairCandidate & { dati_estratti?: unknown }, rule: string, nowIso: string) {
+  return {
+    ...processedVersionMark(current),
+    dati_estratti: appendStatusHistory(current.dati_estratti, {
+      data: nowIso,
+      origine: "sincronizzazione",
+      azione: "conservato_non_riconosciuto",
+      regola: rule,
+      motivo: "Email riletta e non più riconosciuta come avviso: il candidato resta nel suo stato per la revisione manuale"
+    }),
+    updated_at: nowIso
+  };
+}
+
+/** Campi della notifica usati per aggiornare un candidato esistente. */
+export type ExistingCandidateRow = {
+  titolo: unknown; comune: unknown; prezzo: unknown; notification_sender: unknown; email_subject: unknown;
+  portale: unknown; url: unknown; url_originale: unknown; data_pubblicazione: unknown; tipologia_immobile: unknown;
+  superficie_mq: unknown; locali: unknown; camere: unknown; bagni: unknown; dati_fonte: unknown;
+  dati_estratti: Record<string, unknown>; data_extraction_version: unknown; tipo_venditore: SellerType;
+  seller_confidence: number; seller_evidence: string; seller_classification_version: unknown; listing_key?: unknown;
+};
+
+/**
+ * Modifica di un candidato già presente quando arriva una sua notifica, calcolata dal
+ * valore APPENA RILETTO del candidato (aggiornamento protetto): un candidato in coda
+ * riceve i dati della nuova estrazione conservando lo storico delle decisioni; la
+ * classificazione manuale non viene mai toccata; nessun declassamento ad "Agenzia".
+ * Gli scartati e gli archiviati non vengono aggiornati qui.
+ */
+export function existingCandidatePatch(
+  current: { stato?: unknown; seller_manual_override?: unknown; tipo_venditore?: unknown; dati_estratti?: unknown; listing_key?: unknown },
+  row: ExistingCandidateRow,
+  nowIso: string
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = { deduplication_version: 1, updated_at: nowIso };
+  if (current.stato === "da_verificare") {
+    Object.assign(patch, {
+      titolo: row.titolo, comune: row.comune, prezzo: row.prezzo,
+      notification_sender: row.notification_sender, email_subject: row.email_subject,
+      portale: row.portale, url: row.url, url_originale: row.url_originale,
+      data_pubblicazione: row.data_pubblicazione, tipologia_immobile: row.tipologia_immobile,
+      superficie_mq: row.superficie_mq, locali: row.locali, camere: row.camere, bagni: row.bagni,
+      dati_fonte: row.dati_fonte,
+      dati_estratti: preserveStatusHistory(current.dati_estratti, row.dati_estratti),
+      data_extraction_version: row.data_extraction_version
+    });
+    const sellerFields = sellerFieldsForExisting(current, {
+      classification: row.tipo_venditore, confidence: row.seller_confidence, evidence: row.seller_evidence
+    });
+    if (sellerFields) Object.assign(patch, sellerFields, { seller_classification_version: row.seller_classification_version });
+  }
+  if (row.listing_key && !current.listing_key) patch.listing_key = row.listing_key;
+  return patch;
 }

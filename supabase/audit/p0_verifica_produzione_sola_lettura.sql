@@ -653,7 +653,8 @@ select count(*) filter (where (dati_estratti->'notifiche_dopo_scarto'->>'da_rive
 
 
 -- AQ17 · Trigger di notifica push: verifica PRIMA delle migrazioni ------
--- 20261125200000 (new_opportunities) e 20261125202000 (price_drop).
+-- 20261126004257 (new_opportunities; file originale 20261125200000) e
+-- 20261126004310 (price_drop; file originale 20261125202000).
 -- La definizione del trigger è schema, non dati. Della funzione si
 -- restituiscono solo indicatori: il codice resta in produzione.
 -- Atteso: un solo trigger di notifica per ciascuna tabella, AFTER, FOR EACH
@@ -686,7 +687,7 @@ select c.relname as tabella,
 --   select pg_get_functiondef('<schema>.<funzione>'::regproc);
 
 
--- AQ17b · Prerequisiti tecnici delle migrazioni 20261125200000 e 20261125202000
+-- AQ17b · Prerequisiti tecnici delle migrazioni 20261126004257 e 20261126004310
 -- Sola lettura. Una sola riga di risultato. Atteso PRIMA delle migrazioni:
 --   funzione_notifica_candidati_esiste = true
 --   trigger_che_usano_funzione_candidati = 1

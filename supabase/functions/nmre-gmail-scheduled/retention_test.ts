@@ -43,10 +43,12 @@ Deno.test("un candidato già Agenzia può restare Agenzia e i nuovi privati veng
 });
 
 Deno.test("uno scarto precedente non nasconde un nuovo ribasso",()=>{
-  assertEquals(shouldReopenDiscarded("scartato",true),true,"scartato + ribasso: torna in revisione");
-  assertEquals(shouldReopenDiscarded("scartato",false),false,"scartato senza ribasso: resta scartato, la notifica è conservata");
-  assertEquals(shouldReopenDiscarded("da_verificare",true),false,"già in coda");
-  assertEquals(shouldReopenDiscarded("confermato",true),false,"già in archivio: non torna in coda");
+  const base={datiEstratti:{storico_stato:[{data:"2026-11-20T10:00:00Z",origine:"utente",azione:"scartato"}]},
+    sourceEmailId:"m-nuova",knownNotificationCreatedAt:null,currentPrice:180000,lastRecordedPrice:200000};
+  assertEquals(shouldReopenDiscarded({...base,stato:"scartato",hasPriceDrop:true}),true,"scartato + nuova notifica con nuovo ribasso: torna in revisione");
+  assertEquals(shouldReopenDiscarded({...base,stato:"scartato",hasPriceDrop:false}),false,"scartato senza ribasso: resta scartato, la notifica è conservata");
+  assertEquals(shouldReopenDiscarded({...base,stato:"da_verificare",hasPriceDrop:true}),false,"già in coda");
+  assertEquals(shouldReopenDiscarded({...base,stato:"confermato",hasPriceDrop:true}),false,"già in archivio: non torna in coda");
 });
 
 Deno.test("rielaborazione: idoneità invariata rispetto al filtro storico",()=>{
@@ -144,4 +146,15 @@ Deno.test("l'elenco delle notifiche dopo lo scarto è limitato, il conteggio no"
   const record=value.notifiche_dopo_scarto as any;
   assertEquals(record.elenco.length,DISCARDED_NOTIFICATION_LIMIT,"elenco limitato");
   assertEquals(record.conteggio,DISCARDED_NOTIFICATION_LIMIT+4,"conteggio completo");
+});
+
+Deno.test("una nuova estrazione non cancella i dati scritti dal frontend",()=>{
+  const previous={storico_stato:[{data:"t",origine:"utente",azione:"scartato"}],
+    notifiche_dopo_scarto:{da_rivedere:false,visto_il:"2026-11-15T10:00:00Z"},
+    pagina_pubblica:{evidenza:"pagina analizzata"},campi_immobile:{prezzo:150000}};
+  const next=preserveStatusHistory(previous,{campi_immobile:{prezzo:140000}}) as Record<string, any>;
+  assertEquals(next.campi_immobile.prezzo,140000,"i dati estratti dall'email vengono aggiornati");
+  assertEquals(next.storico_stato.length,1,"storico delle decisioni conservato");
+  assertEquals(next.notifiche_dopo_scarto.visto_il,"2026-11-15T10:00:00Z","contrassegno e presa visione conservati");
+  assertEquals(next.pagina_pubblica.evidenza,"pagina analizzata","dati della pagina pubblica conservati");
 });

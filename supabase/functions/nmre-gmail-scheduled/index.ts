@@ -6,10 +6,11 @@ import {
 import type { PropertyEmailRule } from "./_shared/parser.ts";
 import { collectHistoryMessageIds } from "./_shared/history.ts";
 import {
-  appendStatusHistory, isNewNotificationAfterDiscard, isRepairEligible, keepAgencyCandidates,
-  preserveStatusHistory, processedVersionMark, recordNotificationAfterDiscard,
-  sellerFieldsForExisting, shouldReopenDiscarded
+  existingCandidatePatch, isRepairEligible, keepAgencyCandidates, keptForReviewPatch, processedVersionMark
 } from "./_shared/retention.ts";
+import type { DiscardedNotificationPatchInfo, ExistingCandidateRow } from "./_shared/retention.ts";
+import { guardedCandidateUpdate } from "./_shared/guarded.ts";
+import { applyNotificationToExistingCandidate } from "./_shared/discard_flow.ts";
 import {
   captureDubiousAlertsEnabled, dubiousAlertEvidence, promotedSellerClassification
 } from "./_shared/dubious.ts";
@@ -657,23 +658,12 @@ export default {
           // Un'email che ha superato il filtro ma non è stata trattenuta è stata
           // classificata come agenzia con NMRE_KEEP_AGENCY_CANDIDATES=false.
           const rule = !filterRule || filterRule === "accettata" ? "classificata_agenzia" : filterRule;
-          const { error: keepError } = await ctx.supabaseAdmin
-            .from("annunci_candidati")
-            .update({
-              ...processedVersionMark(candidate),
-              dati_estratti: appendStatusHistory(candidate.dati_estratti, {
-                data: new Date().toISOString(),
-                origine: "sincronizzazione",
-                azione: "conservato_non_riconosciuto",
-                regola: rule,
-                motivo: "Email riletta e non più riconosciuta come avviso: il candidato resta nel suo stato per la revisione manuale"
-              }),
-              updated_at: new Date().toISOString()
-            })
-            .eq("owner_id", owner)
-            .eq("id", candidate.id);
-          if (keepError) throw new Error("Aggiornamento delle notifiche non riconosciute non riuscito");
-          keptForReview++;
+          // Aggiornamento protetto: la voce di storico si aggiunge al valore appena riletto.
+          const kept = await guardedCandidateUpdate(ctx.supabaseAdmin, owner, String(candidate.id),
+            "id,dati_estratti,deduplication_version,data_extraction_version,seller_classification_version,updated_at",
+            (current: any) => keptForReviewPatch(current, rule, new Date().toISOString()));
+          if (kept.status === "error") throw new Error("Aggiornamento delle notifiche non riconosciute non riuscito");
+          if (kept.status === "updated") keptForReview++;
         }
       }
 
@@ -784,61 +774,16 @@ export default {
 
         if (existingCandidate) {
           candidateId = String(existingCandidate.id);
-          const candidateUpdate: Record<string, unknown> = {
-            deduplication_version: 1,
-            updated_at: new Date().toISOString()
-          };
-
-          // I record già scartati o già trasferiti nell'archivio non vengono
-          // aggiornati qui. La notifica viene comunque conservata nello storico e,
-          // se documenta un ribasso, il candidato scartato torna in revisione
-          // (vedi shouldReopenDiscarded più avanti).
-          if (existingCandidate.stato === "da_verificare") {
-            Object.assign(candidateUpdate, {
-              titolo: row.titolo,
-              comune: row.comune,
-              prezzo: row.prezzo,
-              notification_sender: row.notification_sender,
-              email_subject: row.email_subject,
-              portale: row.portale,
-              url: row.url,
-              url_originale: row.url_originale,
-              data_pubblicazione: row.data_pubblicazione,
-              tipologia_immobile: row.tipologia_immobile,
-              superficie_mq: row.superficie_mq,
-              locali: row.locali,
-              camere: row.camere,
-              bagni: row.bagni,
-              dati_fonte: row.dati_fonte,
-              // La nuova estrazione sostituisce i dati estratti ma conserva lo
-              // storico delle decisioni (storico_stato).
-              dati_estratti: preserveStatusHistory(existingCandidate.dati_estratti, row.dati_estratti),
-              data_extraction_version: row.data_extraction_version
-            });
-            // Le classificazioni manuali non vengono toccate; un candidato in coda
-            // non viene mai declassato automaticamente ad "Agenzia".
-            const sellerFields = sellerFieldsForExisting(existingCandidate, {
-              classification: row.tipo_venditore,
-              confidence: row.seller_confidence,
-              evidence: row.seller_evidence
-            });
-            if (sellerFields) {
-              Object.assign(candidateUpdate, sellerFields, {
-                seller_classification_version: row.seller_classification_version
-              });
-            }
-          }
-
-          if (row.listing_key && !existingCandidate.listing_key) {
-            candidateUpdate.listing_key = row.listing_key;
-          }
-
-          const { data: updatedRows, error: updateError } = await ctx.supabaseAdmin
-            .from("annunci_candidati")
-            .update(candidateUpdate)
-            .eq("owner_id", owner)
-            .eq("id", candidateId)
-            .select("id");
+          // Aggiornamento protetto: la modifica è calcolata dal candidato appena riletto
+          // (stato, classificazione manuale, storico, dati della pagina) e scritta solo se
+          // il record non è cambiato nel frattempo. Gli scartati e gli archiviati
+          // ricevono solo i segni tecnici; la notifica resta nello storico e la decisione
+          // su ribassi e nuove notifiche viene presa più avanti.
+          const existingResult = await guardedCandidateUpdate(ctx.supabaseAdmin, owner, candidateId,
+            "id,stato,seller_manual_override,tipo_venditore,dati_estratti,listing_key,updated_at",
+            (current: any) => existingCandidatePatch(current, row as unknown as ExistingCandidateRow, new Date().toISOString()));
+          const updateError = existingResult.status === "error" ? existingResult.error : null;
+          if (existingResult.status === "missing") throw new Error("Il candidato da aggiornare non esiste più");
           if (updateError) {
             // Un altro ciclo potrebbe aver associato la stessa scheda nello stesso istante.
             if (updateError.code !== "23505") {
@@ -854,8 +799,8 @@ export default {
               if (raceError || !raced) throw new Error("Conflitto durante la deduplicazione dell'immobile");
               candidateId = String(raced.id);
             }
-          } else {
-            updated += updatedRows?.length || 0;
+          } else if (existingResult.status === "updated") {
+            updated++;
           }
 
           // La riga email legacy (copia storica dello stesso immobile) resta intatta
@@ -863,12 +808,10 @@ export default {
           // segno resterebbe idonea alla rielaborazione e verrebbe riletta da
           // Gmail a ogni sincronizzazione.
           if (currentCandidate && String(currentCandidate.id) !== candidateId) {
-            const { error: markError } = await ctx.supabaseAdmin
-              .from("annunci_candidati")
-              .update(processedVersionMark(currentCandidate))
-              .eq("owner_id", owner)
-              .eq("id", currentCandidate.id);
-            if (markError) throw new Error("Aggiornamento dello stato di deduplicazione non riuscito");
+            const legacyMark = await guardedCandidateUpdate(ctx.supabaseAdmin, owner, String(currentCandidate.id),
+              "id,deduplication_version,data_extraction_version,seller_classification_version,updated_at",
+              (current: any) => processedVersionMark(current));
+            if (legacyMark.status === "error") throw new Error("Aggiornamento dello stato di deduplicazione non riuscito");
           }
         } else {
           // explicit_price_reduction is an internal parsing value, not a database column.
@@ -919,7 +862,10 @@ export default {
         // Il vecchio prezzo viene memorizzato solo se dichiarato dal portale
         // oppure se una notifica precedente dello stesso annuncio prova un importo maggiore.
         let previousPrice: number | null = row.explicit_price_reduction?.previousPrice ?? null;
-        if (previousPrice === null && Number(row.prezzo) > 0) {
+        // Ultimo prezzo già registrato da un'altra notifica dello stesso candidato: serve
+        // anche a capire se un ribasso è NUOVO rispetto a quanto già noto.
+        let lastRecordedPrice: number | null = null;
+        if ((previousPrice === null && Number(row.prezzo) > 0) || existingCandidate) {
           const { data: priorSnapshot, error: priorSnapshotError } = await ctx.supabaseAdmin
             .from("annunci_candidati_notifiche")
             .select("listing_price")
@@ -933,7 +879,8 @@ export default {
             .maybeSingle();
           if (priorSnapshotError) throw new Error("Lettura dello storico prezzi non riuscita");
           const lastPrice = Number(priorSnapshot?.listing_price);
-          if (Number.isFinite(lastPrice) && lastPrice > Number(row.prezzo)) {
+          if (priorSnapshot && Number.isFinite(lastPrice) && lastPrice > 0) lastRecordedPrice = lastPrice;
+          if (previousPrice === null && Number(row.prezzo) > 0 && Number.isFinite(lastPrice) && lastPrice > Number(row.prezzo)) {
             const historicalDropPercent = ((lastPrice - Number(row.prezzo)) / lastPrice) * 100;
             // Le vecchie notifiche possono contenere prezzi estratti male:
             // un calo superiore al 50% non viene attribuito senza conferma esplicita del portale.
@@ -949,17 +896,20 @@ export default {
           ? Math.round((priceDropAmount! / previousPrice!) * 10000) / 100
           : null;
 
-        // Per un candidato scartato serve sapere se la notifica è nuova o una rilettura.
-        let notificationAlreadyRecorded = true;
-        if (existingCandidate?.stato === "scartato") {
+        // Per un candidato già esistente serve sapere se la notifica era già acquisita
+        // (rilettura della stessa email) e quando: lo storico notifiche è la fonte
+        // affidabile (chiave owner_id + source_email_id).
+        let knownNotificationCreatedAt: string | null = null;
+        if (existingCandidate) {
           const { data: knownNotification, error: knownNotificationError } = await ctx.supabaseAdmin
             .from("annunci_candidati_notifiche")
-            .select("source_email_id")
+            .select("source_email_id,created_at")
             .eq("owner_id", owner)
             .eq("source_email_id", row.source_email_id)
             .maybeSingle();
           if (knownNotificationError) throw new Error("Verifica dello storico notifiche non riuscita");
-          notificationAlreadyRecorded = !!knownNotification;
+          // Una notifica già registrata senza data viene trattata come molto vecchia (nessuna riapertura).
+          knownNotificationCreatedAt = knownNotification ? String(knownNotification.created_at || "1970-01-01T00:00:00Z") : null;
         }
 
         const { error: notificationError } = await ctx.supabaseAdmin
@@ -984,59 +934,28 @@ export default {
         notificationEventsLinked++;
         if (forcedIds.has(row.source_email_id)) promotedCandidateByEmail.set(row.source_email_id, candidateId);
 
-        // Uno scarto precedente non deve nascondere un nuovo ribasso: il candidato
-        // torna "da verificare" con la motivazione registrata. Nessun dato viene
-        // rimosso; la scelta resta reversibile dall'interfaccia.
-        if (existingCandidate && shouldReopenDiscarded(existingCandidate.stato, hasPriceDrop)) {
-          const { data: reopened, error: reopenError } = await ctx.supabaseAdmin
-            .from("annunci_candidati")
-            .update({
-              stato: "da_verificare",
-              dati_estratti: appendStatusHistory(existingCandidate.dati_estratti, {
-                data: new Date().toISOString(),
-                origine: "sincronizzazione",
-                azione: "riaperto_per_ribasso",
-                da: "scartato",
-                a: "da_verificare",
-                motivo: "Nuovo ribasso documentato" + (priceDropPercent !== null ? " (-" + priceDropPercent + "%)" : "")
-              }),
-              updated_at: new Date().toISOString()
-            })
-            .eq("owner_id", owner)
-            .eq("id", candidateId)
-            .eq("stato", "scartato")
-            .select("id");
-          if (reopenError) throw new Error("Riapertura del candidato con ribasso non riuscita");
-          reopenedOnPriceDrop += reopened?.length || 0;
-        } else if (existingCandidate && isNewNotificationAfterDiscard(existingCandidate.stato, notificationAlreadyRecorded)) {
-          // Nuova notifica senza ribasso su un annuncio scartato: il candidato resta
-          // scartato, ma la notifica viene evidenziata nel pannello di recupero.
-          const marked = recordNotificationAfterDiscard(existingCandidate.dati_estratti, {
+        // Notifiche su un candidato scartato. La decisione è presa sul valore appena
+        // riletto (aggiornamento protetto) e non si ripete per la stessa email:
+        // - nuova notifica con un NUOVO ribasso → il candidato torna "da verificare";
+        // - nuova notifica senza nuovo ribasso → resta scartato ma viene evidenziato;
+        // - rilettura di un'email già acquisita prima dell'ultimo scarto, o già gestita →
+        //   nessuna modifica: la decisione dell'utente prevale.
+        if (existingCandidate) {
+          const patchInfo: DiscardedNotificationPatchInfo = {
             data: row.data_pubblicazione || new Date().toISOString(),
             source_email_id: row.source_email_id,
             prezzo: currentPrice,
             ribasso_percentuale: priceDropPercent,
             titolo: row.titolo,
             comune: row.comune,
-            portale: row.portale
+            portale: row.portale,
+            priceDropPercent
+          };
+          const outcome = await applyNotificationToExistingCandidate(ctx.supabaseAdmin, owner, {
+            candidateId, knownNotificationCreatedAt, hasPriceDrop, currentPrice, lastRecordedPrice, info: patchInfo
           });
-          const { error: markNotificationError } = await ctx.supabaseAdmin
-            .from("annunci_candidati")
-            .update({
-              dati_estratti: appendStatusHistory(marked, {
-                data: new Date().toISOString(),
-                origine: "sincronizzazione",
-                azione: "nuova_notifica_dopo_scarto",
-                motivo: "Nuova notifica dello stesso immobile dopo lo scarto"
-              }),
-              updated_at: new Date().toISOString()
-            })
-            .eq("owner_id", owner)
-            .eq("id", candidateId)
-            .eq("stato", "scartato");
-          if (markNotificationError) throw new Error("Registrazione della notifica dopo lo scarto non riuscita");
-          existingCandidate.dati_estratti = marked;
-          notificationsAfterDiscard++;
+          if (outcome.written && outcome.action === "reopen") reopenedOnPriceDrop++;
+          if (outcome.written && outcome.action === "mark") notificationsAfterDiscard++;
         }
 
         // Archivia solo i privati con prova esplicita ad alta affidabilita o verifica manuale gia salvata.

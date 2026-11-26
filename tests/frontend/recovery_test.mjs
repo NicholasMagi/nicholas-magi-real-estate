@@ -21,7 +21,7 @@ function grab(name) {
 }
 const names = ["nmreTime", "nmreNormalizeRecoveryRow", "nmreFetchAllById", "nmreFetchAllPages", "validUrl", "isSpecificCandidateUrl", "canonicalCandidateUrl", "nmreAppendStatusHistory",
   "nmreLastStatusEntry", "nmreDiscardEntry", "nmreAgencyDecisionOrigin", "candidateRecoveryGroup",
-  "nmreNotificationsAfterDiscard", "nmreAgencyReopenUpdates"];
+  "nmreLastSeenEntry", "nmreNotificationsAfterDiscard", "nmreAgencyReopenUpdates"];
 const api = new Function(
   'const NMRE_PAGE_SIZE=1000;const NMRE_STATUS_HISTORY_LIMIT=50;const NMRE_DISCARD_ACTIONS=["scartato","classificato_agenzia_e_scartato"];' +
   names.map(grab).join("\n") + ";return {" + names.join(",") + "};"
