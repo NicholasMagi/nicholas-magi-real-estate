@@ -61,7 +61,9 @@ Deno.test("12 · notifica da verificare: link a ogni annuncio plausibile e alla 
   eq(links.includes(digest.searchUrl!), true, "link alla pagina dei risultati");
   eq(ui.nmreCandidateListingUrl(row), digest.searchUrl, "il collegamento principale della notifica apre la pagina dei risultati");
   eq(ui.nmreCandidateListingLabel(row), "Apri ricerca Subito", "la pagina generale non viene etichettata come annuncio specifico");
-  eq(links.every(link => subitoAdId(link)), true, "ogni collegamento della lista apre una scheda specifica");
+  const listingLinks = links.filter(link => subitoAdId(link));
+  eq(listingLinks.length, 4, "un link diretto per ogni annuncio plausibile");
+  eq(listingLinks.every(link => !!subitoAdId(link)), true, "ogni collegamento agli annunci è specifico");
   eq(/Apri questo annuncio/.test(markup), true, "ogni risultato ha un'azione esplicita per aprire il proprio annuncio");
   eq(ui.isSpecificCandidateUrl(digest.searchUrl), false, "la pagina dei risultati non è presentata come annuncio specifico");
 });
