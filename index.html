@@ -1256,11 +1256,11 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
       <button class="secondary" id="refreshCandidates" type="button">Aggiorna email</button>
     </div>
   </div>
-  <p class="candidate-inbox-intro">Qui trova soltanto le email immobiliari ancora da verificare. Quando conferma che il venditore è un privato, NMRE trasferisce l’immobile nell’Archivio; i privati riconosciuti automaticamente con prove affidabili vengono archiviati senza passare da questa coda. Le agenzie e le email scartate vengono escluse.</p>
+  <p class="candidate-inbox-intro">Qui trova le email immobiliari da verificare e gli annunci importati dalle Sue ricerche Subito. Per queste importazioni, il venditore viene preclassificato come privato in base al filtro della ricerca; se la singola scheda indica un inserzionista professionale, NMRE lo segnala e lascia il venditore da verificare. Gli annunci restano in questa coda finché decide di archiviarli o scartarli.</p>
   <details class="crm candidate-recovery subito-browser-import" id="subitoBrowserImportPanel">
     <summary>Importa annunci da una pagina Subito aperta nel browser</summary>
-    <p class="hint">Dalla pagina dei risultati Subito copi i dati con lo script di acquisizione e li incolli qui. NMRE prepara un'anteprima, confronta ogni ID con Opportunità e Archivio e non modifica i record già presenti. Le schede importate restano «Da verificare»: la novità e il venditore non sono considerati dimostrati.</p>
-    <p class="hint">L'importazione crea una normale opportunità e la relativa notifica. Selezioni soltanto gli annunci che desidera acquisire; i possibili duplicati vengono evidenziati e non selezionati automaticamente.</p>
+    <p class="hint">Usi questo importatore con le ricerche Subito in cui ha già applicato il filtro per i venditori privati. NMRE preclassifica il venditore come «Privato»; se la singola scheda segnala un inserzionista professionale, il venditore resta «Da verificare». La novità dell’annuncio non viene dedotta dal filtro.</p>
+    <p class="hint">L’importazione crea una normale opportunità e la relativa notifica. I duplicati esatti vengono esclusi; i possibili duplicati sono evidenziati e non selezionati automaticamente. L’annuncio non viene trasferito automaticamente nell’Archivio.</p>
     <label for="subitoBrowserPayload">Dati copiati dalla Console di Subito</label>
     <textarea id="subitoBrowserPayload" rows="7" placeholder="Incolli qui il JSON copiato dalla pagina dei risultati Subito"></textarea>
     <div class="candidate-actions subito-browser-import-actions">
@@ -5391,9 +5391,13 @@ function nmreBuildSubitoBrowserCandidate(item,meta,ownerId,batchId){
     locali:item.rooms,
     camere:null,
     bagni:null,
-    tipo_venditore:"Da verificare",
-    seller_confidence:0,
-    seller_evidence:"Acquisizione dalla pagina Subito aperta nel browser. Novità non dimostrata; verificare la scheda e l'identità del venditore prima di confermare.",
+    tipo_venditore:item.advertiser_company===true?"Da verificare":"Privato",
+    seller_confidence:item.advertiser_company===true?0:item.advertiser_company===false?95:85,
+    seller_evidence:item.advertiser_company===true
+      ?"La scheda Subito indica un inserzionista professionale, in contrasto con il filtro privati della ricerca: verificare prima di archiviare."
+      :item.advertiser_company===false
+        ?"Subito indica un inserzionista privato; la ricerca di origine è già filtrata per venditori privati."
+        :"Ricerca Subito di origine configurata con filtro per venditori privati, come confermato dall’utente; la scheda non espone un indicatore individuale del tipo inserzionista.",
     portale:"Subito",
     url:item.url,
     url_originale:meta.searchUrl,
@@ -5404,7 +5408,7 @@ function nmreBuildSubitoBrowserCandidate(item,meta,ownerId,batchId){
     dedup_key:"subito:"+item.id,
     stato:"da_verificare",
     data_extraction_version:6,
-    seller_classification_version:3,
+    seller_classification_version:4,
     deduplication_version:1,
     listing_key:listingKey,
     dati_fonte:{
@@ -5417,7 +5421,9 @@ function nmreBuildSubitoBrowserCandidate(item,meta,ownerId,batchId){
       url_ricerca:meta.searchUrl,
       captured_at:meta.capturedAt,
       annunci_letti:meta.totalReported,
-      browser_import:true
+      browser_import:true,
+      seller_filter_applied:true,
+      seller_filter:"privati"
     },
     dati_estratti:{
       riduzione_prezzo:null,
@@ -5427,6 +5433,8 @@ function nmreBuildSubitoBrowserCandidate(item,meta,ownerId,batchId){
         immagini:item.images,pubblicato_il:item.published_at,
         inserzionista_professionale:item.advertiser_company,
         fonte_dati:"browser_next_data",
+        filtro_venditore:"privati",
+        venditore_preclassificato_da_filtro:item.advertiser_company!==true,
         dettagli_completi:!!(item.title&&item.location&&item.price!==null&&item.surface_mq!==null),
         novita_non_dimostrata:true,
         motivo_novita:"acquisizione_browser_non_dimostrabile"
@@ -5478,7 +5486,7 @@ function nmreRenderSubitoBrowserPreview(){
         +'<td>'+safe(published)+'</td><td>'+status+'</td></tr>';
     }).join("")
     +'</tbody></table></div>'
-    +'<p class="subito-browser-preview-note">Le schede selezionate saranno create come «Da verificare». Nessuna viene considerata nuova con certezza, nessun venditore viene riconosciuto automaticamente e nessun immobile passa direttamente nell’Archivio.</p>';
+    +'<p class="subito-browser-preview-note">Le schede selezionate entrano in «Nuove opportunità». Il venditore è preclassificato come «Privato» in base al filtro della ricerca, salvo che la singola scheda Subito indichi un inserzionista professionale. La data di pubblicazione e la novità dell’annuncio non vengono inventate; nessun immobile passa direttamente nell’Archivio.</p>';
   $("subitoBrowserSelectSafe").disabled=!state.items.some(entry=>!entry.exact&&!entry.possible&&!entry.imported);
   $("subitoBrowserImportSelected").disabled=!state.items.some(entry=>!entry.exact&&!entry.imported&&target.querySelector('[data-subito-browser-id="'+entry.item.id+'"]')?.checked);
 }
@@ -5530,7 +5538,8 @@ async function nmreImportSelectedSubitoBrowserItems(){
   const selectedIds=new Set([...target.querySelectorAll("[data-subito-browser-id]:checked")].map(input=>input.dataset.subitoBrowserId));
   const selected=state.items.filter(entry=>selectedIds.has(entry.item.id)&&!entry.exact&&!entry.imported);
   if(!selected.length)return;
-  const confirmed=confirm("Conferma l'importazione di "+selected.length+" annunci come «Da verificare»?\n\nI record esistenti non verranno modificati. La normale notifica di nuova opportunità verrà generata per ogni scheda creata.");
+  const professionalConflicts=selected.filter(entry=>entry.item.advertiser_company===true).length;
+  const confirmed=confirm("Conferma l'importazione di "+selected.length+" annunci nelle «Nuove opportunità»?\n\nIl filtro della ricerca li classifica come Privato; "+professionalConflicts+" annunci indicati da Subito come professionali resteranno Da verificare. La novità dell'annuncio non è dimostrata. I record esistenti non verranno modificati e verrà generata la normale notifica per ogni scheda creata.");
   if(!confirmed)return;
   const button=$("subitoBrowserImportSelected");
   button.disabled=true;
@@ -5556,7 +5565,7 @@ async function nmreImportSelectedSubitoBrowserItems(){
   }
   nmreRenderSubitoBrowserPreview();
   await loadCandidates({force:true});
-  $("subitoBrowserMsg").textContent=inserted+" annunci importati come «Da verificare»"
+  $("subitoBrowserMsg").textContent=inserted+" annunci importati nelle «Nuove opportunità»"
     +(duplicates?" · "+duplicates+" duplicati ignorati":"")
     +(failure?" · Interruzione: "+failure:"")
     +". Nessun record preesistente è stato sovrascritto.";
