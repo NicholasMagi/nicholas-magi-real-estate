@@ -1168,6 +1168,10 @@ a Ancona e provincia ha 3 nuovi annunci per te». L'email non contiene i tre imm
 contiene il pulsante «Vedi i nuovi annunci», che porta alla pagina dei risultati.
 
 ### 19.1 Causa
+> **Correzione (§20.1):** sull'email reale la causa del punto 1 è diversa: il filtro
+> scarta l'email per la riga «Ricerca salvata:» della parte di testo
+> (`esclusione_nel_testo`). La ricostruzione qui sotto vale per la fixture sintetica.
+
 Riprodotta con la fixture dell'email (`fixtures/subito_saved_search_email.html`):
 1. **Email scartata dal filtro.** `listingUrls()` dà lo stesso punteggio a tutti i link
    Subito e sceglie il primo, cioè quello del logo (homepage). Il filtro esclude quindi
@@ -1287,3 +1291,67 @@ degli annunci recuperati.
   quella ricerca. Se tutti gli annunci di un'email erano già noti e non è rimasta una
   riga riepilogativa, l'email successiva risulterà da verificare: degrada verso la
   verifica, senza perdite.
+
+## 20. Verifica su email e pagina reali di Subito e correzioni (26/11/2026)
+
+Riferimenti: email reale del 26/11/2026 alle 09:24 («Appartamenti a Ancona e provincia
+ha 3 nuovi annunci per te», SPF/DKIM/DMARC superati) e pagina dei risultati aperta dal
+pulsante, salvata dal titolare. Email precedente della stessa ricerca: 25/11/2026 alle
+09:24. Fixture ripulite: `subito_real_email.html`/`.txt`, `subito_real_results_page.html`
+(rimossi nomi, telefoni e ID degli inserzionisti, `kxconfid` personale, token di
+tracciamento, ID di sessione; destinatario assente).
+
+### 20.1 Cosa ha mostrato il materiale reale
+- **Causa reale dell'esclusione:** la parte di testo dell'email contiene «Ricerca
+  salvata:»; il filtro la tratta come conferma di salvataggio (`esclusione_nel_testo`).
+- **Link:** il pulsante punta direttamente a www.subito.it (nessun redirect); Subito
+  reindirizza `?advt=0%2C2` a `/da-privati/`, mantenendo `kxconfid`.
+- **Pagina:** risultati in `props.pageProps.initialState.items.originalList` (30 su 263),
+  accanto a `galleryList` e `boostedItems` (vetrina, promossi). Il marcatore «datadome» è
+  presente anche nella pagina normale.
+- **Ricerca `advt=0,2`:** comprende privati (tipo 0) e professionisti (tipo 2): 4 annunci
+  su 30 sono di professionisti. L'etichetta «Inserzionista: Privato» non è una prova.
+- **Date:** la data è quella dell'ultima pubblicazione: alcuni annunci con ID vecchi hanno
+  date recenti (ripubblicati).
+- **Conteggio:** tra il 25/11 alle 09:24 e il 26/11 alle 09:24 la pagina ha **6**
+  annunci (3 privati, 3 professionisti); Subito ne dichiara **3**. Non ci sono prove che
+  Subito conti solo i privati, né dell'ora esatta del suo conteggio: la novità non è
+  dimostrabile e la notifica resta «da verificare» con i 6 link.
+
+### 20.2 Correzioni
+| Correzione | Dettaglio |
+|---|---|
+| Archivio | Prima di inserire un annuncio nuovo si controlla la tabella `annunci` per ID Subito (`listing_key` e `url`), compresi gli immobili inseriti a mano e quelli eliminati. Se il confronto fallisce, l'email si interrompe: nessun annuncio «nuovo», cursore fermo |
+| `kxconfid` | Conservato nella richiesta HTTP; ignorato solo nella chiave stabile della ricerca (con campagna, ordinamento e pagina) |
+| Parser | Solo `items.originalList` (voci `AdItem`); `galleryList` e `boostedItems` esclusi; una voce senza link valido rende il recupero parziale; senza l'elenco dei risultati gli annunci sono solo proposti |
+| Link nell'email | I link a schede nell'email (per esempio suggeriti) non danno mai certezza |
+| Ripubblicati | Un annuncio della finestra con ID più vecchio di uno anteriore alla finestra rende la novità non dimostrabile (`possibili_ripubblicazioni`) |
+| Conteggio | Confronto con il totale della finestra (privati e professionisti); il dettaglio è registrato e mostrato nella scheda |
+| Collegamento | Lettura e smistamento delle email in `_shared/mailbox.ts`, testati sull'email reale; `index.ts` li usa (controllo strutturale) |
+
+### 20.3 Test
+- `subito_real_test.ts` (8 test, in CI): email reale come messaggio Gmail; 30 risultati
+  confrontati campo per campo con la pagina; vetrina e promossi esclusi; finestra reale
+  (6 contro 3 → da verificare, nessun inserimento); prima email; scenari con gli annunci
+  reali (Opportunità corretta a mano, Scartato, Archivio con candidato, Archivio inserito
+  a mano, nuovi, rilettura); link suggeriti ignorati.
+- `subito_test.ts`: test aggiornati e nuovi (kxconfid, chiave stabile, originalList,
+  struttura non riconosciuta, voce non leggibile, Archivio manuale ed eliminato, errore
+  dell'Archivio, link suggeriti, ripubblicati).
+- Mutazioni: 10 difetti reintrodotti (accettazione, venditore, rielaborazione, HTML,
+  collegamento in `index.ts`, `kxconfid`, vetrina, Archivio saltato, errore dell'Archivio
+  ignorato, ripubblicati): tutti rilevati.
+
+### 20.4 Limiti ancora aperti
+- **Accesso dal server:** la pagina è stata letta da Safari; la funzione potrebbe ricevere
+  la verifica anti-robot di Subito. Verificabile solo con la funzione distribuita: in quel
+  caso ogni email resta «da verificare» con i link.
+- **Significato del conteggio:** con i dati reali la finestra 25/11 09:24 → 26/11 09:24
+  non torna (6 contro 3). Servono altre coppie di email della stessa ricerca per capire
+  come conta Subito; fino ad allora queste email restano da verificare.
+- **Email normali (non Subito):** il confronto con la tabella `annunci` è applicato agli
+  annunci delle ricerche salvate Subito; per le altre email resta l'avviso «Possibile
+  duplicato nell'archivio» nella scheda.
+- **Dati della pagina non letti:** bagni, piano, classe energetica, riscaldamento,
+  dotazioni, «Niente venditori» (`/nosalesman`); descrizione troncata da Subito a 2000
+  caratteri.

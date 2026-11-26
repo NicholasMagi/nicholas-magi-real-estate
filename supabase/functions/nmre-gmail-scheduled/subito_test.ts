@@ -97,8 +97,10 @@ Deno.test("1 · email Subito di ricerca salvata riconosciuta (numero dichiarato,
   eq(digest.declaredCount, 3, "3 nuovi annunci dichiarati");
   eq(digest.searchLabel, "Appartamenti a Ancona e provincia", "nome della ricerca");
   eq(digest.emailListingUrls.length, 0, "l'email non contiene schede");
-  // Causa del problema: il filtro generico sceglieva il link del logo (homepage) e scartava l'email.
-  eq(propertyEmailDecision(EMAIL_26).rule, "link_principale_generico", "il filtro generico escludeva l'email");
+  // Fixture sintetica (senza parte di testo): il filtro generico la escluderebbe per il link
+  // del logo. Sull'email reale la causa è un'altra ("Ricerca salvata:" nella parte di testo):
+  // vedi subito_real_test.ts.
+  eq(propertyEmailDecision(EMAIL_26).rule, "link_principale_generico", "il filtro generico escludeva la fixture sintetica");
 });
 Deno.test("1 · non riconosciute: altri mittenti, mittenti che imitano Subito, avvisi di un singolo annuncio", () => {
   eq(subitoSavedSearchDigest(email("x1", "Thu, 26 Nov 2026 09:24:26 +0100", { from: "Immobiliare.it <noreply@immobiliare.it>" })), null, "altro portale");
