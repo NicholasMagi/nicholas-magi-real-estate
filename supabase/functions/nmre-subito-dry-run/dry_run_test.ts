@@ -223,3 +223,88 @@ Deno.test("richiesta: oggetto e giorno obbligatori, message_id valido", () => {
   eq(validateRequest({ subject: SUBJECT, received_on: "2026-11-26", message_id: "../modify" }).ok, false, "message_id non valido");
   eq(validateRequest({ subject: SUBJECT, received_on: "2026-11-26" }).ok, true, "valida");
 });
+
+// ---------- Verifiche aggiuntive: nessuna opportunità persa, duplicati, sola lettura ----------
+
+const EMAIL_LIMIT_MS = Date.parse("2026-11-26T08:24:27Z") + 5 * 60 * 1000;
+
+Deno.test("ogni annuncio plausibile è una scheda «Da verificare» proposta, anche oltre il limite di 15 e anche se professionale", async () => {
+  const { report } = await run();
+  const plausible = pageItems().filter((entry: any) => {
+    const item = report.annunci.find(a => a.id === adId(entry))!;
+    return !item.pubblicato_il || Date.parse(item.pubblicato_il) <= EMAIL_LIMIT_MS;
+  });
+  const proposed = report.annunci.filter(a => a.decisione === "proposta_scheda_da_verificare");
+  eq(proposed.length, plausible.length, "tutti gli annunci plausibili proposti");
+  eq(report.annunci.filter(a => a.oltre_limite_proposte).length, Math.max(0, plausible.length - 15), "quelli oltre il limite della decisione restano proposti");
+  eq(proposed.every(a => a.anteprima?.stato === "da_verificare"), true, "nessuna proposta scartata: tutte «Da verificare»");
+  eq(proposed.some(a => a.inserzionista.startsWith("Professionista")), true, "anche gli annunci professionali sono proposti, non scartati");
+  eq(report.annunci.filter(a => a.decisione === "nessuna_proposta").every(a => a.categoria === "successivo_all_email" || a.categoria === "anteriore_alla_finestra"),
+    true, "nessuna proposta solo per annunci fuori dalla finestra dell'email");
+});
+
+Deno.test("annunci Subito riconosciuti esattamente come nella pagina reale (ID, URL, titolo, prezzo)", async () => {
+  const { report } = await run();
+  const raw = pageItems();
+  eq(report.annunci.map(a => a.id), raw.map(adId), "stessi ID, stesso ordine");
+  eq(new Set(report.annunci.map(a => a.id)).size, report.annunci.length, "nessun annuncio ripetuto");
+  for (const [index, entry] of raw.entries()) {
+    const a = report.annunci[index];
+    eq(a.url, entry.urls.default, "URL diretto " + a.id);
+    eq(a.titolo, String(entry.subject).replace(/\s+/g, " ").trim(), "titolo " + a.id);
+    eq(a.prezzo === null || typeof a.prezzo === "number", true, "prezzo numerico o assente " + a.id);
+  }
+});
+
+Deno.test("duplicati: Archivio eliminato, Archivio per listing_key, presenza sia in Opportunità sia in Archivio", async () => {
+  const ids = pageItems().map(adId);
+  const seed = {
+    annunci_candidati: [{ owner_id: OWNER, dedup_key: "subito:" + ids[5], stato: "confermato", tipo_venditore: "Privato" }],
+    annunci: [
+      { owner_id: OWNER, url: "https://www.subito.it/appartamenti/eliminato-" + ids[4] + ".htm", deleted_at: "2026-11-20T10:00:00Z" },
+      { owner_id: OWNER, listing_key: "subito.it/appartamenti/archiviato-" + ids[6] + ".htm", deleted_at: null },
+      { owner_id: OWNER, url: "https://www.subito.it/appartamenti/doppio-" + ids[5] + ".htm", deleted_at: null }
+    ]
+  };
+  const { report, fake, before } = await run(seed);
+  assertNoWrites(fake, before, "duplicati");
+  const byId = new Map(report.annunci.map(a => [a.id, a]));
+  eq([byId.get(ids[4])?.decisione, byId.get(ids[4])?.gia_presente.archivio?.eliminato], ["gia_in_archivio", true], "eliminato dall'Archivio: non riproposto");
+  eq(byId.get(ids[6])?.decisione, "gia_in_archivio", "archiviato da NMRE (listing_key)");
+  eq(byId.get(ids[5])?.decisione, "gia_nelle_opportunita", "presente in entrambi: prevale l'Opportunità");
+  eq(!!byId.get(ids[5])?.gia_presente.archivio, true, "e il rapporto mostra anche la presenza in Archivio");
+});
+
+Deno.test("email già registrata in NMRE: segnalata nel rapporto, nessuna scrittura", async () => {
+  const digest = { owner_id: OWNER, dedup_key: "gmail:real-26", stato: "da_verificare", dati_estratti: { ricerca_subito: { tentativi: 2 } } };
+  const { report, fake, before } = await run({ annunci_candidati: [digest] });
+  assertNoWrites(fake, before, "email registrata");
+  eq(report.email?.gia_registrata_in_nmre, true, "email già registrata");
+  eq((await run()).report.email?.gia_registrata_in_nmre, false, "email non registrata");
+});
+
+Deno.test("sola lettura: sul client del database vengono chiamati solo metodi di lettura", async () => {
+  const fake = fakeSupabase();
+  const called = new Set<string>();
+  const spy = (target: any): any => new Proxy(target, {
+    get(object, property) {
+      const value = object[property];
+      if (typeof value !== "function" || property === "then") return typeof value === "function" ? value.bind(object) : value;
+      return (...args: unknown[]) => { called.add(String(property)); const result = value.apply(object, args); return result && typeof result === "object" ? spy(result) : result; };
+    }
+  });
+  const admin = { from: (table: string) => { called.add("from:" + table); return spy(fake.client.from(table)); }, rpc: () => { called.add("rpc"); return Promise.resolve({ data: null, error: null }); } };
+  const report = await subitoDryRun({ message: gmailMessage("real-26"), db: readOnlyDb(admin), owner: OWNER, fetchPage: pageFetcher().fetchPage, nowIso: NOW });
+  eq(report.annunci.length > 0, true, "prova completata");
+  const allowed = new Set(["from:annunci_candidati", "from:annunci", "select", "eq", "like", "lt", "order", "limit", "maybeSingle"]);
+  const unexpected = [...called].filter(name => !allowed.has(name));
+  eq(unexpected, [], "nessun metodo diverso dalle letture");
+  eq(fake.state.writes, 0, "nessuna scrittura");
+});
+
+Deno.test("selezione: la ricerca Gmail è ristretta a mittente, oggetto e giorni attorno alla data", async () => {
+  const { gmail, urls } = fakeGmail([gmailMessage("aaaa1111bbbb2222")]);
+  await selectEmail(gmail, request());
+  const query = new URL(urls[0].slice(4)).searchParams.get("q") || "";
+  eq(query.startsWith("from:subito.it subject:\"" + SUBJECT + "\" after:"), true, "query con oggetto esatto: " + query);
+});

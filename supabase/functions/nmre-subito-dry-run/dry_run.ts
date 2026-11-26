@@ -69,7 +69,10 @@ export async function selectEmail(gmail: ReadOnlyGmail, request: DryRunRequest):
     ids = [request.message_id];
   } else {
     const day = Date.parse(request.received_on + "T00:00:00Z");
-    const query = "from:subito.it after:" + Math.floor((day - 86400000) / 1000) + " before:" + Math.floor((day + 2 * 86400000) / 1000);
+    // Oggetto tra virgolette (senza virgolette interne): restringe l'elenco all'email cercata.
+    const subjectTerm = request.subject.replace(/["\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+    const query = "from:subito.it subject:\"" + subjectTerm + "\" after:" + Math.floor((day - 86400000) / 1000)
+      + " before:" + Math.floor((day + 2 * 86400000) / 1000);
     const list = await gmail.list(query, MAX_LISTED);
     ids = (Array.isArray(list?.messages) ? list.messages : []).map((m: any) => String(m?.id || "")).filter(Boolean).slice(0, MAX_LISTED);
   }
@@ -134,7 +137,8 @@ export type DryRunItem = {
 export type DryRunReport = {
   success: boolean; dry_run: true; esito: string; messaggio: string;
   email: null | { id: string; oggetto: string; ricevuta_il: string | null; mittente_subito: boolean; annunci_dichiarati: number | null;
-    ricerca: string | null; url_ricerca: string | null; kxconfid_conservato: boolean; etichetta: string | null };
+    ricerca: string | null; url_ricerca: string | null; kxconfid_conservato: boolean; etichetta: string | null;
+    gia_registrata_in_nmre: boolean | null };
   pagina: null | { stato: string; motivo: string; motivo_testo: string; url_finale: string | null; http: number | null; fonte: string | null;
     annunci_letti: number; letta_il: string; avviso: string };
   decisione: null | { certa: boolean; motivo: string; motivo_testo: string; nella_finestra: number | null; ripubblicati: string[] };
@@ -162,7 +166,8 @@ export async function subitoDryRun(input: { message: any; db: ReadOnlyDb; owner:
     id: String(email.id), oggetto: normalizeSubject(email.subject).slice(0, 300), ricevuta_il: receivedIso,
     mittente_subito: isSubitoSender(email.from), annunci_dichiarati: digest.declaredCount, ricerca: digest.searchKey,
     url_ricerca: digest.searchUrl, kxconfid_conservato: !!digest.searchUrl && /[?&]kxconfid=/.test(digest.searchUrl),
-    etichetta: digest.searchLabel || null
+    etichetta: digest.searchLabel || null,
+    gia_registrata_in_nmre: null as boolean | null
   };
 
   // Una sola lettura della pagina: una seconda richiesta è un errore della prova.
@@ -178,6 +183,8 @@ export async function subitoDryRun(input: { message: any; db: ReadOnlyDb; owner:
   let acquisition;
   let previousIso: string | null = null;
   try {
+    // Riga riepilogativa di questa stessa email già salvata da una sincronizzazione?
+    emailInfo.gia_registrata_in_nmre = !!(await deps.existingDigest(String(email.id)));
     acquisition = await acquireSubitoDigest(email, digest, deps);
     // Inizio della finestra (email precedente della stessa ricerca), letto come fa la decisione.
     if (digest.searchKey && receivedIso) previousIso = await deps.previousDigestDate(digest.searchKey, receivedIso);
@@ -227,7 +234,8 @@ export async function subitoDryRun(input: { message: any; db: ReadOnlyDb; owner:
     let decisione: ItemDecision;
     try {
       opportunita = await existingCandidate(input.db, input.owner, item.id);
-      const archived = opportunita ? null : await deps.archivedListing(item.id);
+      // Entrambi i confronti, sempre: il rapporto mostra ogni presenza già nota.
+      const archived = await deps.archivedListing(item.id);
       archivio = archived ? { id: archived.annuncioId, eliminato: archived.eliminato } : null;
       decisione = opportunita ? "gia_nelle_opportunita"
         : archivio ? "gia_in_archivio"
@@ -289,7 +297,8 @@ export function reportText(report: DryRunReport): string {
     const e = report.email;
     lines.push("", "Email: " + e.id + " · " + (e.ricevuta_il || "data n/d") + " · " + e.oggetto,
       "  Annunci dichiarati: " + (e.annunci_dichiarati ?? "n/d") + " · kxconfid conservato: " + (e.kxconfid_conservato ? "sì" : "no"),
-      "  Ricerca: " + (e.etichetta || e.ricerca || "n/d"));
+      "  Ricerca: " + (e.etichetta || e.ricerca || "n/d"),
+      "  Email già registrata in NMRE: " + (e.gia_registrata_in_nmre === null ? "n/d" : e.gia_registrata_in_nmre ? "sì" : "no"));
   }
   if (report.pagina) {
     const p = report.pagina;

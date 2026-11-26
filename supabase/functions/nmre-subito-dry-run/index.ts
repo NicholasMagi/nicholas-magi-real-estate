@@ -3,7 +3,7 @@
 // Garanzie (verificate anche dai test strutturali in index_guard_test.ts):
 //  - accesso al database solo tramite readOnlyDb(): select su annunci_candidati e annunci,
 //    RPC nmre_get_gmail_tokens in GET (transazione READ ONLY di PostgREST; richiede che la
-//    funzione sia STABLE, migrazione 20261127090000 in supabase/migrations_pending/). Se la
+//    funzione sia STABLE, migrazione 20261126200000 in supabase/migrations_pending/). Se la
 //    chiamata in GET è rifiutata la prova si ferma: nessun ripiego su POST. Nessun insert/
 //    update/upsert/delete, nessun lock, nessuna RPC di salvataggio;
 //  - Gmail solo in lettura (profilo, elenco limitato a 10, un messaggio): nessuna lettura o

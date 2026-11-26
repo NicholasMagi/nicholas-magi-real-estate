@@ -15,7 +15,7 @@ modificata: le funzioni condivise per Subito sono riusate così come sono.
 
 | Vincolo | Come è garantito | Test |
 |---|---|---|
-| Nessuna scrittura su Supabase | Il database passa solo da `readOnlyDb()`: per `annunci_candidati` e `annunci` esistono soltanto `select()` e i filtri di lettura, inviati in GET; `insert`, `update`, `upsert`, `delete` e qualsiasi altro metodo sollevano un errore. L'unica RPC ammessa (`nmre_get_gmail_tokens`) è inviata in GET: PostgREST la esegue in una transazione READ ONLY. Richiede che la funzione sia **STABLE** (migrazione `20261127090000_gmail_tokens_rpc_stable`, non applicata). Finché resta VOLATILE la chiamata in GET viene rifiutata e la prova si ferma con l'esito `token_non_leggibili_in_sola_lettura`: **non esiste un ripiego su POST** | `readonly_test.ts`, `index_guard_test.ts`; nei test di `dry_run_test.ts` il contatore delle scritture del database simulato resta 0 e le tabelle restano identiche |
+| Nessuna scrittura su Supabase | Il database passa solo da `readOnlyDb()`: per `annunci_candidati` e `annunci` esistono soltanto `select()` e i filtri di lettura, inviati in GET; `insert`, `update`, `upsert`, `delete` e qualsiasi altro metodo sollevano un errore. L'unica RPC ammessa (`nmre_get_gmail_tokens`) è inviata in GET: PostgREST la esegue in una transazione READ ONLY. Richiede che la funzione sia **STABLE** (migrazione `20261126200000_gmail_tokens_rpc_stable`, non applicata). Finché resta VOLATILE la chiamata in GET viene rifiutata e la prova si ferma con l'esito `token_non_leggibili_in_sola_lettura`: **non esiste un ripiego su POST** | `readonly_test.ts`, `index_guard_test.ts`; nei test di `dry_run_test.ts` il contatore delle scritture del database simulato resta 0 e le tabelle restano identiche |
 | Nessuna modifica di annunci o dati manuali | Come sopra; gli annunci già presenti, anche scartati o con decisione manuale, vengono solo letti e segnalati | `dry_run_test.ts` («annunci già presenti») |
 | Nessun avanzamento del cursore Gmail | Il cursore non viene né letto né scritto; non si usano la cronologia, il lock della sincronizzazione o il watch | `index_guard_test.ts` |
 | Nessun salvataggio del token | Un token scaduto viene rinnovato solo in memoria; `nmre_save_gmail_tokens` non è raggiungibile | `readonly_test.ts`, `index_guard_test.ts` |
@@ -40,80 +40,129 @@ Se un confronto con Opportunità o Archivio non riesce, **nessun** annuncio vien
 - Il registro dei venditori verificati non viene consultato: il tipo di inserzionista è
   quello indicato da Subito, più la classificazione del testo.
 
-## Prerequisiti (solo lettura)
+## Procedura operativa (solo dopo approvazione esplicita)
 
-**A · Corpo e volatilità della funzione dei token.** Da eseguire nel SQL Editor; la
-transazione è in sola lettura e si chiude con `ROLLBACK`:
+Ogni passo si ferma al primo esito diverso da quello atteso. Non leggere, copiare o
+riportare valori di secret o token.
+
+### Passo 1 · Controllo iniziale della funzione dei token (sola lettura)
+Supabase Dashboard → progetto NMRE → **SQL Editor** → **New query**. Incolla ed esegui
+(**Run**): è una sola SELECT sul catalogo, senza scritture.
 
 ```sql
-BEGIN TRANSACTION READ ONLY;
 select p.provolatile as volatilita, p.prosecdef as security_definer, l.lanname as linguaggio,
-       p.proconfig as impostazioni, pg_get_function_result(p.oid) as risultato,
+       pg_get_userbyid(p.proowner) as proprietario, coalesce(p.proacl::text, '(predefiniti)') as permessi,
+       coalesce(p.proconfig::text, '') as impostazioni, md5(p.prosrc) as impronta_corpo,
        p.prosrc ~* '\m(insert|update|delete|merge|truncate|call|copy|perform|execute|nextval|setval|set_config)\M' as contiene_scritture,
        btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')) ~* '^select\M' as inizia_con_select
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace join pg_language l on l.oid = p.prolang
  where n.nspname = 'public' and p.proname = 'nmre_get_gmail_tokens';
-ROLLBACK;
 ```
 
-Atteso prima della migrazione: `volatilita = v`, `linguaggio = sql`,
-`contiene_scritture = false`, `inizia_con_select = true`. Dopo la migrazione:
-`volatilita = s`.
+**Atteso:** una sola riga, con `volatilita = v`, `security_definer = true`,
+`linguaggio = sql`, `contiene_scritture = false` e `inizia_con_select = true`.
+**Annota** `proprietario`, `permessi`, `impostazioni` e `impronta_corpo`: serviranno al
+passo 3.
 
-**B · Secret `NMRE_ALLOWED_USER_ID`.** Controllare solo il nome, mai il valore:
-Dashboard → Edge Functions → Secrets, oppure dalla riga di comando, che mostra nomi e
-impronte ma non i valori:
+### Passo 2 · Applicazione della sola migrazione (scrive solo la volatilità)
+SQL Editor → **New query**. Incolla **l'intero contenuto** di
+`supabase/migrations_pending/20261126200000_gmail_tokens_rpc_stable.sql`, preso dal ramo
+della PR, ed esegui (**Run**). Non usare `supabase db push`: questo file non è in
+`supabase/migrations/`.
+
+- **Atteso:** l'avviso «public.nmre_get_gmail_tokens() ora è STABLE … corpo invariato»,
+  oppure «è già STABLE: nessuna modifica».
+- **In caso di errore** («nessuna modifica eseguita» o «Verifica finale non superata»):
+  la transazione è annullata e nulla cambia. Fermarsi.
+- La migrazione invia anche `notify pgrst, 'reload schema'`, perché PostgREST riconosca
+  la nuova volatilità.
+
+### Passo 3 · Verifica dopo la migrazione (sola lettura)
+Rieseguire la query del passo 1.
+
+**Atteso:** `volatilita = s`, mentre `security_definer`, `proprietario`, `permessi`,
+`impostazioni` e `impronta_corpo` devono essere **identici** a quelli annotati.
+Se una colonna è cambiata, eseguire il rollback
+`supabase/rollback/20261126200000_gmail_tokens_rpc_stable.rollback.sql` e fermarsi.
+
+### Passo 4 · Nome del secret `NMRE_ALLOWED_USER_ID` (sola lettura)
+Dashboard → **Edge Functions** → **Secrets**: verificare che il nome compaia, senza
+aprirne il valore. In alternativa, dalla riga di comando (mostra nomi e impronte, non i
+valori):
 
 ```bash
 supabase secrets list --project-ref <project-ref>
 ```
 
-I secret valgono per tutto il progetto: lo stesso nome è già usato da
-`nmre-gmail-scheduled`.
+### Passo 5 · Distribuzione della sola funzione di prova
+Dal ramo della PR, **senza** `--no-verify-jwt`, quindi con la verifica JWT della
+piattaforma attiva. Distribuisce solo `nmre-subito-dry-run`: `nmre-gmail-scheduled` non
+viene toccata.
 
-## Procedura (solo dopo approvazione esplicita)
+```bash
+git fetch origin claude/subito-dry-run && git checkout --detach origin/claude/subito-dry-run
+```
 
-0. Prerequisiti A e B verificati; migrazione `supabase/migrations_pending/20261127090000_gmail_tokens_rpc_stable.sql`
-   applicata dal SQL Editor (solo quel file), poi di nuovo la query A: `volatilita = s`.
+```bash
+supabase functions deploy nmre-subito-dry-run --project-ref <project-ref>
+```
 
-1. **Distribuzione della sola funzione di prova.** Non tocca `nmre-gmail-scheduled`.
-   Senza `--no-verify-jwt`.
+**Atteso** nella Dashboard → Edge Functions:
+- `nmre-subito-dry-run` presente, con la verifica JWT **attiva**;
+- `nmre-gmail-scheduled` ancora alla versione **69**.
 
-   ```bash
-   supabase functions deploy nmre-subito-dry-run --project-ref <project-ref>
-   ```
+### Passo 6 · Prova sull'email del 26/11/2026
+Apri l'app NMRE con il tuo account. Apri gli strumenti per sviluppatori del browser,
+scheda **Console**, e incolla il codice qui sotto. Il token della sessione resta nel tuo
+browser e non viene stampato.
 
-   Usa i secret già presenti nel progetto (`NMRE_ALLOWED_USER_ID`,
-   `INTEGRATION_TOKEN_ENCRYPTION_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`):
-   nessun secret nuovo o modificato.
-2. **Esecuzione dall'app NMRE.** Accedi con il tuo account, apri gli strumenti per
-   sviluppatori del browser, scheda Console, e incolla il codice qui sotto. Il token
-   della sessione resta nel tuo browser.
+```js
+const authKey = Object.keys(localStorage).find(k => /^sb-.*-auth-token$/.test(k));
+const session = JSON.parse(localStorage.getItem(authKey));
+const base = localStorage.getItem("nmre-supabase-url") || "https://hhircfmrtkgaybrougku.supabase.co";
+const apikey = localStorage.getItem("nmre-supabase-publishable-key") || "sb_publishable_qc33hhZz6qfftoQzG-Vyiw_p2cNYsuO";
+const res = await fetch(base.replace(/\/$/, "") + "/functions/v1/nmre-subito-dry-run", {
+  method: "POST",
+  headers: { Authorization: "Bearer " + session.access_token, apikey, "Content-Type": "application/json" },
+  body: JSON.stringify({ subject: "Appartamenti a Ancona e provincia ha 3 nuovi annunci per te", received_on: "2026-11-26" })
+});
+const report = await res.json();
+console.log("HTTP", res.status, "esito:", report.esito);
+console.log(report.rapporto);
+console.log("Scritture sul database:", report.garanzie?.scritture_database);
+console.assert(report.garanzie?.scritture_database === 0, "ATTENZIONE: scritture_database diverso da 0");
+report;
+```
 
-   ```js
-   const authKey = Object.keys(localStorage).find(k => /^sb-.*-auth-token$/.test(k));
-   const session = JSON.parse(localStorage.getItem(authKey));
-   const base = localStorage.getItem("nmre-supabase-url") || "https://hhircfmrtkgaybrougku.supabase.co";
-   const apikey = localStorage.getItem("nmre-supabase-publishable-key") || "sb_publishable_qc33hhZz6qfftoQzG-Vyiw_p2cNYsuO";
-   const res = await fetch(base.replace(/\/$/, "") + "/functions/v1/nmre-subito-dry-run", {
-     method: "POST",
-     headers: { Authorization: "Bearer " + session.access_token, apikey, "Content-Type": "application/json" },
-     body: JSON.stringify({ subject: "Appartamenti a Ancona e provincia ha 3 nuovi annunci per te", received_on: "2026-11-26" })
-   });
-   const report = await res.json();
-   console.log(report.rapporto);
-   report;
-   ```
+### Passo 7 · Verifica del risultato
+**Attesi:**
+- `garanzie.scritture_database = 0`;
+- `garanzie.rpc_in_sola_lettura = ["nmre_get_gmail_tokens"]`;
+- `garanzie.pagine_subito_lette` pari a 0 o 1;
+- `garanzie.cursore_gmail = "non letto né modificato"`;
+- `garanzie.chiamate_gmail` contiene solo `profile`, `messages` e `messages/<id>`.
 
-3. **Lettura del rapporto.**
-   - `rapporto` è il testo leggibile.
-   - `annunci` contiene l'elenco completo.
-   - `garanzie` riporta le chiamate effettivamente eseguite: `scritture_database: 0`,
-     solo `select` e RPC in GET, una pagina letta, cursore non toccato.
-   - Se più email corrispondono, il rapporto elenca le loro intestazioni: ripeti la
-     prova aggiungendo `message_id`.
-4. **Rimozione della funzione di prova dopo l'uso** (facoltativa):
+**Come leggere l'esito:**
 
-   ```bash
-   supabase functions delete nmre-subito-dry-run --project-ref <project-ref>
-   ```
+| Esito | Significato | Cosa fare |
+|---|---|---|
+| `novita_non_dimostrabile` o `novita_dimostrata` | Prova completata | Leggere `rapporto` e `annunci` |
+| `email_non_individuata` | 0 o più email corrispondenti | `candidati_email` elenca le intestazioni; ripetere con `message_id` |
+| `pagina_non_disponibile` | Subito ha bloccato la pagina o non ha risposto | Nessun aggiramento; riprovare più tardi |
+| `token_non_leggibili_in_sola_lettura` | La funzione dei token non è (ancora) STABLE per PostgREST | Ricontrollare il passo 3; attendere un minuto per il ricaricamento dello schema |
+| `confronto_non_riuscito` | Una lettura di Opportunità o Archivio non è riuscita | Nessuna proposta valida: riprovare |
+
+### Passo 8 · Dopo la prova
+Facoltativo: rimozione della funzione di prova.
+
+```bash
+supabase functions delete nmre-subito-dry-run --project-ref <project-ref>
+```
+
+La migrazione STABLE può restare. Il suo rollback è
+`supabase/rollback/20261126200000_gmail_tokens_rpc_stable.rollback.sql`.
+
+Dopo un'applicazione manuale dal SQL Editor, la versione potrebbe non risultare in
+`supabase_migrations.schema_migrations`. Il riallineamento del repository (spostamento
+del file in `supabase/migrations/`) va fatto in una PR separata, come per le protezioni
+dei trigger (rapporto A1 §16).

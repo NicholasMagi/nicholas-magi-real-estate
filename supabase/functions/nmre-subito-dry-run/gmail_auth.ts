@@ -42,7 +42,7 @@ export async function readTokenRow(db: TokenReader, account: string): Promise<To
     return {
       ok: false, esito: "token_non_leggibili_in_sola_lettura",
       messaggio: "La lettura dei token Gmail in sola lettura non è disponibile: public.nmre_get_gmail_tokens() deve essere STABLE "
-        + "(migrazione supabase/migrations_pending/20261127090000_gmail_tokens_rpc_stable.sql). Prova interrotta, nessuna scrittura."
+        + "(migrazione supabase/migrations_pending/20261126200000_gmail_tokens_rpc_stable.sql). Prova interrotta, nessuna scrittura."
         + (error?.code ? " Codice: " + String(error.code).slice(0, 20) + "." : "")
     };
   }
