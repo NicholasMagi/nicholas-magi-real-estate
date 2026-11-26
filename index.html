@@ -6385,19 +6385,19 @@ function renderArchiveExtractedDetails(item){
 }
 
 function nmreListingSearchNormalize(value){
-  return String(value??"").normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLocaleLowerCase("it").replace(/\\s+/g," ").trim();
+  return String(value??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("it").replace(/\s+/g," ").trim();
 }
 function nmreListingSearchPhoneKeysFromText(value){
   const text=String(value||"");
-  const matches=text.match(/(?:\\+|00)?\\d[\\d\\s().\\/-]{6,}\\d/g)||[];
+  const matches=text.match(/(?:\+|00)?\d[\d\s().\/-]{6,}\d/g)||[];
   return [...new Set(matches.flatMap(number=>nmrePhoneKeys(number)))];
 }
 function nmreListingSearchContactPhoneKeys(contact){
   const values=[contact?.phone||""];
-  for(const line of String(contact?.notes||"").split(/\\r?\\n/)){
-    const match=line.match(/^\\s*(?:altri numeri|numeri secondari|telefoni secondari)\\s*:\\s*(.*)$/i);
+  for(const line of String(contact?.notes||"").split(/\r?\n/)){
+    const match=line.match(/^\s*(?:altri numeri|numeri secondari|telefoni secondari)\s*:\s*(.*)$/i);
     if(!match)continue;
-    values.push(...match[1].split(/[;,]/).map(value=>value.replace(/\\s*\\([^)]*\\)\\s*$/,"").trim()));
+    values.push(...match[1].split(/[;,]/).map(value=>value.replace(/\s*\([^)]*\)\s*$/,"").trim()));
   }
   return [...new Set(values.flatMap(nmrePhoneKeys))];
 }
@@ -6417,7 +6417,7 @@ function nmreUnifiedListingSearchMatch(item,query){
   }
   const haystack=fields.filter(value=>value!==null&&value!==undefined)
     .map(nmreListingSearchNormalize).join(" ");
-  const tokens=normalized.split(/\\s+/).filter(Boolean);
+  const tokens=normalized.split(/\s+/).filter(Boolean);
   if(tokens.every(token=>haystack.includes(token)))return true;
   const queryPhones=nmreListingSearchPhoneKeysFromText(normalized);
   if(!queryPhones.length)return false;
