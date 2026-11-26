@@ -130,6 +130,26 @@ jobs:
               raise SystemExit("Duplicate HTML ids: " + ", ".join(duplicates))
           print(f"Checked {len(parser.ids)} unique element ids.")
           PY
+
+      - name: Validate Supabase function configuration
+        run: |
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          config = tomllib.loads(Path("supabase/config.toml").read_text(encoding="utf-8"))
+          functions = config.get("functions", {})
+          scheduled = functions.get("nmre-gmail-scheduled", {})
+          if scheduled.get("verify_jwt") is not False:
+              raise SystemExit("nmre-gmail-scheduled must keep verify_jwt = false")
+          unexpected = [
+              name for name, options in functions.items()
+              if name != "nmre-gmail-scheduled" and options.get("verify_jwt") is False
+          ]
+          if unexpected:
+              raise SystemExit("Unexpected functions with verify_jwt disabled: " + ", ".join(unexpected))
+          print("Supabase config TOML is valid; only nmre-gmail-scheduled disables platform JWT verification.")
+          PY
   migrations:
     runs-on: ubuntu-latest
     services:
@@ -155,3 +175,57 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
         run: supabase/tests/run_migration_tests.sh
+
+  deploy-pages:
+    name: Deploy GitHub Pages (after CI)
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: [validate, migrations]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Assemble minimal Pages artifact
+        run: |
+          set -euo pipefail
+          rm -rf _site
+          mkdir -p _site
+          cp index.html sw.js manifest.webmanifest icon.svg _site/
+          touch _site/.nojekyll
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          site = Path("_site")
+          expected = {".nojekyll", "index.html", "sw.js", "manifest.webmanifest", "icon.svg"}
+          actual = {path.name for path in site.iterdir()}
+          if actual != expected:
+              raise SystemExit(f"Unexpected Pages artifact files: {sorted(actual)}")
+          html = (site / "index.html").read_text(encoding="utf-8")
+          for reference in ("./manifest.webmanifest", "./icon.svg", "./sw.js"):
+              if reference not in html:
+                  raise SystemExit(f"index.html is missing runtime reference: {reference}")
+          manifest = json.loads((site / "manifest.webmanifest").read_text(encoding="utf-8"))
+          if not any(icon.get("src") == "./icon.svg" for icon in manifest.get("icons", [])):
+              raise SystemExit("manifest.webmanifest does not reference the published icon.svg")
+          print("Pages artifact contains only the four runtime files and .nojekyll.")
+          PY
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
