@@ -182,6 +182,7 @@ jobs:
     needs: [validate, migrations]
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
       pages: write
       id-token: write
