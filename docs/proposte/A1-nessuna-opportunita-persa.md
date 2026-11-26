@@ -1151,9 +1151,9 @@ di regressione che **fallisce sul codice di d524e4a** e passa su quello corretto
 
 ### 18.6 Test
 - `regressions_test.ts` (8), `resilience_test.ts` (2), `cursor_guard_test.ts` (7, sul
-  sorgente reale), `frontend_coherence_test.ts` (16 casi), più i test del frontend.
+  sorgente reale), `frontend_coherence_test.ts` (13 casi), più i test del frontend.
 - Su d524e4a falliscono: 8/8 di `regressions_test.ts`, `resilience_test.ts` (modulo
-  assente), 3 di `cursor_guard_test.ts`, 5 di `frontend_coherence_test.ts`, il test dei
+  assente), 3 di `cursor_guard_test.ts`, 4 di `frontend_coherence_test.ts`, il test dei
   campi manuali in `archive_persist_test.mjs`, e `recovery_test.mjs`.
 - Totali: Deno 94; frontend 63 + 41 + 20; migrazioni e rollback 59; controlli nel
   browser 37 + 8. Versione del service worker: `20261126-recovery-panel-4`.
