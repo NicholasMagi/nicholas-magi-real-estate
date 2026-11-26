@@ -72,14 +72,36 @@ solo con autorizzazione esplicita.
 | 1.3 | Recupero mirato delle email Subito saltate dalla v68 (lettura per ID, schede di 1.2) | Dopo 1.1 e 1.2 |
 | 1.4 | Fase 2: registro delle email escluse dal filtro (solo ID e regola) | Migrazione pronta, da approvare |
 | 1.5 | Registro dei venditori anche per Subito; inserzionista privato, professionista o non identificato in tutte le schede | Da sviluppare |
-| 1.6 | Allarme sulla sincronizzazione (nessuna esecuzione riuscita da più di 30 minuti, cursore fermo, errori ripetuti), con notifica push | Da sviluppare |
+| 1.6 | Allarme sulla sincronizzazione: avviso nell'app (nessuna esecuzione riuscita da più di 30 minuti, 3 errori consecutivi) | PR #77 in Draft · notifica push ad app chiusa: dopo lo schema (§5) |
+
+### Coerenza tra PR #74 e #75
+- **Stessa logica.** La prova (#74) e la sincronizzazione (#75) usano gli stessi moduli
+  Subito: lettura della pagina, decisione sulla novità, confronto con Opportunità e
+  Archivio.
+- **Stesse proposte.** Le schede proposte dalla prova coincidono con quelle che la #75
+  creerebbe: annunci plausibili, esclusi quelli già presenti o solo nell'Archivio.
+- **Differenza nell'anteprima.** Nella prova, il tipo di venditore mostrato è quello
+  calcolato senza il contrassegno `novita_non_dimostrata`. Dopo il merge della #75,
+  la #74 passerà `unprovenReason` per mostrare «Da verificare» come in produzione.
+  Non serve prima: la prova non scrive.
+- **Ordine:**
+  1. prova reale della #74;
+  2. revisione della #75;
+  3. migrazione `20261126210000`;
+  4. deploy di `nmre-gmail-scheduled`;
+  5. `NMRE_SUBITO_ITEM_CANDIDATES=true`.
 
 ### Fase 2 · Opportunità, Archivio e Rubrica
 | # | Intervento |
 |---|---|
 | 2.1 | Esportazione in sola lettura dello schema di produzione nel repository (`supabase db dump --schema-only`, revisionata) e test sullo schema reale |
 | 2.2 | Verifica end-to-end di archiviazione, inserimento manuale, recupero degli scartati e protezione delle modifiche manuali sullo schema reale |
-| 2.3 | Rubrica: collegamento automatico per telefono solo con corrispondenza certa (PR #71, già su `main`), nessun contatto duplicato, collegamento dalla scheda dell'opportunità |
+| 2.3 | Rubrica: collegamento automatico per telefono solo con corrispondenza certa (PR #71, già su `main`), esteso ai numeri secondari (PR #78) |
+| 2.4 | **Importazione della rubrica del telefono** (vCard 2.1/3.0/4.0, Contact Picker): anteprima, tutti i numeri ed email, aggiornamento solo additivo, importazione ripetibile | PR #78 in Draft |
+| 2.5 | **Possibili duplicati** su tutti i numeri normalizzati e sulle email, solo segnalazione | PR #78 in Draft |
+| 2.6 | **Unione guidata dei contatti**: confronto, scelta dei valori, anteprima, conferma esplicita; trasferisce appuntamenti, attività, collegamenti immobili e annunci; nessuna cancellazione senza conferma | Dopo lo schema (§5): servono le chiavi esterne reali |
+| 2.7 | Tabella dei numeri di telefono per contatto (`nmre_contact_phones`), con migrazione dei «Altri numeri» dalle note | Migrazione da preparare dopo lo schema |
+| 2.8 | Annuncio collegato al contatto anche nelle **Opportunità**, e segnalazione «più contatti con questo numero» da verificare | Dopo lo schema: verificare le colonne di `annunci_candidati` |
 
 ### Fase 3 · CRM e funzioni interne
 | # | Intervento |
@@ -97,10 +119,57 @@ Assistente testuale e vocale, che usa le stesse funzioni dell'app e chiede confe
 prima di ogni azione che modifica dati. Il progetto è in `docs/nmre-ai-assistant.md`.
 Parte dopo la Fase 3.
 
-## 4. Prossimi passi concreti
+## 5. Acquisizione sicura dello schema di produzione (senza dati né secret)
+Da eseguire dal titolare. Si ottiene **solo la struttura**: tabelle, colonne, vincoli, indici,
+funzioni, trigger e policy RLS degli schemi `public` e `private`.
+
+1. Installare la CLI di Supabase e collegare il progetto (`supabase link --project-ref <ref>`,
+   chiede la password del database: non salvarla nel repository).
+2. Esportare la sola struttura (nessuna riga dei dati):
+
+   ```bash
+   supabase db dump --linked --schema public,private -f nmre_schema_produzione.sql
+   ```
+
+3. **Controllo prima di condividere.** Il file deve contenere solo `CREATE`, `ALTER`,
+   `COMMENT`, `GRANT` e `POLICY`. Questi comandi devono restituire **nessuna riga**:
+
+   ```bash
+   grep -nE "^(INSERT|COPY) " nmre_schema_produzione.sql
+   ```
+
+   ```bash
+   grep -niE "sb_secret_|eyJ[a-zA-Z0-9_-]{20,}|password|refresh_token\s*[:=]" nmre_schema_produzione.sql
+   ```
+
+4. Caricare il file in una PR dedicata come `supabase/schema/produzione_<data>.sql`, non in
+   `supabase/migrations/`: è un riferimento e non deve essere applicato.
+
+Con lo schema reale:
+- ricostruiremo la struttura nei test (database usa e getta);
+- verificheremo chiavi esterne, vincoli, funzioni e trigger;
+- aggiungeremo test end-to-end sui flussi Opportunità → Archivio → Rubrica, senza
+  duplicare tabelle o colonne già esistenti.
+
+## 6. Pull Request aperte
+| PR | Contenuto | Stato |
+|---|---|---|
+| #68 | Connettore Immobiliare.it Insights | Draft, in attesa dell'autorizzazione commerciale |
+| #74 | Prova senza scritture di una singola email Subito | Draft, pronta per la prova reale |
+| #75 | Schede singole «Da verificare» per Subito (dietro interruttore) e migrazione per le notifiche | Draft, CI verde |
+| #76 | Questa roadmap | Draft |
+| #77 | Allarme sulla sincronizzazione in ogni schermata | Draft |
+| #78 | Importazione della rubrica del telefono e possibili duplicati | Draft |
+
+Le PR #75, #77 e #78 cambiano la versione del service worker: integrandole insieme va
+scelta una versione unica.
+
+## 7. Prossimi passi concreti
 1. **Titolare:** eseguire la procedura della PR #74 (README della funzione, passi 1–8)
    e inviare il rapporto.
 2. **Revisione della PR #75.** Poi, con autorizzazione: migrazione
    `20261126210000`, deploy di `nmre-gmail-scheduled`, `NMRE_SUBITO_ITEM_CANDIDATES=true`.
-3. **Sviluppo:** recupero mirato delle email Subito (1.3) e allarme sulla
-   sincronizzazione (1.6).
+3. **Titolare:** esportare lo schema di produzione (§5).
+4. **Sviluppo:** recupero mirato delle email Subito (1.3) dopo la prova; registro delle
+   email escluse (1.4); unione guidata dei contatti (2.6) dopo lo schema; audit delle
+   sezioni CRM (3.1).
