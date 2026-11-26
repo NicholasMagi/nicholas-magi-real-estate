@@ -1292,7 +1292,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
     <select id="candidateTownFilter"><option value="">Tutti i comuni</option></select>
     <select id="candidateTypeFilter"><option value="">Tutte le tipologie</option></select>
     <select id="candidatePortalFilter"><option value="">Tutti i portali</option></select>
-    <select id="candidateSellerFilter"><option value="">Tutti</option><option value="Privato">Privato riconosciuto</option><option value="Da verificare">Da verificare</option></select>
+    <select id="candidateSellerFilter"><option value="">Tutti</option><option value="Privato">Privato · filtro Subito o verifica</option><option value="Da verificare">Da verificare</option></select>
     <select id="candidateQualityFilter"><option value="">Tutti gli annunci</option><option value="duplicates">Possibili duplicati</option><option value="priceDrop">Ribassi di prezzo documentati</option><option value="link">Link da verificare</option><option value="stale">Email ricevuta oltre 30 giorni fa</option><option value="incomplete">Dati incompleti</option></select>
     <input id="candidatePriceMin" type="number">
     <input id="candidatePriceMax" type="number">
@@ -2069,7 +2069,7 @@ function renderDailyActionPlan(all,candidates,today){
  const ranked=(Array.isArray(candidates)?candidates:[]).filter(item=>item.tipo_venditore!=="Agenzia")
   .map(item=>({item,priority:candidatePriority(item)}))
   .sort((a,b)=>b.priority.score-a.priority.score||(Date.parse(b.item.created_at||"")||0)-(Date.parse(a.item.created_at||"")||0));
- ranked.forEach(({item,priority})=>push({kind:"candidate",id:item.id,tag:item.tipo_venditore==="Privato"?"PRIVATO RICONOSCIUTO":"VENDITORE DA VERIFICARE",
+ ranked.forEach(({item,priority})=>push({kind:"candidate",id:item.id,tag:item.tipo_venditore==="Privato"?(item.dati_fonte?.seller_filter_applied?"PRIVATO · FILTRO SUBITO":"PRIVATO RICONOSCIUTO"):"VENDITORE DA VERIFICARE",
   title:item.titolo||"Nuova opportunità",detail:[item.comune,priority.score+"/100 priorità",priority.reasons?.slice(0,2).join(" · ")].filter(Boolean).join(" · "),
   button:"Verifica lead",priority:item.tipo_venditore==="Privato"?7:8,rank:-priority.score}));
  const incomplete=all.filter(item=>active(item)&&["da_contattare","primo_contatto","interessato"].includes(item.stato_contatto||"da_contattare"))
@@ -2116,7 +2116,7 @@ function acquisitionIntelligence(item,now=new Date()){
  const signals=[];
  let score=0;
  const add=(points,label)=>{score+=points;signals.push(label);};
- if(item.tipo_venditore==="Privato")add(25,"Privato verificato");
+ if(item.tipo_venditore==="Privato")add(25,item.dati_fonte?.seller_filter_applied?"Ricerca Subito filtrata per privati":"Privato verificato");
  else if(item.tipo_venditore==="Da verificare")add(6,"Identità del venditore da verificare");
  if(history.drops.length){
   const latest=history.drops[history.drops.length-1];
@@ -2205,7 +2205,7 @@ function renderAcquisitionIntelligence(candidates=candidateCache){
   const title=safe(item.titolo||"Immobile senza titolo");
   const meta=safe([item.comune,item.portale].filter(Boolean).join(" · ")||"Territorio da verificare");
   const price=Number(item.prezzo)>0?formatCurrency(Number(item.prezzo)):"Prezzo non indicato";
-  const seller=item.tipo_venditore==="Privato"?"Privato verificato":"Venditore da verificare";
+  const seller=item.tipo_venditore==="Privato"?(item.dati_fonte?.seller_filter_applied?"Privato · filtro Subito":"Privato verificato"):"Venditore da verificare";
   const signals=intel.signals.slice(0,4).map(signal=>'<span class="seller-radar-signal">'+safe(signal)+'</span>').join("");
   const historyLine=history.drops.length
    ?history.drops.length+" ribassi documentati · ultimo "+safe(new Date(history.drops[history.drops.length-1].date).toLocaleDateString("it-IT"))
@@ -2248,7 +2248,7 @@ function sellerQualification(item){
  else if(item.prezzo_trattabile==="parzialmente")add(8,"Possibile margine sul prezzo");
  else if(item.prezzo_trattabile==="no")signals.push("Prezzo non trattabile al momento");
  if(String(item.vendita_motivazione||"").trim())add(5,"Motivazione vendita conosciuta");
- if(item.tipo_venditore==="Privato")add(10,"Privato verificato");
+ if(item.tipo_venditore==="Privato")add(10,item.dati_fonte?.seller_filter_applied?"Filtro Subito: venditori privati":"Privato verificato");
  return {score:Math.min(65,score),signals,qualified:!!(item.altre_agenzie&&item.altre_agenzie!=="da_verificare"&&item.tempistiche_vendita&&item.prezzo_trattabile!=="da_verificare")};
 }
 
@@ -2647,7 +2647,7 @@ function renderDashboard(){
     const title=safe(item.titolo||"Annuncio immobiliare");
     const meta=safe([item.comune,item.portale,item.tipologia_immobile].filter(Boolean).join(" · ")||"Dettagli da completare");
     const price=item.prezzo!==null&&item.prezzo!==undefined?euro(item.prezzo):"Prezzo non indicato";
-    const seller=item.tipo_venditore==="Privato"?"Privato riconosciuto":"Venditore da verificare";
+    const seller=item.tipo_venditore==="Privato"?(item.dati_fonte?.seller_filter_applied?"Privato · filtro Subito":"Privato riconosciuto"):"Venditore da verificare";
     const reasons=priority.reasons.slice(0,2).join(" · ")||priority.description;
     const rank=index===0?"Da lavorare per primo":"Priorità "+(index+1);
     return '<article class="dash-lead-card">'
@@ -5756,7 +5756,7 @@ function renderCandidates(){
     const emailSubject=String(c.email_subject||"Notifica immobiliare").trim();
     const emailSender=String(c.notification_sender||sourceLabel).trim();
     const emailCount=c.is_browser_import?"Importata da browser":Number(c.notification_count)>1?Number(c.notification_count)+" email collegate":"1 email";
-    const sellerStateLabel=isPrivate?"Privato riconosciuto · archiviazione da completare":"Venditore da verificare";
+    const sellerStateLabel=isPrivate?(c.dati_fonte?.seller_filter_applied?"Privato · filtro Subito · archiviazione da completare":"Privato riconosciuto · archiviazione da completare"):"Venditore da verificare";
     const duplicateBadge=quality.duplicate?'<span class="candidate-email-duplicate">Possibile duplicato</span>':"";
     const lastDecision=nmreLastStatusEntry(c);
     const reopenBadge=lastDecision&&lastDecision.azione==="riaperto_per_ribasso"
