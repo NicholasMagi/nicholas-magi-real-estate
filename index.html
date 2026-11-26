@@ -89,6 +89,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .gmail-sync-last-run{font-size:11px;color:var(--muted);margin-top:4px}
 .gmail-sync-title-success{color:#267447!important}
 .gmail-sync-title-error{color:#a12b27!important}
+.nmre-sync-alert{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:12px 0;padding:12px 14px;border-radius:10px;border:1px solid #e6b8b5;background:#fdf1f0;color:#7a221e;font-size:13px;line-height:1.45}.nmre-sync-alert[hidden]{display:none}.nmre-sync-alert-warning{border-color:#ead29a;background:#fdf8ea;color:#6b4e00}.nmre-sync-alert strong{font-size:13px}.nmre-sync-alert-action{margin-left:auto;min-height:44px;padding:0 14px;border-radius:8px;border:1px solid currentColor;background:#fff;color:inherit;font-weight:700;cursor:pointer}.nmre-contact-import{display:grid;gap:10px;padding:4px 0}.nmre-contact-import-group summary{cursor:pointer;font-weight:700;padding:6px 0}.nmre-contact-import-group ul,.nmre-contact-duplicate ul{margin:6px 0 6px 18px;padding:0;font-size:12px;line-height:1.5;overflow-wrap:anywhere}#nmreContactImportConfirm,#nmreContactImportPicker{min-height:44px}
 .gmail-sync-title-stale{color:#9a642f!important}
 .gmail-sync-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
 .gmail-sync-stat{padding:10px;border:1px solid var(--line);border-radius:9px;background:white;min-width:0}
@@ -600,6 +601,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 </div></header>
 
 <main class="wrap">
+<div id="nmreSyncAlert" class="nmre-sync-alert" role="alert" hidden><strong id="nmreSyncAlertTitle"></strong><span id="nmreSyncAlertText"></span><button type="button" id="nmreSyncAlertOpen" class="nmre-sync-alert-action">Apri il monitor</button></div>
 
 <section id="setup" class="panel">
 <h2>Collegamento a Supabase</h2>
@@ -734,7 +736,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 La casella Gmail viene elaborata dal server in background. Qui non vengono mostrate le email: vede soltanto i dati estratti dagli annunci immobiliari, senza mittente, oggetto o testo dei messaggi.
 </p>
 <div class="topline">
-<div><span class="pill">Sincronizzazione automatica attiva</span><div class="small">Controllo server-side ogni minuto, anche a sito chiuso; la lista si aggiorna ogni minuto quando il sito è aperto.</div></div>
+<div><span class="pill">Sincronizzazione automatica attiva</span><div class="small">Controllo server-side ogni 10 minuti (e subito, con le notifiche push di Gmail quando attive), anche a sito chiuso; la lista si aggiorna ogni minuto quando il sito è aperto.</div></div>
 <button class="secondary" id="connectGmail">Ricollega Gmail</button>
 </div>
 <div class="gmail-sync-monitor" aria-live="polite">
@@ -810,6 +812,22 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
       <label class="wide">Note<textarea id="nmreCrmContactNotes" rows="2" maxlength="4000"></textarea></label>
       <div class="wide"><button class="gold" type="submit">Salva contatto</button><span id="nmreCrmContactMsg" class="status" aria-live="polite"></span></div>
     </form>
+    </details>
+    <details class="nmre-crm-create" id="nmreContactImport">
+      <summary>Importa la rubrica del telefono</summary>
+      <div class="nmre-contact-import">
+        <p class="hint"><strong>iPhone:</strong> app Contatti → apra un contatto o selezioni l’elenco → Condividi → salvi il file .vcf (per tutti i contatti: iCloud.com → Contatti → Esporta vCard). <strong>Android:</strong> app Contatti → Gestisci contatti → Esporta in file .vcf, oppure «Scegli dal telefono». <strong>Computer:</strong> carichi il file .vcf esportato.</p>
+        <label>File vCard (.vcf)<input id="nmreContactImportFile" type="file" accept=".vcf,text/vcard,text/x-vcard,text/directory"></label>
+        <button type="button" class="secondary" id="nmreContactImportPicker" hidden>Scegli dal telefono</button>
+        <div id="nmreContactImportPreview"></div>
+        <button type="button" class="gold" id="nmreContactImportConfirm" hidden>Conferma importazione</button>
+        <span id="nmreContactImportMsg" class="status" aria-live="polite"></span>
+        <p class="hint">Nulla viene salvato prima della conferma. Un contatto già presente non viene duplicato: si aggiungono solo i numeri e le email mancanti. I numeri oltre il primo sono conservati nelle note («Altri numeri»). Se un numero corrisponde a più contatti, non viene modificato nulla.</p>
+      </div>
+    </details>
+    <details class="nmre-crm-create" id="nmreContactDuplicates">
+      <summary>Possibili duplicati <b id="nmreContactDuplicateCount">0</b></summary>
+      <div id="nmreContactDuplicateList"></div>
     </details>
     <div class="nmre-crm-toolbar"><input id="nmreCrmContactSearch" type="search" placeholder="Cerca nome, telefono, email o comune"><select id="nmreCrmContactFilter"><option value="">Tutti i contatti</option><option value="proprietario">Proprietari</option><option value="acquirente">Acquirenti</option><option value="investitore">Investitori</option><option value="professionista">Professionisti</option></select></div>
     <div id="nmreCrmContactList" class="nmre-crm-list"></div>
@@ -1220,7 +1238,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
   <div class="candidate-inbox-toolbar">
     <div class="candidate-inbox-search">
       <label for="candidateSearch">Cerca nelle email</label>
-      <input id="candidateSearch" type="search" placeholder="Oggetto, mittente, immobile o comune">
+      <input id="candidateSearch" type="search" placeholder="Immobile, via, comune, contatto, telefono, ID o link">
     </div>
     <div class="candidate-inbox-toolbar-actions">
       <span id="candidateFilterCount" class="search-filter-count">Caricamento email…</span>
@@ -1374,7 +1392,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div class="search-filter-panel">
   <div class="search-filter-head"><div class="search-filter-title">Ricerca archivio · Filtri commerciali e immobiliari</div><span class="small">Combinabili tra loro</span></div>
   <div class="search-filter-grid">
-    <div class="search-filter-field"><label for="listingSearch">Parola chiave</label><input id="listingSearch" type="search" placeholder="Titolo, via, comune, contatto"></div>
+    <div class="search-filter-field"><label for="listingSearch">Parola chiave</label><input id="listingSearch" type="search" placeholder="Immobile, via, comune, contatto, telefono, ID o link"></div>
     <div class="search-filter-field"><label for="listingTownFilter">Comune</label><select id="listingTownFilter"><option value="">Tutti i comuni</option></select></div>
     <div class="search-filter-field"><label for="listingTypeFilter">Tipologia</label><select id="listingTypeFilter"><option value="">Tutte le tipologie</option></select></div>
     <div class="search-filter-field"><label for="listingPortalFilter">Portale / fonte</label><select id="listingPortalFilter"><option value="">Tutte le fonti</option></select></div>
@@ -1491,7 +1509,10 @@ function nmreSubitoRecoveryHtml(c){
         +(search.annunci_in_finestra_privati!==null&&search.annunci_in_finestra_privati!==undefined?' ('+escape(search.annunci_in_finestra_privati)+' privati, '+escape(search.annunci_in_finestra_professionali)+' professionisti)':""):"")
       +(Array.isArray(search.annunci_ripubblicati)&&search.annunci_ripubblicati.length?' · ripubblicati: '+escape(search.annunci_ripubblicati.join(", ")):"")
       +escape(retry)
-      +(complete?links(search.recuperati,"Annunci recuperati"):links(search.possibili,"Possibili nuovi annunci (da controllare uno per uno):"))
+      +(complete?links(search.recuperati,"Annunci recuperati")
+        :Array.isArray(search.schede_proposte)&&search.schede_proposte.length
+          ?links(search.schede_proposte,"Ogni annuncio è in coda come scheda singola «Da verificare»:")
+          :links(search.possibili,"Possibili nuovi annunci (da controllare uno per uno):"))
       +links((Array.isArray(search.gia_in_archivio)?search.gia_in_archivio:[]).map(entry=>({...entry,titolo:(entry.titolo||("Annuncio "+entry.id))+(entry.eliminato_dall_archivio?" (eliminato dall’Archivio)":" (già nell’Archivio)")})),"Già presenti nell’Archivio, non duplicati:")
       +(searchUrl?'<p><a href="'+escape(searchUrl)+'" target="_blank" rel="noopener noreferrer" data-subito-search>Apri la pagina dei risultati su Subito</a></p>':"")
       +'</div>';
@@ -1500,7 +1521,12 @@ function nmreSubitoRecoveryHtml(c){
   if(item&&item.id){
     return '<div class="candidate-quality candidate-quality-review" data-subito-item="'+escape(item.id)+'"><strong>Annuncio Subito</strong> · ID '+escape(item.id)
       +(item.pubblicato_il?' · pubblicato il '+escape(date(item.pubblicato_il)):"")
-      +' · recuperato dalla ricerca salvata'+(item.dettagli_completi?"":" (dettagli parziali: verificare sull’annuncio)")+'</div>';
+      +' · recuperato dalla ricerca salvata'+(item.dettagli_completi?"":" (dettagli parziali: verificare sull’annuncio)")
+      +(item.novita_non_dimostrata?'<br><span data-subito-unproven>Novità non dimostrata: Subito non permette di stabilire se è nuovo. Verifichi l’annuncio prima di decidere.</span>':"")
+      +(item.inserzionista_professionale===true?'<br><span data-subito-seller="professionista">Subito indica un inserzionista professionale.</span>'
+        :item.inserzionista_professionale===false?'<br><span data-subito-seller="privato">Subito indica un inserzionista privato.</span>'
+        :'<br><span data-subito-seller="non-indicato">Tipo di inserzionista non indicato da Subito.</span>')
+      +'</div>';
   }
   return "";
 }
@@ -1532,7 +1558,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-subito-saved-search-2");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-nmre-release-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1607,7 +1633,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-subito-saved-search-2");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-nmre-release-1");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -1716,6 +1742,45 @@ async function loadSellerRegistry(){
   renderSellerRegistry();
 }
 
+// Salute della sincronizzazione Gmail dallo storico nmre_gmail_sync_runs (più recente per primo).
+// Il job pianificato gira ogni 10 minuti: oltre 30 minuti senza un'esecuzione riuscita, o 3
+// errori consecutivi, l'acquisizione è da considerare bloccata.
+function nmreSyncHealth(runs,nowMs){
+  const list=Array.isArray(runs)?runs:[];
+  if(!list.length)return {level:"unknown",title:"",text:"",consecutiveFailures:0,minutesSinceSuccess:null};
+  let consecutiveFailures=0;
+  for(const row of list){if(row&&row.status==="success")break;consecutiveFailures++;}
+  const time=row=>Date.parse(row&&(row.completed_at||row.started_at)||"");
+  const lastSuccess=list.find(row=>row&&row.status==="success"&&Number.isFinite(time(row)));
+  const minutesSinceSuccess=lastSuccess?Math.max(0,Math.floor((nowMs-time(lastSuccess))/60000)):null;
+  const latestAge=Number.isFinite(time(list[0]))?Math.max(0,Math.floor((nowMs-time(list[0]))/60000)):null;
+  const since=minutes=>minutes===null?"":minutes<120?minutes+" minuti":Math.floor(minutes/60)+" ore";
+  if(minutesSinceSuccess===null||minutesSinceSuccess>30||consecutiveFailures>=3){
+    const text=consecutiveFailures>=3
+      ?consecutiveFailures+" sincronizzazioni consecutive non riuscite"+(minutesSinceSuccess!==null?"; ultima riuscita "+since(minutesSinceSuccess)+" fa":"")+"."
+      :minutesSinceSuccess===null?"Nessuna sincronizzazione riuscita nello storico recente."
+      :"Nessuna sincronizzazione riuscita da "+since(minutesSinceSuccess)+".";
+    return {level:"error",title:"Acquisizione Gmail bloccata.",text:text+" I nuovi annunci potrebbero non arrivare.",consecutiveFailures,minutesSinceSuccess};
+  }
+  if(consecutiveFailures>0){
+    return {level:"warning",title:"Ultima sincronizzazione non riuscita.",text:"Errori consecutivi: "+consecutiveFailures+"; ultima riuscita "+since(minutesSinceSuccess)+" fa.",consecutiveFailures,minutesSinceSuccess};
+  }
+  if(latestAge!==null&&latestAge>20){
+    return {level:"warning",title:"Sincronizzazione in ritardo.",text:"Ultimo controllo "+since(latestAge)+" fa: verifichi il job pianificato.",consecutiveFailures,minutesSinceSuccess};
+  }
+  return {level:"ok",title:"",text:"",consecutiveFailures,minutesSinceSuccess};
+}
+function nmreRenderSyncAlert(health){
+  const box=$("nmreSyncAlert");if(!box)return;
+  const visible=health&&(health.level==="error"||health.level==="warning");
+  box.hidden=!visible;
+  box.classList.toggle("nmre-sync-alert-warning",!!visible&&health.level==="warning");
+  if(!visible)return;
+  $("nmreSyncAlertTitle").textContent=health.title;
+  $("nmreSyncAlertText").textContent=health.text;
+}
+$("nmreSyncAlertOpen")?.addEventListener("click",()=>nmreNavigateToTarget("gmailSyncTitle"));
+
 async function loadGmailSyncStatus(){
   if(!currentUser||!supabase)return;
   const title=$("gmailSyncTitle");
@@ -1728,17 +1793,19 @@ async function loadGmailSyncStatus(){
     .limit(200);
   title.classList.remove("gmail-sync-title-success","gmail-sync-title-error","gmail-sync-title-stale");
   if(error){
+    nmreRenderSyncAlert({level:"warning",title:"Stato della sincronizzazione non leggibile.",text:"Non è stato possibile verificare l'ultima acquisizione Gmail."});
     title.textContent="Monitor sincronizzazione non disponibile";
     lastRun.textContent="Non è stato possibile leggere lo stato dal database.";
     details.textContent=error.message||"Errore di lettura del monitor.";
     return;
   }
   const runs=Array.isArray(data)?data:[];
+  nmreRenderSyncAlert(nmreSyncHealth(runs,Date.now()));
   if(!runs.length){
     title.textContent="In attesa della prima esecuzione registrata";
     lastRun.textContent="Non esiste ancora uno storico: il monitor si popolerà alla prossima sincronizzazione pianificata.";
     ["gmailSyncRead","gmailSyncProperty","gmailSyncInserted","gmailSyncAutoArchived","gmailSyncReview","gmailSyncAgencies","gmailSyncDuplicates","gmailSyncRuns24h","gmailSyncErrors24h","gmailSyncSuccessStreak"].forEach(id=>$(id).textContent="—");
-    details.textContent="La raccolta Gmail è configurata per un controllo server-side ogni minuto. Nessun dato storico è stato ricostruito o inventato.";
+    details.textContent="La raccolta Gmail è configurata per un controllo server-side ogni 10 minuti, più le notifiche push di Gmail quando attive. Nessun dato storico è stato ricostruito o inventato.";
     return;
   }
   const latest=runs[0];
@@ -3686,7 +3753,7 @@ function nmreCrmRender(){
  $("nmreCrmStatContacts").textContent=nmreCrmContacts.length;
  $("nmreCrmStatProperties").textContent=nmreCrmProperties.filter(x=>!["venduto","locato","archiviato"].includes(x.status)).length;
  $("nmreCrmStatAgenda").textContent=nmreCrmAppointments.filter(x=>x.status==="programmato").length;
- nmreCrmRenderContacts();nmreCrmRenderProperties();nmreCrmRenderAgenda();
+ nmreCrmRenderContacts();nmreRenderContactDuplicates();nmreCrmRenderProperties();nmreCrmRenderAgenda();
 }
 function nmreIdentityKey(value){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("it").replace(/[^a-z0-9@.]+/g," ").trim().replace(/\s+/g," ");}
 function nmrePhoneKeys(value){
@@ -3725,7 +3792,7 @@ function nmreMatchContactForListing(item){
  const matches=contacts.filter(contact=>{
   const name=nmreIdentityKey(contact.full_name);
   const email=String(contact.email||"").trim().toLowerCase();
-  const contactPhoneKeys=nmrePhoneKeys(contact.phone);
+  const contactPhoneKeys=nmreContactPhoneKeysAll(contact);
   const emailInListing=identity.some(x=>x.includes(email)&&email.length>5);
   const phoneInListing=contactPhoneKeys.some(key=>listingPhoneKeys.has(key));
   const nameMatch=name.length>=4&&identity.includes(name);
@@ -3886,11 +3953,344 @@ function nmreCrmRenderSalesCoach(contactId,box){
   learningHtml+
   '<p class="nmre-sales-coach-disclaimer">Suggerimenti costruiti sui dati presenti nel CRM e su regole commerciali. Non sono una previsione del comportamento del contatto. Verifichi sempre che le informazioni siano aggiornate.</p>';
 }
+/* Rubrica: importazione dei contatti del telefono (vCard / Contact Picker) e possibili duplicati.
+   Nessuna unione automatica: i contatti con più corrispondenze restano da verificare.
+   I numeri e le email oltre il primo sono conservati nelle note, in righe strutturate
+   («Altri numeri:», «Altre email:») lette anche dalla ricerca dei duplicati. */
+const NMRE_EXTRA_PHONES_LABEL="Altri numeri:";
+const NMRE_EXTRA_EMAILS_LABEL="Altre email:";
+const NMRE_NOTES_MAX=4000;
+function nmreDecodeQuotedPrintable(value,charset){
+ const bytes=[];const text=String(value||"").replace(/=\r?\n/g,"");
+ for(let i=0;i<text.length;i++){
+  if(text[i]==="="&&/^[0-9A-Fa-f]{2}$/.test(text.slice(i+1,i+3))){bytes.push(parseInt(text.slice(i+1,i+3),16));i+=2;}
+  else{const encoded=new TextEncoder().encode(text[i]);for(const b of encoded)bytes.push(b);}
+ }
+ try{return new TextDecoder(/^(utf-?8)?$/i.test(charset||"")?"utf-8":charset).decode(new Uint8Array(bytes));}
+ catch{return new TextDecoder("utf-8").decode(new Uint8Array(bytes));}
+}
+function nmreVcardUnescape(value){
+ return String(value||"").replace(/\\n/gi,"\n").replace(/\\([,;:\\])/g,"$1").trim();
+}
+function nmreParseVcard(text){
+ // Righe ripiegate (spazio o tabulazione iniziale) e ritorni a capo «soft» del quoted-printable.
+ const raw=String(text||"").replace(/\r\n?/g,"\n");
+ const lines=[];
+ for(const line of raw.split("\n")){
+  if((line.startsWith(" ")||line.startsWith("\t"))&&lines.length){lines[lines.length-1]+=line.slice(1);continue;}
+  if(lines.length&&/ENCODING=QUOTED-PRINTABLE/i.test(lines[lines.length-1].split(":")[0])&&lines[lines.length-1].endsWith("=")){lines[lines.length-1]=lines[lines.length-1].slice(0,-1)+line;continue;}
+  lines.push(line);
+ }
+ const cards=[];let card=null;
+ for(const line of lines){
+  if(/^BEGIN:VCARD\s*$/i.test(line)){card={fn:"",given:"",family:"",phones:[],emails:[],org:"",title:"",street:"",locality:"",note:""};continue;}
+  if(/^END:VCARD\s*$/i.test(line)){if(card)cards.push(card);card=null;continue;}
+  if(!card)continue;
+  const colon=line.indexOf(":");if(colon<0)continue;
+  const head=line.slice(0,colon),rawValue=line.slice(colon+1);
+  const parts=head.split(";");const name=parts[0].split(".").pop().toUpperCase();
+  const params=parts.slice(1).map(p=>p.toUpperCase());
+  if(name==="PHOTO"||name==="LOGO"||name==="SOUND"||name==="KEY")continue;
+  const charset=(parts.slice(1).find(p=>/^CHARSET=/i.test(p))||"").split("=")[1]||"utf-8";
+  const decoded=params.some(p=>p==="ENCODING=QUOTED-PRINTABLE"||p==="QUOTED-PRINTABLE")?nmreDecodeQuotedPrintable(rawValue,charset):rawValue;
+  const types=params.flatMap(p=>p.replace(/^TYPE=/,"").split(",")).map(t=>t.replace(/"/g,"").toLowerCase());
+  if(name==="FN")card.fn=nmreVcardUnescape(decoded);
+  else if(name==="N"){const n=decoded.split(";").map(nmreVcardUnescape);card.family=n[0]||"";card.given=[n[1],n[2]].filter(Boolean).join(" ");}
+  else if(name==="TEL"){
+   const number=nmreVcardUnescape(decoded).replace(/^tel:/i,"").split(";")[0].trim();
+   if(number)card.phones.push({number,label:types.includes("cell")||types.includes("mobile")?"cellulare":types.includes("home")?"casa":types.includes("work")?"lavoro":types.includes("fax")?"fax":"altro"});
+  }
+  else if(name==="EMAIL"){const email=nmreVcardUnescape(decoded).replace(/^mailto:/i,"").toLowerCase();if(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))card.emails.push(email);}
+  else if(name==="ORG")card.org=decoded.split(";").map(nmreVcardUnescape).filter(Boolean).join(" · ");
+  else if(name==="TITLE")card.title=nmreVcardUnescape(decoded);
+  else if(name==="ADR"&&!card.street&&!card.locality){const a=decoded.split(";").map(nmreVcardUnescape);card.street=[a[1],a[2]].filter(Boolean).join(" ").trim();card.locality=a[3]||"";}
+  else if(name==="NOTE")card.note=nmreVcardUnescape(decoded);
+ }
+ return cards.map(c=>{
+  const fullName=(c.fn||[c.given,c.family].filter(Boolean).join(" ")||c.org||"").replace(/\s+/g," ").trim();
+  const seen=new Set();
+  const phones=c.phones.filter(p=>{const key=nmrePhoneKey(p.number)||p.number.replace(/\D/g,"");if(!key||seen.has(key))return false;seen.add(key);return true;});
+  // Prima il cellulare: diventa il numero principale.
+  phones.sort((a,b)=>(a.label==="cellulare"?0:1)-(b.label==="cellulare"?0:1));
+  return {full_name:fullName,phones,emails:[...new Set(c.emails)],org:c.org,title:c.title,address:c.street,municipality:c.locality,note:c.note};
+ }).filter(c=>c.full_name||c.phones.length||c.emails.length);
+}
+function nmreContactFromPicker(entry){
+ const name=(Array.isArray(entry?.name)?entry.name[0]:entry?.name)||"";
+ const tels=(entry?.tel||[]).map(number=>({number:String(number),label:"altro"}));
+ const seen=new Set();
+ const phones=tels.filter(p=>{const key=nmrePhoneKey(p.number);if(!key||seen.has(key))return false;seen.add(key);return true;});
+ const address=Array.isArray(entry?.address)?entry.address[0]:null;
+ return {full_name:String(name).trim(),phones,emails:[...new Set((entry?.email||[]).map(e=>String(e).toLowerCase()).filter(e=>e.includes("@")))],
+  org:"",title:"",address:address?.addressLine?.join(" ")||"",municipality:address?.city||"",note:""};
+}
+function nmreNotesExtraValues(notes,label){
+ return String(notes||"").split("\n").filter(line=>line.startsWith(label)).flatMap(line=>line.slice(label.length).split(";")).map(v=>v.replace(/\(.*?\)/g,"").trim()).filter(Boolean);
+}
+/** Tutte le chiavi telefoniche di un contatto NMRE: numero principale e «Altri numeri» delle note. */
+function nmreContactPhoneKeysAll(contact){
+ return [...new Set([contact?.phone,...nmreNotesExtraValues(contact?.notes,NMRE_EXTRA_PHONES_LABEL)].flatMap(nmrePhoneKeys))];
+}
+function nmreContactEmailsAll(contact){
+ return [...new Set([contact?.email,...nmreNotesExtraValues(contact?.notes,NMRE_EXTRA_EMAILS_LABEL)].map(e=>String(e||"").trim().toLowerCase()).filter(e=>e.includes("@")))];
+}
+function nmreImportedNotes(c,dateLabel){
+ const lines=[];
+ if(c.phones.length>1)lines.push(NMRE_EXTRA_PHONES_LABEL+" "+c.phones.slice(1).map(p=>p.number+" ("+p.label+")").join("; "));
+ if(c.emails.length>1)lines.push(NMRE_EXTRA_EMAILS_LABEL+" "+c.emails.slice(1).join("; "));
+ if(c.org||c.title)lines.push("Rubrica del telefono: "+[c.org,c.title].filter(Boolean).join(" · "));
+ if(c.note)lines.push(c.note);
+ lines.push("Importato dalla rubrica del telefono il "+dateLabel);
+ return lines.join("\n");
+}
+/**
+ * Piano di importazione (nessuna scrittura). Categorie:
+ *  nuovo · aggiorna (un solo contatto corrispondente, con numeri o email nuovi) ·
+ *  gia_presente · da_verificare (più contatti corrispondenti: nessuna scrittura) ·
+ *  doppione_nel_file (stesso nome e un recapito in comune con una scheda precedente
+ *  del file: unita a quella) · senza_recapiti (nessun nome né recapito: ignorata).
+ */
+function nmrePlanContactImport(imported,existing,dateLabel){
+ const contacts=Array.isArray(existing)?existing:[];
+ const index=contacts.map(c=>({c,phones:new Set(nmreContactPhoneKeysAll(c)),emails:new Set(nmreContactEmailsAll(c))}));
+ const items=[];
+ for(const original of imported||[]){
+  const c={...original,phones:[...original.phones],emails:[...original.emails]};
+  if(!c.full_name&&!c.phones.length){items.push({contact:c,category:"senza_recapiti",matches:[]});continue;}
+  if(!c.full_name)c.full_name=c.phones[0]?.number||c.emails[0]||"Contatto senza nome";
+  items.push({contact:c,category:null,matches:[]});
+ }
+ // Schede del file che condividono un numero normalizzato o un'email (anche a catena).
+ const active=items.filter(item=>!item.category);
+ const parent=active.map((_,i)=>i);
+ const find=i=>parent[i]===i?i:(parent[i]=find(parent[i]));
+ const owners=new Map();
+ active.forEach((item,i)=>{
+  const keys=[...new Set([...item.contact.phones.flatMap(p=>nmrePhoneKeys(p.number)).map(k=>"tel:"+k),...item.contact.emails.map(e=>"email:"+e)])];
+  for(const key of keys){if(owners.has(key))parent[find(i)]=find(owners.get(key));else owners.set(key,i);}
+ });
+ const groups=new Map();
+ active.forEach((item,i)=>{const root=find(i);(groups.get(root)||groups.set(root,[]).get(root)).push(item);});
+ for(const group of groups.values()){
+  if(group.length<2)continue;
+  const names=new Set(group.map(item=>nmreIdentityKey(item.contact.full_name)));
+  if(names.size>1){
+   // Nomi diversi con un recapito in comune: persone forse diverse. Nessuna creazione.
+   for(const item of group){
+    item.category="da_verificare";item.reason="numero_condiviso_nel_file";
+    item.sharedWith=group.filter(other=>other!==item).map(other=>other.contact.full_name);
+   }
+   continue;
+  }
+  // Stesso nome e recapiti in comune: stessa persona, tutte le informazioni nella prima scheda.
+  const [first,...rest]=group;
+  for(const twin of rest){
+   for(const p of twin.contact.phones)if(!first.contact.phones.some(q=>nmrePhoneKeys(q.number).some(k=>nmrePhoneKeys(p.number).includes(k))))first.contact.phones.push(p);
+   for(const e of twin.contact.emails)if(!first.contact.emails.includes(e))first.contact.emails.push(e);
+   for(const field of ["org","title","address","municipality"])if(!first.contact[field]&&twin.contact[field])first.contact[field]=twin.contact[field];
+   if(twin.contact.note&&twin.contact.note!==first.contact.note)first.contact.note=[first.contact.note,twin.contact.note].filter(Boolean).join("\n");
+   twin.category="doppione_nel_file";twin.mergedInto=first;
+  }
+ }
+ for(const item of items){
+  if(item.category)continue;
+  const c=item.contact;
+  const keys=new Set(c.phones.flatMap(p=>nmrePhoneKeys(p.number)));
+  item.matches=index.filter(row=>[...row.phones].some(k=>keys.has(k))||c.emails.some(e=>row.emails.has(e))).map(row=>row.c);
+  if(item.matches.length>1){item.category="da_verificare";item.reason="piu_contatti";continue;}
+  if(!item.matches.length){
+   const notes=nmreImportedNotes(c,dateLabel);
+   if(notes.length>NMRE_NOTES_MAX){item.category="da_verificare";item.reason="note_troppo_lunghe";continue;}
+   item.category="nuovo";
+   item.insert={full_name:c.full_name.slice(0,180),contact_type:"altro",phone:c.phones[0]?.number?.slice(0,60)||null,email:c.emails[0]||null,
+    municipality:c.municipality?.slice(0,100)||null,address:c.address?.slice(0,220)||null,status:"nuovo",notes};
+   continue;
+  }
+  const target=item.matches[0];
+  const known=new Set(nmreContactPhoneKeysAll(target)),knownEmails=new Set(nmreContactEmailsAll(target));
+  const newPhones=c.phones.filter(p=>!nmrePhoneKeys(p.number).some(k=>known.has(k)));
+  const newEmails=c.emails.filter(e=>!knownEmails.has(e));
+  if(!newPhones.length&&!newEmails.length){item.category="gia_presente";continue;}
+  // Aggiornamento solo additivo: il numero e l'email principali non vengono mai sostituiti;
+  // i campi vuoti vengono riempiti, i nuovi recapiti aggiunti in coda alle note esistenti.
+  const update={};
+  const phonesForNotes=[...newPhones],emailsForNotes=[...newEmails];
+  if(!String(target.phone||"").trim()&&phonesForNotes.length)update.phone=phonesForNotes.shift().number.slice(0,60);
+  if(!String(target.email||"").trim()&&emailsForNotes.length)update.email=emailsForNotes.shift();
+  const extra=[];
+  if(phonesForNotes.length)extra.push(NMRE_EXTRA_PHONES_LABEL+" "+phonesForNotes.map(p=>p.number+" ("+p.label+")").join("; "));
+  if(emailsForNotes.length)extra.push(NMRE_EXTRA_EMAILS_LABEL+" "+emailsForNotes.join("; "));
+  if(extra.length){
+   const notes=[String(target.notes||"").replace(/\s+$/,""),...extra,"Recapiti aggiunti dalla rubrica del telefono il "+dateLabel].filter(Boolean).join("\n");
+   // Mai troncare le note: oltre il limite il contatto resta da verificare.
+   if(notes.length>NMRE_NOTES_MAX){item.category="da_verificare";item.reason="note_troppo_lunghe";item.matches=[target];continue;}
+   update.notes=notes;
+  }
+  item.category="aggiorna";item.update=update;item.newPhones=newPhones;item.newEmails=newEmails;
+ }
+ const summary={};
+ for(const item of items)summary[item.category]=(summary[item.category]||0)+1;
+ return {items,summary};
+}
+/**
+ * Numeri di un contatto nella forma della futura tabella nmre_contact_phones: numero come
+ * scritto, chiave normalizzata, etichetta, principale o secondario, origine (colonna phone
+ * o riga «Altri numeri» delle note). È la base della migrazione dopo lo schema reale.
+ */
+function nmreContactPhoneEntries(contact){
+ const entries=[];const seen=new Set();
+ const add=(number,label,primary,source)=>{
+  const key=nmrePhoneKey(number);
+  if(!key||seen.has(key))return;seen.add(key);
+  entries.push({numero:String(number).trim(),chiave:key,etichetta:label,principale:primary,origine:source});
+ };
+ if(String(contact?.phone||"").trim())add(contact.phone,"principale",true,"phone");
+ for(const line of String(contact?.notes||"").split("\n").filter(l=>l.startsWith(NMRE_EXTRA_PHONES_LABEL))){
+  for(const part of line.slice(NMRE_EXTRA_PHONES_LABEL.length).split(";")){
+   const label=(part.match(/\(([^)]*)\)/)||[])[1]||"altro";
+   add(part.replace(/\(.*?\)/g,"").trim(),label.trim(),false,"note");
+  }
+ }
+ return entries;
+}
+/**
+ * Gruppi di possibili duplicati: contatti che condividono almeno un numero (tutti i numeri,
+ * normalizzati) o un'email. Solo segnalazione: nessuna unione automatica.
+ */
+function nmreFindContactDuplicates(contacts){
+ const list=Array.isArray(contacts)?contacts:[];
+ const parent=list.map((_,i)=>i);
+ const find=i=>parent[i]===i?i:(parent[i]=find(parent[i]));
+ const reasons=new Map();
+ const byKey=new Map();
+ list.forEach((c,i)=>{
+  for(const key of nmreContactPhoneKeysAll(c).filter(k=>k.length<=10||!k.startsWith("39")))(byKey.get("tel:"+key)||byKey.set("tel:"+key,[]).get("tel:"+key)).push(i);
+  for(const email of nmreContactEmailsAll(c))(byKey.get("email:"+email)||byKey.set("email:"+email,[]).get("email:"+email)).push(i);
+ });
+ for(const [key,members] of byKey){
+  const unique=[...new Set(members)];
+  if(unique.length<2)continue;
+  for(const i of unique.slice(1))parent[find(i)]=find(unique[0]);
+  for(const i of unique)(reasons.get(i)||reasons.set(i,new Set()).get(i)).add(key);
+ }
+ const groups=new Map();
+ list.forEach((c,i)=>{if(!reasons.has(i))return;const root=find(i);(groups.get(root)||groups.set(root,[]).get(root)).push(i);});
+ return [...groups.values()].filter(g=>g.length>1).map(g=>{
+  const shared=[...new Set(g.flatMap(i=>[...reasons.get(i)]))].filter(key=>g.filter(i=>reasons.get(i).has(key)).length>1);
+  const names=new Set(g.map(i=>nmreIdentityKey(list[i].full_name)));
+  return {contacts:g.map(i=>list[i]),shared:shared.map(k=>k.replace(/^tel:/,"telefono ").replace(/^email:/,"email ")),
+   sameName:names.size===1,
+   differences:["full_name","phone","email","municipality","address","contact_type","status"].filter(f=>new Set(g.map(i=>String(list[i][f]||"").trim().toLowerCase())).size>1)};
+ });
+}
+const NMRE_IMPORT_LABELS={nuovo:"Nuovi contatti da creare",aggiorna:"Contatti esistenti a cui aggiungere numeri o email",gia_presente:"Già presenti, nessuna modifica",
+ da_verificare:"Da verificare: nessuna creazione né modifica",doppione_nel_file:"Ripetuti nel file con lo stesso nome: uniti, tutti i recapiti conservati",senza_recapiti:"Senza nome né recapiti: ignorati"};
+let nmreContactImportSource=null;
+function nmreContactImportDateLabel(){return new Intl.DateTimeFormat("it-IT",{dateStyle:"short"}).format(new Date());}
+function nmreRenderContactImportPreview(plan){
+ const box=$("nmreContactImportPreview");if(!box)return;
+ const order=["nuovo","aggiorna","da_verificare","gia_presente","doppione_nel_file","senza_recapiti"];
+ const describe=item=>{
+  const c=item.contact;
+  const phones=c.phones.map(p=>p.number+" ("+p.label+")").join(", ");
+  const match=item.matches?.length?" → "+item.matches.map(m=>m.full_name).join(" / "):"";
+  const extra=item.category==="aggiorna"?" · da aggiungere: "+[...(item.newPhones||[]).map(p=>p.number),...(item.newEmails||[])].join(", "):"";
+  const reason=item.reason==="numero_condiviso_nel_file"?" · stesso recapito di: "+(item.sharedWith||[]).join(", ")
+   :item.reason==="note_troppo_lunghe"?" · note oltre "+NMRE_NOTES_MAX+" caratteri: da completare a mano"
+   :item.reason==="piu_contatti"?" · corrisponde a più contatti":"";
+  return '<li><strong>'+safe(c.full_name||"(senza nome)")+'</strong>'+(phones?' · '+safe(phones):"")+(c.emails.length?' · '+safe(c.emails.join(", ")):"")+safe(match)+safe(extra)+safe(reason)+'</li>';
+ };
+ box.innerHTML=order.filter(cat=>plan.summary[cat]).map(cat=>{
+  const items=plan.items.filter(item=>item.category===cat);
+  return '<details class="nmre-contact-import-group" data-import-category="'+cat+'"'+(cat==="nuovo"||cat==="aggiorna"||cat==="da_verificare"?" open":"")+'><summary>'+safe(NMRE_IMPORT_LABELS[cat])+': <b>'+items.length+'</b></summary><ul>'
+   +items.slice(0,300).map(describe).join("")+(items.length>300?'<li>… e altri '+(items.length-300)+'</li>':"")+'</ul></details>';
+ }).join("")||'<p class="hint">Nessun contatto trovato nel file.</p>';
+ const writes=(plan.summary.nuovo||0)+(plan.summary.aggiorna||0);
+ $("nmreContactImportConfirm").hidden=!writes;
+ $("nmreContactImportConfirm").textContent="Conferma: crea "+(plan.summary.nuovo||0)+" e aggiorna "+(plan.summary.aggiorna||0);
+}
+function nmreShowContactImport(imported,label){
+ nmreContactImportSource=imported;
+ const plan=nmrePlanContactImport(imported,nmreCrmContacts,nmreContactImportDateLabel());
+ nmreRenderContactImportPreview(plan);
+ $("nmreContactImportMsg").textContent=label+": "+imported.length+" schede lette. Controlli l'anteprima: nulla è stato ancora salvato.";
+}
+async function nmreApplyContactImport(){
+ if(!currentUser||!supabase||!nmreContactImportSource)return;
+ const button=$("nmreContactImportConfirm");button.disabled=true;
+ try{
+  // Piano ricalcolato sulla Rubrica appena riletta: niente doppioni con contatti aggiunti nel frattempo.
+  await loadCrmWorkspace();
+  const plan=nmrePlanContactImport(nmreContactImportSource,nmreCrmContacts,nmreContactImportDateLabel());
+  const result={inserted:0,updated:0,conflicts:0,errors:[]};
+  for(const item of plan.items.filter(item=>item.category==="nuovo")){
+   const {error}=await supabase.from("nmre_contacts").insert({owner_id:currentUser.id,...item.insert});
+   if(error)result.errors.push(item.contact.full_name+": "+error.message);else result.inserted++;
+  }
+  for(const item of plan.items.filter(item=>item.category==="aggiorna")){
+   const target=item.matches[0];
+   let query=supabase.from("nmre_contacts").update({...item.update,updated_at:new Date().toISOString()}).eq("id",target.id).eq("owner_id",currentUser.id);
+   // Controllo ottimistico: se il contatto è stato modificato nel frattempo, nessuna scrittura.
+   if(target.updated_at)query=query.eq("updated_at",target.updated_at);
+   const {data,error}=await query.select("id");
+   if(error)result.errors.push(target.full_name+": "+error.message);
+   else if(!Array.isArray(data)||data.length!==1)result.conflicts++;
+   else result.updated++;
+  }
+  await loadCrmWorkspace();
+  nmreContactImportSource=null;$("nmreContactImportPreview").innerHTML="";button.hidden=true;
+  $("nmreContactImportMsg").textContent="Importazione completata: "+result.inserted+" contatti creati, "+result.updated+" aggiornati"
+   +(result.conflicts?", "+result.conflicts+" non aggiornati perché modificati nel frattempo (ripeta l'importazione)":"")
+   +(result.errors.length?". Errori: "+result.errors.slice(0,5).join("; "):"")+". "+(plan.summary.da_verificare||0)+" da verificare: nessuna modifica.";
+ }catch(error){
+  $("nmreContactImportMsg").textContent="Importazione interrotta: "+(error?.message||"errore");
+ }finally{button.disabled=false;}
+}
+function nmreRenderContactDuplicates(){
+ const list=$("nmreContactDuplicateList");if(!list)return;
+ const groups=nmreFindContactDuplicates(nmreCrmContacts||[]);
+ $("nmreContactDuplicateCount").textContent=groups.length;
+ if(!groups.length){list.innerHTML='<p class="hint">Nessun contatto condivide numeri di telefono o email.</p>';return;}
+ const fieldLabels={full_name:"nome",phone:"telefono",email:"email",municipality:"comune",address:"indirizzo",contact_type:"tipologia",status:"stato"};
+ list.innerHTML='<p class="hint">Contatti che condividono almeno un numero (tutti i numeri, normalizzati: +39, 0039, spazi e trattini) o un’email. Persone diverse possono condividere un numero, per esempio il telefono di casa: NMRE non unisce mai automaticamente.</p>'
+  +groups.map(g=>'<article class="nmre-crm-item nmre-contact-duplicate" data-duplicate-group><div><h4>'+(g.sameName?"Probabile stessa persona":"Persone diverse con un recapito in comune?")+'</h4>'
+   +'<p>In comune: '+safe(g.shared.join(", "))+(g.differences.length?' · Dati diversi: '+safe(g.differences.map(f=>fieldLabels[f]).join(", ")):"")+'</p><ul>'
+   +g.contacts.map(c=>'<li><strong>'+safe(c.full_name)+'</strong> · '+safe(c.phone||"senza telefono")+(c.email?' · '+safe(c.email):"")+(c.municipality?' · '+safe(c.municipality):"")
+    +(nmreNotesExtraValues(c.notes,NMRE_EXTRA_PHONES_LABEL).length?' · altri numeri: '+safe(nmreNotesExtraValues(c.notes,NMRE_EXTRA_PHONES_LABEL).join(", ")):"")+'</li>').join("")
+   +'</ul></div></article>').join("");
+}
+$("nmreContactImportFile")?.addEventListener("change",async event=>{
+ const file=event.target.files?.[0];if(!file)return;
+ if(file.size>20_000_000){$("nmreContactImportMsg").textContent="File troppo grande (oltre 20 MB).";return;}
+ const cards=nmreParseVcard(await file.text());
+ nmreShowContactImport(cards,"File «"+file.name+"»");
+ event.target.value="";
+});
+if("contacts" in navigator&&"select" in (navigator.contacts||{})){
+ $("nmreContactImportPicker").hidden=false;
+ $("nmreContactImportPicker").addEventListener("click",async()=>{
+  try{
+   const props=await navigator.contacts.getProperties?.()||["name","tel","email"];
+   const picked=await navigator.contacts.select(["name","tel","email",...(props.includes("address")?["address"]:[])],{multiple:true});
+   nmreShowContactImport((picked||[]).map(nmreContactFromPicker),"Contatti scelti dal telefono");
+  }catch(error){$("nmreContactImportMsg").textContent="Selezione dei contatti non disponibile: "+(error?.message||"annullata");}
+ });
+}
+$("nmreContactImportConfirm")?.addEventListener("click",nmreApplyContactImport);
+
+/** Ricerca per numero: confronto normalizzato con tutti i numeri del contatto (anche secondari). */
+function nmreContactMatchesPhoneQuery(contact,query){
+ const digits=String(query||"").replace(/\D/g,"");
+ if(digits.length<6||/[a-z]/i.test(String(query||"").replace(/[\s+().\/-]/g,"").replace(/\d/g,"")))return false;
+ const key=digits.startsWith("0039")?digits.slice(4):digits.startsWith("39")&&digits.length>=11?digits.slice(2):digits;
+ return nmreContactPhoneKeysAll(contact).some(k=>k.includes(key));
+}
 function nmreCrmRenderContacts(){
  const q=$("nmreCrmContactSearch").value.toLocaleLowerCase("it"),f=$("nmreCrmContactFilter").value;
  const rows=nmreCrmContacts.filter(x=>{
   const properties=nmreCrmPropertiesForContact(x.id);
-  return (!f||x.contact_type===f)&&(!q||[x.full_name,x.phone,x.email,x.municipality,x.address,x.notes,...properties.flatMap(p=>[p.title,p.municipality,p.address])].some(v=>String(v||"").toLocaleLowerCase("it").includes(q)));
+  return (!f||x.contact_type===f)&&(!q||[x.full_name,x.phone,x.email,x.municipality,x.address,x.notes,...properties.flatMap(p=>[p.title,p.municipality,p.address])].some(v=>String(v||"").toLocaleLowerCase("it").includes(q))
+   ||nmreContactMatchesPhoneQuery(x,q));
  });
  const roleLabels={proprietario:"Proprietario",comproprietario:"Comproprietario",referente:"Referente",familiare:"Familiare",altro:"Altro"};
  $("nmreCrmContactList").innerHTML=rows.length?rows.map(x=>{
@@ -4395,7 +4795,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-subito-saved-search-2");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-nmre-release-1");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);
@@ -4907,9 +5307,8 @@ function renderCandidates(){
     return true;
   };
   const visible=data.filter(item=>{
-    const haystack=[item.email_subject,item.notification_sender,item.titolo,item.comune,item.portale,item.tipologia_immobile].filter(Boolean).join(" ").toLocaleLowerCase("it");
     const quality=qualityById.get(String(item.id));
-    return (!term||haystack.includes(term))
+    return (!term||nmreUnifiedListingSearchMatch(item,term))
       &&(!town||item.comune===town)
       &&(!type||item.tipologia_immobile===type)
       &&(!portal||item.portale===portal)
@@ -6385,6 +6784,52 @@ function renderArchiveExtractedDetails(item){
   return '<details class="candidate-quality candidate-source-details"><summary>Altri dati recuperati automaticamente</summary>'+rows+description+imageLinks+source+'</details>';
 }
 
+function nmreListingSearchNormalize(value){
+  return String(value??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("it").replace(/\s+/g," ").trim();
+}
+function nmreListingSearchPhoneKeysFromText(value){
+  const text=String(value||"");
+  const matches=text.match(/(?:\+|00)?\d[\d\s().\/-]{6,}\d/g)||[];
+  return [...new Set(matches.flatMap(number=>nmrePhoneKeys(number)))];
+}
+function nmreListingSearchContactPhoneKeys(contact){
+  const values=[contact?.phone||""];
+  for(const line of String(contact?.notes||"").split(/\r?\n/)){
+    const match=line.match(/^\s*(?:altri numeri|numeri secondari|telefoni secondari)\s*:\s*(.*)$/i);
+    if(!match)continue;
+    values.push(...match[1].split(/[;,]/).map(value=>value.replace(/\s*\([^)]*\)\s*$/,"").trim()));
+  }
+  return [...new Set(values.flatMap(nmrePhoneKeys))];
+}
+function nmreUnifiedListingSearchMatch(item,query){
+  const normalized=nmreListingSearchNormalize(query);
+  if(!normalized)return true;
+  const linkedContact=(nmreCrmContacts||[]).find(contact=>item?.contact_id&&String(contact.id)===String(item.contact_id));
+  const fields=[
+    item?.id,item?.titolo,item?.comune,item?.indirizzo,item?.portale,item?.contatto,
+    item?.tipologia_immobile,item?.email_subject,item?.notification_sender,
+    item?.seller_identity,item?.url,item?.url_originale,item?.link,item?.descrizione,
+    item?.note_personali,item?.source_email_id
+  ];
+  if(linkedContact){
+    fields.push(linkedContact.full_name,linkedContact.phone,linkedContact.email,
+      linkedContact.municipality,linkedContact.address,linkedContact.notes);
+  }
+  const haystack=fields.filter(value=>value!==null&&value!==undefined)
+    .map(nmreListingSearchNormalize).join(" ");
+  const tokens=normalized.split(/\s+/).filter(Boolean);
+  if(tokens.every(token=>haystack.includes(token)))return true;
+  const queryPhones=nmreListingSearchPhoneKeysFromText(normalized);
+  if(!queryPhones.length)return false;
+  const itemPhoneKeys=nmreListingSearchPhoneKeysFromText([
+    item?.contatto,item?.seller_identity,item?.phone,item?.telefono,item?.telephone,
+    item?.mobile,item?.cellulare,item?.recapito,item?.proprietario,item?.venditore
+  ].filter(Boolean).join(" "));
+  if(linkedContact)itemPhoneKeys.push(...nmreListingSearchContactPhoneKeys(linkedContact));
+  const available=new Set(itemPhoneKeys);
+  return queryPhones.some(key=>available.has(key));
+}
+
 function renderListings(){
   const data=listingCache||[];
   $("totalCount").textContent=data.length;
@@ -6402,8 +6847,7 @@ function renderListings(){
   const seller=$("sellerFilter").value;
   const contactStatus=$("contactFilter").value;
   const filtered=data.filter(item=>{
-    const haystack=[item.titolo,item.comune,item.portale,item.contatto,item.tipologia_immobile].filter(Boolean).join(" ").toLocaleLowerCase("it");
-    return (!query||haystack.includes(query))
+    return (!query||nmreUnifiedListingSearchMatch(item,query))
       &&(!town||item.comune===town)
       &&(!propertyType||item.tipologia_immobile===propertyType)
       &&(!portal||item.portale===portal)

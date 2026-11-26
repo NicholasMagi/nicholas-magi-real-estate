@@ -1,4 +1,4 @@
-// NMRE service worker build 20261126-subito-saved-search-2
+// NMRE service worker build 20261126-nmre-release-1
 self.addEventListener("install",event=>{self.skipWaiting();});
 self.addEventListener("activate",event=>{event.waitUntil(self.clients.claim());});
 self.addEventListener("push",event=>{
