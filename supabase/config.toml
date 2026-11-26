@@ -1,0 +1,4 @@
+# The scheduled worker is invoked server-to-server with the Supabase Secret API Key.
+# The handler validates this key with withSupabase({ auth: "secret" }).
+[functions.nmre-gmail-scheduled]
+verify_jwt = false
