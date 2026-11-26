@@ -22,8 +22,8 @@ function grab(name: string): string {
   throw new Error("Funzione non chiusa: " + name);
 }
 // deno-lint-ignore no-explicit-any
-const ui = new Function(["validUrl", "nmreCandidateListingUrl", "nmreSubitoRecoveryHtml", "isSpecificCandidateUrl"].map(grab).join("\n")
-  + ";return {nmreCandidateListingUrl,nmreSubitoRecoveryHtml,isSpecificCandidateUrl};")() as any;
+const ui = new Function(["validUrl", "nmreCandidateListingLabel", "nmreCandidateListingUrl", "nmreSubitoRecoveryHtml", "isSpecificCandidateUrl"].map(grab).join("\n")
+  + ";return {nmreCandidateListingLabel,nmreCandidateListingUrl,nmreSubitoRecoveryHtml,isSpecificCandidateUrl};")() as any;
 
 const fixture = (name: string) => Deno.readTextFileSync(new URL("./fixtures/" + name, import.meta.url));
 const emailHtml = fixture("subito_saved_search_email.html");
@@ -39,6 +39,7 @@ Deno.test("12 · la scheda di un annuncio recuperato apre direttamente l'annunci
     const row = { id: "c-" + id, ...subitoItemRow(page.items.find(item => item.id === id)!, ctx, { pageSource: "next_data" }) };
     const url = ui.nmreCandidateListingUrl(row);
     eq(subitoAdId(url), id, "«Apri annuncio» porta all'annuncio " + id);
+    eq(ui.nmreCandidateListingLabel(row), "Apri annuncio", "la scheda individuale è etichettata come annuncio");
     eq(url.startsWith("https://www.subito.it/appartamenti/"), true, "scheda dell'annuncio, non la ricerca");
     eq(ui.isSpecificCandidateUrl(url), true, "riconosciuto come link specifico (controllo qualità)");
     eq(/data-subito-item="\d+"/.test(ui.nmreSubitoRecoveryHtml(row)), true, "riferimento all'annuncio Subito nella scheda");
@@ -58,7 +59,10 @@ Deno.test("12 · notifica da verificare: link a ogni annuncio plausibile e alla 
   const links = hrefs(markup);
   eq(links.filter(link => subitoAdId(link)).length, 4, "un link diretto per ogni annuncio plausibile");
   eq(links.includes(digest.searchUrl!), true, "link alla pagina dei risultati");
-  eq(ui.nmreCandidateListingUrl(row), digest.searchUrl, "«Apri annuncio» della notifica apre la pagina dei risultati");
+  eq(ui.nmreCandidateListingUrl(row), digest.searchUrl, "il collegamento principale della notifica apre la pagina dei risultati");
+  eq(ui.nmreCandidateListingLabel(row), "Apri ricerca Subito", "la pagina generale non viene etichettata come annuncio specifico");
+  eq(links.every(link => subitoAdId(link)), true, "ogni collegamento della lista apre una scheda specifica");
+  eq(/Apri questo annuncio/.test(markup), true, "ogni risultato ha un'azione esplicita per aprire il proprio annuncio");
   eq(ui.isSpecificCandidateUrl(digest.searchUrl), false, "la pagina dei risultati non è presentata come annuncio specifico");
 });
 
