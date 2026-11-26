@@ -511,7 +511,7 @@ non è riconoscibile, non distribuire: il rollback non sarebbe preciso.
 Il frontend nuovo è compatibile con la versione 68: le parti Subito vengono
 mostrate solo quando esistono `dati_estratti.ricerca_subito` o
 `dati_estratti.subito`. Il frontend precedente con la nuova funzione va evitato:
-può riscattare senza storico i candidati con lo stesso link di uno scarto (§16.5);
+puòrisc artare senza storico i candidati con lo stesso link di uno scarto (§16.5);
 le righe riepilogative Subito condividono il link della pagina dei risultati.
 
 | Passo | Azione | Verifica / arresto |
