@@ -54,6 +54,9 @@ jobs:
       - name: Test guarded archive preparation (prepareCandidateForArchive)
         run: node tests/frontend/archive_persist_test.mjs
 
+      - name: Test Immobiliare.it Insights messages (syncInsightsApi)
+        run: node tests/frontend/insights_message_test.mjs
+
       - name: Check migration layout (phase 2 not applicable, production versions)
         run: |
           bash supabase/tests/check_migration_layout.sh
@@ -68,7 +71,7 @@ jobs:
           echo "Auto-verifica superata: la Fase 2 in supabase/migrations viene rilevata."
 
       - name: Test Immobiliare Insights API adapter
-        run: deno test supabase/functions/nmre-insights-sync/provider_test.ts
+        run: deno test --allow-read=. supabase/functions/nmre-insights-sync/provider_test.ts supabase/functions/nmre-insights-sync/sync_test.ts supabase/functions/nmre-insights-sync/index_guard_test.ts
 
       - name: Check embedded frontend JavaScript
         run: |

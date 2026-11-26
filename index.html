@@ -1532,7 +1532,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-subito-saved-search-2");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-insights-connector-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1607,7 +1607,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-subito-saved-search-2");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-insights-connector-1");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -4316,7 +4316,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-subito-saved-search-2");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-insights-connector-1");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);
@@ -4460,24 +4460,23 @@ async function syncInsightsApi(){
       msg("portalApiMsg",data.error,"error");
       return;
     }
+    if(data?.code==="INSIGHTS_SEARCH_FAILED"){
+      $("insightsApiStatus").textContent="Ultima ricerca non riuscita";
+      msg("portalApiMsg",data.error,"error");
+      return;
+    }
     if(!data?.success)throw new Error(data?.error||"Importazione non riuscita.");
-    $("insightsApiStatus").textContent="Ultima ricerca completata · "+data.resultsRead+" risultati analizzati";
+    $("insightsApiStatus").textContent=(data.completeness==="parziale"?"Ultima ricerca parziale":"Ultima ricerca completata")+" · "+data.privateListingsInArea+" annunci di privati in area";
     const resultParts=[
-      data.inserted+" nuovi annunci privati con indicatore di recapito presente importati (numero non restituito dall’API)",
-      data.matchedEmailAsPrivate+" annunci email riconosciuti come privati",
-      data.matchedEmailAsPrivateWithPhone+" annunci privati con indicatore di recapito presente (numero da verificare sull’annuncio)",
-      data.matchedEmailAsProfessional+" annunci email segnalati come professionisti e lasciati in coda per la conferma manuale",
-      data.alreadyPresent+" già presenti"
+      data.inserted+" nuovi annunci di privati importati come «Da verificare»",
+      data.alreadyPresent+" già presenti in NMRE (nessuna modifica a dati e decisioni)",
+      data.alreadyInArchive+" già nell’Archivio, non duplicati",
+      data.matchedAsPrivate+" opportunità in attesa confermate come privati",
+      (data.detailPrivate+data.detailProfessional)+" opportunità già presenti verificate sul dettaglio ("+data.detailProfessional+" da professionisti, lasciate da verificare)",
+      data.phoneFlagged+" con il filtro recapito del portale (numero non restituito dall’API: verificare sull’annuncio)"
     ];
-    if(!data.phoneFilterAvailable){
-      resultParts.push("filtro indicatore di recapito non disponibile: la presenza del numero non è verificata");
-    }
-    if(!data.professionalLookupAvailable){
-      resultParts.push("verifica professionisti non completata (API "+(data.professionalLookupStatus||"non disponibile")+")");
-    }
-    if(data.conflictingProviderTypes>0){
-      resultParts.push(data.conflictingProviderTypes+" casi discordanti lasciati da verificare");
-    }
+    if(data.completeness==="parziale")resultParts.push("ricerca parziale: non tutte le pagine sono state lette, ripetere con un periodo più breve");
+    if(data.insertFailures>0)resultParts.push(data.insertFailures+" annunci non salvati per errore");
     msg("portalApiMsg",resultParts.join(" · ")+". "+data.note,"success");
     await loadCandidates();
   }catch(error){

@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildInsightsSearchPayload, toCandidate } from "./provider.ts";
+import { classifyExistingByListingId, collectInsightsListings, INSIGHTS_TIME_BUDGET_MS, planInsightsWrites } from "./sync.ts";
+import type { ArchivedListing, ExistingCandidate, InsightsApi } from "./sync.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "https://nicholasmagi.github.io",
@@ -15,22 +16,6 @@ function reply(data: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" }
   });
-}
-
-function canonicalImmobiliareUrl(value: unknown): string | null {
-  if (typeof value !== "string" || !value.trim()) return null;
-  try {
-    const url = new URL(value.trim());
-    let host = url.hostname.toLowerCase();
-    if (host.startsWith("www.")) host = host.slice(4);
-    if (url.protocol !== "https:" || host !== "immobiliare.it") return null;
-    const segments = url.pathname.split("/").filter(Boolean);
-    if (segments.length < 2 || segments[0].toLowerCase() !== "annunci") return null;
-    if (!/^[0-9]+$/.test(segments[1])) return null;
-    return "immobiliare.it/annunci/" + segments[1];
-  } catch {
-    return null;
-  }
 }
 
 function requiredSettings() {
@@ -83,17 +68,36 @@ async function getInsightsToken(
   return accessToken;
 }
 
-async function fetchComparableDetail(baseUrl: string, token: string, uuid: string) {
-  const response = await fetch(baseUrl + "/comparable/" + encodeURIComponent(uuid), {
-    headers: { "Authorization": "Bearer " + token },
-    signal: AbortSignal.timeout(20000)
-  });
-  if (!response.ok) {
-    console.error("Insights comparable detail failed:", response.status);
-    return null;
+// Chiamata autenticata alla Comps API. Il token (valido 4 ore) viene riusato, come
+// raccomanda la documentazione; con 401 (token scaduto o revocato) se ne chiede uno nuovo
+// una sola volta.
+async function insightsRequest(
+  baseUrl: string,
+  settings: ReturnType<typeof requiredSettings>,
+  path: string,
+  init: { method: "GET" | "POST"; body?: unknown }
+): Promise<{ status: number; data: any }> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const token = await getInsightsToken(baseUrl, settings);
+    const response = await fetch(baseUrl + path, {
+      method: init.method,
+      headers: {
+        "Authorization": "Bearer " + token,
+        ...(init.body !== undefined ? { "Content-Type": "application/json" } : {})
+      },
+      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+      signal: AbortSignal.timeout(30000)
+    });
+    if (response.status === 401 && attempt === 1) {
+      cachedToken = null;
+      cachedTokenExpiresAt = 0;
+      continue;
+    }
+    let data: any = null;
+    try { data = await response.json(); } catch { data = null; }
+    return { status: response.status, data };
   }
-  const detail = await response.json();
-  return detail && typeof detail === "object" ? detail : null;
+  return { status: 401, data: null };
 }
 
 Deno.serve(async (req: Request) => {
@@ -146,7 +150,7 @@ Deno.serve(async (req: Request) => {
       leadUseApproved,
       canImport: settings.configured && leadUseApproved,
       environment,
-      capabilities: ["ricerca di annunci pubblicati da privati tramite clientTypeID ufficiale", "filtro phoneNumberProvided per selezionare annunci in cui il portale segnala un recapito", "il numero telefonico non è restituito dall’API e va verificato manualmente nell’annuncio", "ricerca separata di professionisti", "incrocio con notifiche email per eliminare i duplicati"],
+      capabilities: ["ricerca degli annunci in vendita pubblicati da privati (fullSearchByAttribute, clientTypeID=1)", "annotazione del filtro phoneNumberProvided (l'API non restituisce numeri di telefono)", "tipo di inserzionista dei candidati già presenti tramite dettaglio per ID annuncio", "confronto con Opportunità, Scartati e Archivio per evitare duplicati"],
       missingSecrets: [
         ["INSIGHTS_CLIENT_ID", settings.clientId],
         ["INSIGHTS_CLIENT_SECRET", settings.clientSecret],
@@ -193,253 +197,139 @@ Deno.serve(async (req: Request) => {
     : "https://sandbox-comparables.realitycs.it";
 
   try {
-    const token = await getInsightsToken(baseUrl, settings);
-    const privateOwnersAll = new Map<string, Record<string, any>>();
-    const privateWithPhoneCandidates = new Map<string, Record<string, any>>();
-    const professionalCandidates = new Map<string, Record<string, any>>();
-    let resultsRead = 0;
-    let detailRead = 0;
-    let detailsFailed = 0;
-    let privateAllPagesRead = 0;
-    let privatePhonePagesRead = 0;
-    let professionalPagesRead = 0;
-    let phoneFilterAvailable = true;
-    let professionalLookupAvailable = true;
-    let professionalLookupStatus: number | null = null;
-    const maxPages = 10;
+    const startedAt = Date.now();
+    const nowIso = new Date().toISOString();
+    const api: InsightsApi = {
+      search: (endpoint, body) => insightsRequest(baseUrl, settings, "/comparables/" + endpoint, { method: "POST", body }),
+      detailByListingId: (listingId) => insightsRequest(baseUrl, settings, "/comparable/id/" + encodeURIComponent(listingId), { method: "GET" })
+    };
 
-    // Ricerca ampia dei privati per classificare anche le email senza telefono;
-    // seconda ricerca più selettiva per importare nuovi proprietari contattabili;
-    // terza ricerca dei professionisti per riconoscere ed escludere le agenzie.
-    const searches = [
-      { clientTypeID: 1 as const, phoneFilter: null, target: privateOwnersAll, fatal: true, label: "privati" },
-      { clientTypeID: 1 as const, phoneFilter: true, target: privateWithPhoneCandidates, fatal: false, label: "privati con telefono" },
-      { clientTypeID: 2 as const, phoneFilter: null, target: professionalCandidates, fatal: false, label: "professionisti" }
-    ];
-
-    for (const search of searches) {
-      for (let page = 1; page <= maxPages; page++) {
-        const response = await fetch(baseUrl + "/comparables/searchByAttribute", {
-          method: "POST",
-          headers: {
-            "Authorization": "Bearer " + token,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(buildInsightsSearchPayload(
-            new Date(), lookbackDays, page, search.clientTypeID, search.phoneFilter
-          )),
-          signal: AbortSignal.timeout(30000)
-        });
-
-        if (!response.ok) {
-          console.error("Immobiliare Insights search failed for " + search.label + ":", response.status);
-          if (search.fatal) {
-            throw new Error("Ricerca ufficiale dei proprietari privati non riuscita. Verificare l'account Insights e il filtro clientTypeID.");
-          }
-          if (search.clientTypeID === 1) phoneFilterAvailable = false;
-          else {
-            professionalLookupAvailable = false;
-            professionalLookupStatus = response.status;
-          }
-          break;
-        }
-
-        const result = await response.json();
-        const items = Array.isArray(result.items) ? result.items : [];
-        resultsRead += items.length;
-        if (search.clientTypeID === 1 && search.phoneFilter === null) privateAllPagesRead++;
-        else if (search.clientTypeID === 1) privatePhonePagesRead++;
-        else professionalPagesRead++;
-
-        for (let offset = 0; offset < items.length; offset += 4) {
-          const batch = items.slice(offset, offset + 4);
-          const details = await Promise.all(batch.map(async (item: Record<string, any>) => {
-            const uuid = typeof item.uuid === "string" ? item.uuid.trim() : "";
-            if (!uuid) return null;
-            return await fetchComparableDetail(baseUrl, token, uuid);
-          }));
-
-          for (const detail of details) {
-            if (!detail) {
-              detailsFailed++;
-              continue;
-            }
-            detailRead++;
-            const candidate = toCandidate(
-              detail, userData.user.id, search.clientTypeID, search.phoneFilter
-            );
-            const key = candidate ? canonicalImmobiliareUrl(candidate.url) : null;
-            if (candidate && key) search.target.set(key, candidate);
-          }
-        }
-
-        const lastPage = Number(result?._metadata?.pages?.last || page);
-        if (page >= lastPage || items.length === 0) break;
-      }
+    // 1) Ricerca degli annunci di privati (dettaglio completo in un'unica chiamata per pagina).
+    const collection = await collectInsightsListings(api, { now: new Date(), lookbackDays });
+    if (collection.status === "errore") {
+      return reply({
+        success: false,
+        code: "INSIGHTS_SEARCH_FAILED",
+        provider: "Immobiliare.it Insights",
+        environment,
+        searches: collection.searches,
+        inserted: 0,
+        error: "Ricerca Immobiliare.it Insights non riuscita: nessun annuncio importato e nessun dato modificato."
+      }, 200);
     }
 
-    // Legge le opportunità già arrivate via email per classificare lo stesso annuncio
-    // senza creare duplicati fra la fonte Gmail e la fonte API.
-    const existingRows: Array<Record<string, any>> = [];
+    // 2) Annunci già presenti in NMRE (tutti gli stati) e Archivio: senza una lettura
+    //    completa non si inserisce nulla.
+    const existingCandidates: ExistingCandidate[] = [];
     const pageSize = 500;
     for (let offset = 0; ; offset += pageSize) {
       const { data: page, error } = await supabase
         .from("annunci_candidati")
-        .select("id,url,url_originale,stato,seller_manual_override")
+        .select("id,url,url_originale,listing_key,dedup_key,stato,seller_manual_override,seller_evidence,seller_classification_version")
         .eq("owner_id", userData.user.id)
-        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
         .range(offset, offset + pageSize - 1);
-      if (error) throw new Error("Lettura dei candidati già raccolti non riuscita.");
-      existingRows.push(...(page || []));
+      if (error) throw new Error("Lettura delle opportunità già raccolte non riuscita: nessun annuncio importato.");
+      existingCandidates.push(...(page || []));
+      if (!page || page.length < pageSize) break;
+    }
+    const archive: ArchivedListing[] = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const { data: page, error } = await supabase
+        .from("annunci")
+        .select("id,url,listing_key,deleted_at")
+        .eq("owner_id", userData.user.id)
+        .order("id", { ascending: true })
+        .range(offset, offset + pageSize - 1);
+      if (error) throw new Error("Lettura dell'Archivio non riuscita: nessun annuncio importato.");
+      archive.push(...(page || []));
       if (!page || page.length < pageSize) break;
     }
 
-    const existingByUrl = new Map<string, Record<string, any>[]>();
-    for (const row of existingRows) {
-      const key = canonicalImmobiliareUrl(row.url) || canonicalImmobiliareUrl(row.url_originale);
-      if (!key) continue;
-      const group = existingByUrl.get(key) || [];
-      group.push(row);
-      existingByUrl.set(key, group);
+    // 3) Cosa scrivere: solo annunci nuovi e conferme del venditore su candidati in attesa.
+    const plan = planInsightsWrites(collection, { candidates: existingCandidates, archive }, { ownerId: userData.user.id, nowIso });
+
+    let inserted = 0;
+    let insertRaces = 0;
+    const insertFailures: string[] = [];
+    for (const row of plan.inserts) {
+      const { error } = await supabase.from("annunci_candidati").insert(row).select("id");
+      if (!error) inserted++;
+      else if (error.code === "23505") insertRaces++;
+      else insertFailures.push(error.message.slice(0, 160));
     }
 
-    const privateUpdateIds: string[] = [];
-    const professionalUpdateIds: string[] = [];
-    const rowsToInsert = new Map<string, Record<string, any>>();
-    let protectedManual = 0;
-    let conflictingProviderTypes = 0;
-
-    const privateKeys = new Set([
-      ...privateOwnersAll.keys(),
-      ...privateWithPhoneCandidates.keys()
-    ]);
-    const allProviderUrls = new Set([
-      ...privateKeys,
-      ...professionalCandidates.keys()
-    ]);
-
-    for (const key of allProviderUrls) {
-      const privateCandidate = privateOwnersAll.get(key) || privateWithPhoneCandidates.get(key);
-      const professionalCandidate = professionalCandidates.get(key);
-      // Se il provider restituisce lo stesso URL in gruppi diversi, non scegliamo a caso.
-      if (privateCandidate && professionalCandidate) {
-        conflictingProviderTypes++;
-        continue;
-      }
-
-      const matches = existingByUrl.get(key) || [];
-      const activeRows = matches.filter(row =>
-        row.stato === "da_verificare" && row.seller_manual_override !== true
-      );
-      protectedManual += matches.filter(row => row.seller_manual_override === true).length;
-
-      if (privateCandidate) {
-        if (activeRows.length) {
-          privateUpdateIds.push(...activeRows.map(row => String(row.id)));
-        } else if (matches.length === 0) {
-          // I nuovi record importati dalla sola API restano limitati ai privati
-          // per i quali il portale conferma che il numero telefonico è disponibile.
-          const contactableCandidate = privateWithPhoneCandidates.get(key);
-          if (contactableCandidate) rowsToInsert.set(contactableCandidate.dedup_key, contactableCandidate);
-        }
-      } else if (professionalCandidate && activeRows.length) {
-        professionalUpdateIds.push(...activeRows.map(row => String(row.id)));
-      }
-    }
-
-    const nowIso = new Date().toISOString();
-    let matchedEmailAsPrivate = 0;
-    let matchedEmailAsPrivateWithPhone = 0;
-    let matchedEmailAsProfessional = 0;
-
-    if (privateUpdateIds.length) {
+    let matchedAsPrivate = 0;
+    if (plan.privateUpdateIds.length) {
       const { data, error } = await supabase
         .from("annunci_candidati")
         .update({
           tipo_venditore: "Privato",
           seller_confidence: 99,
-          seller_evidence: "Immobiliare.it Insights: corrispondenza URL con filtro ufficiale clientTypeID=1 (Privato)",
+          seller_evidence: "Immobiliare.it Insights: stesso annuncio restituito dalla ricerca ufficiale clientTypeID=1 (Privato)",
           seller_classification_version: 4,
-          seller_manual_override: false,
           updated_at: nowIso
         })
         .eq("owner_id", userData.user.id)
         .eq("stato", "da_verificare")
         .eq("seller_manual_override", false)
-        .in("id", [...new Set(privateUpdateIds)])
+        .in("id", plan.privateUpdateIds)
         .select("id");
       if (error) throw new Error("Aggiornamento dei venditori privati riconosciuti non riuscito.");
-      matchedEmailAsPrivate = data?.length ?? 0;
-      const phoneUrls = new Set(privateWithPhoneCandidates.keys());
-      matchedEmailAsPrivateWithPhone = [...new Set(privateUpdateIds)]
-        .filter(id => {
-          const row = existingRows.find(candidate => String(candidate.id) === id);
-          const key = row ? canonicalImmobiliareUrl(row.url) || canonicalImmobiliareUrl(row.url_originale) : null;
-          return !!key && phoneUrls.has(key);
-        }).length;
+      matchedAsPrivate = data?.length ?? 0;
     }
 
-    if (professionalUpdateIds.length) {
+    // 4) Candidati già presenti (per esempio arrivati via Gmail): tipo di inserzionista dal
+    //    dettaglio per ID annuncio. Nessuna opportunità viene scartata automaticamente.
+    const detailCheck = await classifyExistingByListingId(api, existingCandidates, {
+      exclude: new Set(plan.privateUpdateIds), deadline: startedAt + INSIGHTS_TIME_BUDGET_MS + 20_000
+    });
+    let detailPrivate = 0;
+    let detailProfessional = 0;
+    for (const result of detailCheck.results) {
+      const update = result.clientType === "Privato"
+        ? { tipo_venditore: "Privato", seller_confidence: 99, seller_evidence: "Immobiliare.it Insights: dettaglio dell'annuncio con clientType «Privato»", seller_classification_version: 4, updated_at: nowIso }
+        : { tipo_venditore: "Da verificare", seller_confidence: 0, seller_evidence: "Immobiliare.it Insights: dettaglio dell'annuncio con clientType «Professionista»; conferma manuale necessaria", seller_classification_version: 4, updated_at: nowIso };
       const { data, error } = await supabase
         .from("annunci_candidati")
-        // Nessuna opportunità viene scartata automaticamente: il candidato resta in
-        // coda "Da verificare" con l'indicazione del portale, da confermare a mano.
-        .update({
-          tipo_venditore: "Da verificare",
-          seller_confidence: 0,
-          seller_evidence: "Immobiliare.it Insights indica un professionista (clientTypeID=2, corrispondenza URL): conferma manuale necessaria",
-          seller_classification_version: 4,
-          updated_at: nowIso
-        })
+        .update(update)
         .eq("owner_id", userData.user.id)
+        .eq("id", result.id)
         .eq("stato", "da_verificare")
         .eq("seller_manual_override", false)
-        .in("id", [...new Set(professionalUpdateIds)])
         .select("id");
-      if (error) throw new Error("Esclusione degli annunci pubblicati da professionisti non riuscita.");
-      matchedEmailAsProfessional = data?.length ?? 0;
+      if (error) continue;
+      if (data?.length) result.clientType === "Privato" ? detailPrivate++ : detailProfessional++;
     }
 
-    const rows = [...rowsToInsert.values()];
-    let inserted = 0;
-    if (rows.length) {
-      const { data, error } = await supabase
-        .from("annunci_candidati")
-        .upsert(rows, { onConflict: "owner_id,dedup_key", ignoreDuplicates: true })
-        .select("id");
-      if (error) {
-        console.error("Immobiliare Insights candidate save failed:", error.message);
-        throw new Error("Risultati ricevuti, ma non è stato possibile salvare i nuovi proprietari privati.");
-      }
-      inserted = data?.length ?? 0;
-    }
-
-        return reply({
+    return reply({
       success: true,
       provider: "Immobiliare.it Insights",
       environment,
       lookbackDays,
-      pagesRead: privateAllPagesRead + privatePhonePagesRead + professionalPagesRead,
-      privateAllPagesRead,
-      privatePhonePagesRead,
-      professionalPagesRead,
-      resultsRead,
-      detailRead,
-      detailsFailed,
-      privateCandidatesMatched: privateOwnersAll.size,
-      privateCandidatesWithPhone: privateWithPhoneCandidates.size,
-      professionalCandidatesMatched: professionalCandidates.size,
-      matchedEmailAsPrivate,
-      matchedEmailAsPrivateWithPhone,
-      matchedEmailAsProfessional,
-      conflictingProviderTypes,
-      protectedManual,
-      phoneFilterAvailable,
-      professionalLookupAvailable,
-      professionalLookupStatus,
+      endpoint: "fullSearchByAttribute",
+      completeness: collection.status,
+      searches: collection.searches,
+      privateListingsInArea: collection.privateItems.size,
+      phoneFlagged: collection.phoneFlagged.size,
+      phoneSearchComplete: collection.phoneSearchComplete,
+      outOfArea: collection.outOfArea,
+      unusableItems: collection.unusable,
+      declaredProfessionalInPrivateSearch: collection.declaredProfessional,
       inserted,
-      alreadyPresent: Math.max(0, privateWithPhoneCandidates.size - inserted - matchedEmailAsPrivateWithPhone),
-      note: "Il tipo venditore viene confrontato con clientTypeID=1 (Privato) e clientTypeID=2 (Professionista). Gli annunci email possono essere classificati anche quando il filtro sul telefono non è applicato; i nuovi annunci importati automaticamente sono limitati ai privati con numero telefonico disponibile. Le verifiche manuali e gli annunci già scartati non vengono sovrascritti. Il numero telefonico non è restituito dal mapping API documentato: il link dell'annuncio resta il canale di contatto."
+      insertRaces,
+      insertFailures: insertFailures.length,
+      alreadyPresent: plan.alreadyPresent,
+      untouchedDecisions: plan.untouchedDecisions,
+      untouchedManual: plan.untouchedManual,
+      alreadyInArchive: plan.archived.length,
+      matchedAsPrivate,
+      detailChecked: detailCheck.checked,
+      detailFailed: detailCheck.failed,
+      detailPrivate,
+      detailProfessional,
+      note: "Importati come «Da verificare» gli annunci di privati in area non ancora presenti in NMRE né nell'Archivio. Le decisioni e le modifiche manuali non vengono toccate. L'API non restituisce numeri di telefono: il recapito va verificato aprendo l'annuncio." +
+        (collection.status === "parziale" ? " Ricerca parziale: non tutte le pagine sono state lette (vedi searches); ripetere con un periodo più breve." : "")
     });
   } catch (error) {
     console.error("Immobiliare Insights sync error:", error instanceof Error ? error.message : "unknown error");
