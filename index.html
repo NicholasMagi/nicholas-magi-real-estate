@@ -3701,7 +3701,13 @@ function nmrePhoneKeys(value){
  }
  return [...keys].filter(key=>key.length>=9&&key.length<=15);
 }
-function nmrePhoneKey(value){return nmrePhoneKeys(value)[0]||"";}
+function nmrePhoneKey(value){
+ const digits=String(value||"").replace(/\D/g,"");
+ if(digits.length<9||digits.length>15)return "";
+ const international=digits.startsWith("00")?digits.slice(2):digits;
+ if(international.startsWith("39")&&international.length>=11&&international.length<=13)return international.slice(2);
+ return international;
+}
 function nmreExtractListingPhones(item){
  const fields=Object.entries(item||{}).filter(([key,value])=>
   typeof value==="string"&&/(^|_)(contatto|seller_identity|phone|telefono|telephone|tel|mobile|cellulare|recapito)(_|$)/i.test(key)
