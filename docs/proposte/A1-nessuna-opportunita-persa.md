@@ -14,8 +14,8 @@ lo stato di produzione è quello riferito dal titolare, non verificato da qui: v
 
 | Componente | Stato in produzione |
 |---|---|
-| Migrazione protezione `new_opportunities` | **Applicata**, versione `20261126004257` (file rinominato di conseguenza; nome originale `20261125200000`) |
-| Migrazione protezione `price_drop` | **Applicata**, versione `20261126004310` (file rinominato di conseguenza; nome originale `20261125202000`) |
+| Migrazione protezione `new_opportunities` | Riferita come applicata, versione attesa `20261126004257`; da confermare in sola lettura (nome originale `20261125200000`) |
+| Migrazione protezione `price_drop` | Riferita come applicata, versione attesa `20261126004310`; da confermare in sola lettura (nome originale `20261125202000`) |
 | Edge Function `nmre-gmail-scheduled` | **Versione 68 attiva** |
 | Tabella Fase 2 `nmre_gmail_avvisi_dubbi` | **Non applicata**; `NMRE_CAPTURE_DUBIOUS_ALERTS` non impostato. Il file è in `supabase/migrations_pending/`: nessun `db push` può applicarlo |
 | Frontend (`index.html`, `sw.js`) | **Non distribuito**: in produzione resta la versione di `main`. Rilascio proposto nella PR #69 (service worker `20261126-subito-saved-search-2`), procedura al §7 |
@@ -385,49 +385,60 @@ Vedi §13 per l'esito dettagliato, con i link alle esecuzioni.
 
 ## 7. Distribuzione e rollback (aggiornato il 26/11/2026 per il rilascio Subito, PR #69)
 
-Rilascio indipendente: Pull Request Draft
-[NicholasMagi/nicholas-magi-real-estate#69](https://github.com/NicholasMagi/nicholas-magi-real-estate/pull/69),
-branch `claude/subito-release`, codice applicativo del commit `9777a5f`. Il connettore
-Immobiliare.it Insights rivisto resta nella PR #68 e **non** fa parte di questo rilascio.
-Nessun passo va eseguito senza l'approvazione esplicita del titolare. Sostituire
-`<project-ref>` con il riferimento del progetto Supabase.
+Rilascio indipendente nella Pull Request #69, branch `claude/subito-release`.
+Il codice applicativo sottoposto alle verifiche è il commit `9777a5f`; il successivo
+intervento documentale non cambia quel codice. Il connettore Immobiliare.it Insights
+della PR #68 è escluso. **Nessun passo di rilascio va eseguito senza approvazione
+esplicita del titolare.** Sostituire `<project-ref>` con il riferimento del progetto
+Supabase. Questa procedura non prevede migrazioni o modifiche ai secret.
 
-### 7.0 Cosa è verificato e cosa resta da controllare su Supabase
-| Elemento | Stato | Fonte |
+### 7.0 Stato delle verifiche: repository/CI e produzione
+
+| Elemento | Stato | Cosa dimostra |
 |---|---|---|
-| Migrazioni `20261126004257` e `20261126004310` applicate in produzione | Riferito dal titolare il 26/11/2026; **da confermare** con la query 7.1-A in sola lettura | 🟢 riferito · 🔎 da verificare |
-| Backup delle definizioni originali dei trigger (due righe) | **Da confermare** con la query 7.1-A | 🔎 |
-| Tabella Fase 2 `nmre_gmail_avvisi_dubbi` assente | **Da confermare** con la query 7.1-A | 🔎 |
-| Versione 68 di `nmre-gmail-scheduled` attiva | Riferito dal titolare; il commit di origine **non è registrato** nel repository | 🟢 riferito |
-| Verifica JWT della funzione disattivata (`verify_jwt=false`) | Dichiarato in `supabase/cron/README.md`; **da controllare** nella Dashboard prima del passo 2 | 🔎 |
-| Nel repository non esiste `supabase/config.toml` | Senza un'opzione esplicita, la CLI distribuisce con la verifica JWT **attiva** | ✅ codice |
-| Contenuto dei file di migrazione invariato dal 25/11/2026 21:27 UTC (solo rinominati in `ede43d0`, R100) | Verificato con `git log --follow` | ✅ codice |
-| Pubblicazione del frontend | GitHub Pages pubblica `main` con il workflow dinamico `pages-build-deployment` a ogni push, senza attendere la CI | ✅ GitHub Actions |
-| Test Deno (135), test Node del frontend, controlli di struttura, CI `validate` e `migrations` sul commit `9777a5f` | Superati (run 45848138660) | ▶️ 🧪 |
-| Prove nel browser sul commit `9777a5f`: schede Subito 18/18, pannello di recupero 37/37, caricamento con errori 8/8 | Superate, con dati sintetici e Supabase simulato | ▶️ |
-| Comportamento contro il database Supabase reale e accesso dal server alla pagina Subito | **Non verificato** | 🔎 |
+| Codice Subito, frontend e funzione Gmail | Verificati sul commit `9777a5f` | Revisione del repository; non dimostra il comportamento in produzione |
+| CI PR #69, run [45848138660](https://github.com/NicholasMagi/nicholas-magi-real-estate/actions/runs/45848138660) | `validate` e `migrations` superati | I test automatici, compresi quelli delle migrazioni, sono stati eseguiti su ambiente temporaneo; non sul database reale |
+| Browser Playwright sul commit `9777a5f` | Schede Subito 18/18; pannello di recupero 37/37; caricamento con errori 8/8 | Superati con dati sintetici e Supabase simulato; non costituiscono una prova contro il progetto Supabase reale |
+| Pubblicazione GitHub Pages | Configurazione verificata: pubblicazione da `main` tramite il workflow dinamico `pages-build-deployment` | La pubblicazione avverrà dopo il merge su `main`; questa PR non è ancora stata pubblicata |
+| Contenuto delle due migrazioni dei trigger | Invariato dal 25/11/2026 alle 21:27 UTC; il commit `ede43d0` le registra come rinomine Git `R100` | È verificata la storia del repository, non l'applicazione effettiva in produzione |
+| Applicazione in produzione delle versioni `20261126004257` e `20261126004310` | Riferita dal titolare; **da confermare** con la query 7.1-A | Non è stata letta direttamente la cronologia Supabase in questa verifica |
+| Backup delle definizioni originali dei trigger e loro stato attuale | **Da confermare** con la query 7.1-A | La presenza dei file di rollback non prova la presenza dei backup nel database |
+| Assenza della tabella Fase 2 `nmre_gmail_avvisi_dubbi` | **Da confermare** con la query 7.1-A | Non applicare la Fase 2 in questo rilascio |
+| Versione 68 di `nmre-gmail-scheduled` attiva e relativa configurazione JWT | Riferite dal titolare/documentazione; **da verificare** nella Dashboard | Il commit di origine della versione 68 non è registrato nel repository |
+| Secret `NMRE_CAPTURE_DUBIOUS_ALERTS` assente e `NMRE_KEEP_AGENCY_CANDIDATES` non impostato | **Da controllare** nella Dashboard prima del rilascio | Non leggere, copiare o modificare i valori degli altri secret |
+| Accesso della funzione al sito Subito dal server | **Non verificato** | Possibili blocchi anti-robot/CAPTCHA; dopo il deploy l'esito può restare «da verificare» con i link |
 
-### 7.1 Ordine esatto
-Prima il frontend, poi la funzione.
-- Il nuovo frontend è compatibile con la versione 68: le parti Subito della scheda compaiono
-  solo se esistono `dati_estratti.ricerca_subito` o `dati_estratti.subito`.
-- Il frontend di `main` con la nuova funzione va invece evitato:
-  - riscarta senza storico i candidati con lo stesso link di uno scartato (§16.5);
-  - le righe riepilogative di una ricerca Subito condividono il link della pagina dei
-    risultati, quindi verrebbero riscartate.
+### 7.0-A · Identificativi delle migrazioni: nomi originali, file attuali e versioni
 
-| Passo | Azione | Comando o luogo | Verifica | Se qualcosa non va |
-|---|---|---|---|---|
-| A | Controllo del database in sola lettura | Query 7.1-A nel SQL Editor | Condizioni elencate sotto la query | Fermarsi, nessun passo successivo |
-| B | Controllo della funzione | Dashboard → Edge Functions → `nmre-gmail-scheduled`: annotare lo stato della verifica JWT; tra i secret `NMRE_CAPTURE_DUBIOUS_ALERTS` **non** presente e `NMRE_KEEP_AGENCY_CANDIDATES` non impostato | Valori annotati | Fermarsi se la Fase 2 risulta attiva |
-| C | **Backup della versione 68** | Comandi 7.1-C, in una cartella vuota fuori dal repository | La cartella contiene `index.ts` e `_shared/` | Senza backup non distribuire: il rollback B non sarebbe preciso |
-| 1 | Frontend | GitHub: PR #69 → «Ready for review» → merge con «Create a merge commit». Pages pubblica in automatico | Comando 7.1-1: la prima riga di `sw.js` contiene `20261126-subito-saved-search-2` | Rollback C |
-| 2 | Funzione `nmre-gmail-scheduled` dal commit di merge | Comandi 7.1-2 | Passo 3 | Rollback B |
-| 3 | Verifica | Query 7.1-3 dopo la prossima esecuzione programmata (ogni 10 minuti); registro della funzione per 24 ore; prossima email Subito reale | `succeeded`, HTTP 200, nessun errore; link degli annunci oppure notifica «da verificare» | Rollback B |
-| — | **Non** distribuire `nmre-insights-sync` | — | — | — |
-| — | Fase 2: non fa parte di questo rilascio (§4, `supabase/migrations_pending/README.md`) | — | — | — |
+Le due migrazioni furono create il 25/11 con gli identificativi originali riportati
+nella prima colonna. Il 26/11 i file furono rinominati per allineare il prefisso
+temporale alle versioni di applicazione riferite dal titolare. Il commit `ede43d0`
+li registra come rinomine Git `R100`: il contenuto SQL non è stato modificato.
 
-**7.1-A · Query in sola lettura** (si chiude con `ROLLBACK`):
+| Identificativo originale e chiave interna `v_migration`/backup | File attuale in `supabase/migrations/` | Versione attesa in `schema_migrations` |
+|---|---|---|
+| `20261125200000_guard_agency_candidate_notifications` | `20261126004257_guard_agency_candidate_notifications.sql` | `20261126004257`, nome `guard_agency_candidate_notifications` |
+| `20261125202000_guard_agency_price_drop_notifications` | `20261126004310_guard_agency_price_drop_notifications.sql` | `20261126004310`, nome `guard_agency_price_drop_notifications` |
+
+I riferimenti interni `v_migration` e le chiavi nella tabella
+`private.nmre_trigger_definition_backups` **devono restare quelli originali**:
+sono le chiavi usate dai rispettivi rollback per trovare le definizioni salvate.
+Non vanno rinominati né normalizzati.
+
+Le intestazioni SQL che riportano lo stato «NON APPLICATA IN PRODUZIONE» e i
+vecchi percorsi di rollback descrivono il momento in cui i file furono scritti:
+sono commenti storici, non una prova dello stato attuale. Non vengono modificati
+in questo intervento documentale; non modificare i file SQL per correggerli.
+Lo stato reale, i nomi registrati da Supabase e i backup devono essere verificati
+eseguendo la query in sola lettura seguente.
+
+### 7.1 · Controlli prima del rilascio
+
+Eseguire tutti i controlli senza scritture. Se una condizione non coincide, fermarsi:
+non distribuire la funzione e non proseguire con il frontend.
+
+**7.1-A · Query in sola lettura** (la transazione termina con `ROLLBACK`):
+
 ```sql
 BEGIN TRANSACTION READ ONLY;
 
@@ -453,40 +464,89 @@ select to_regclass('public.nmre_gmail_avvisi_dubbi') as tabella_fase_2,
 
 ROLLBACK;
 ```
-Condizioni per proseguire. Fermarsi se anche una sola non vale:
-1. le versioni `20261126004257` e `20261126004310` sono presenti, con un `name` coerente
-   con i due file (§16.7);
-2. nessuna versione `20261125201000` e nessun `name` che contiene `gmail_dubious_alerts`;
-3. ci sono esattamente due backup, con i nomi interni
-   `20261125200000_guard_agency_candidate_notifications` e
-   `20261125202000_guard_agency_price_drop_notifications`;
-4. `protetto = true` per il trigger di notifica di ciascuna delle due tabelle;
-5. `tabella_fase_2` è nulla e `funzione_supporto` è vera.
 
-**7.1-C · Backup della versione 68:**
+Condizioni attese:
+1. Le versioni `20261126004257` e `20261126004310` sono presenti, con i nomi
+   `guard_agency_candidate_notifications` e
+   `guard_agency_price_drop_notifications`.
+2. Non è presente la versione `20261125201000` né una migrazione con nome
+   `gmail_dubious_alerts`.
+3. Sono presenti esattamente due backup, con le chiavi originali
+   `20261125200000_guard_agency_candidate_notifications` e
+   `20261125202000_guard_agency_price_drop_notifications`.
+4. Il trigger di notifica su ciascuna delle due tabelle risulta protetto
+   (`protetto = true`).
+5. `tabella_fase_2` è `NULL` e `funzione_supporto` è `true`.
+
+Se una query fallisce, un backup manca, una versione/nome non coincide o una
+condizione non è vera, **fermarsi**. Non correggere il database e non eseguire
+migrazioni come parte di questa procedura.
+
+**7.1-B · Dashboard Supabase**
+
+In Edge Functions → `nmre-gmail-scheduled`, annotare se la verifica JWT è
+attiva o disattivata. Nell'elenco dei nomi dei secret verificare che
+`NMRE_CAPTURE_DUBIOUS_ALERTS` non sia presente e che
+`NMRE_KEEP_AGENCY_CANDIDATES` non sia impostato. Non leggere né riportare i
+valori dei secret. Se la Fase 2 risulta attiva, fermarsi.
+
+**7.1-C · Backup della versione 68**
+
+Il commit di origine della versione 68 non è noto. Prima di distribuire, scaricare
+la funzione attualmente distribuita in una cartella vuota, fuori dal repository,
+e conservarla senza modificarla:
+
 ```bash
-mkdir -p ~/nmre-backup-v68 && cd ~/nmre-backup-v68
+mkdir -p ~/nmre-backup-v68
+cd ~/nmre-backup-v68
 supabase functions download nmre-gmail-scheduled --project-ref <project-ref>
 ```
 
-**7.1-1 · Verifica della pubblicazione** (l'indirizzo è quello di Settings → Pages):
+Verificare che il download contenga `index.ts` e l'intera cartella `_shared/`
+della funzione `nmre-gmail-scheduled`. Se il download è incompleto o la copia
+non è riconoscibile, non distribuire: il rollback non sarebbe preciso.
+
+### 7.2 · Sequenza di rilascio (solo dopo approvazione)
+
+Il frontend nuovo è compatibile con la versione 68: le parti Subito vengono
+mostrate solo quando esistono `dati_estratti.ricerca_subito` o
+`dati_estratti.subito`. Il frontend precedente con la nuova funzione va evitato:
+può riscattare senza storico i candidati con lo stesso link di uno scarto (§16.5);
+le righe riepilogative Subito condividono il link della pagina dei risultati.
+
+| Passo | Azione | Verifica / arresto |
+|---|---|---|
+| 0 | Completare 7.1-A, 7.1-B e 7.1-C | Se una verifica fallisce o il backup non è completo, fermarsi |
+| 1 | Solo dopo approvazione: portare la PR #69 a «Ready for review» e unirla con «Create a merge commit» | GitHub Pages pubblica `main`; non distribuire la funzione prima di verificare il frontend pubblicato |
+| 2 | Dal commit di merge, distribuire solo `nmre-gmail-scheduled` | Verificare SHA di `origin/main`; mantenere l'impostazione JWT annotata in 7.1-B |
+| 3 | Dopo la successiva esecuzione programmata (ogni 10 minuti), verificare job, risposta HTTP e log per 24 ore; controllare la prossima email Subito reale | Atteso: job `succeeded`, HTTP 200, nessun errore. L'email può legittimamente restare «da verificare» con link |
+
+**7.2-A · Verifica della pubblicazione frontend** (URL da confermare in Settings
+→ Pages se il dominio del progetto è diverso):
+
 ```bash
 curl -s https://nicholasmagi.github.io/nicholas-magi-real-estate/sw.js | head -1
 ```
 
-**7.1-2 · Distribuzione della funzione dal commit di merge:**
-```bash
-git fetch origin main && git checkout --detach origin/main
-git log -1 --format='%H %s'
-supabase functions deploy nmre-gmail-scheduled --project-ref <project-ref> --no-verify-jwt
-```
-- Usare `--no-verify-jwt` **soltanto** se al passo B la verifica JWT della funzione risulta
-  disattivata in produzione.
-- Se risulta attiva, omettere l'opzione, così da mantenere la stessa impostazione della
-  versione 68.
-- Non impostare `NMRE_CAPTURE_DUBIOUS_ALERTS`.
+La prima riga deve contenere `20261126-subito-saved-search-2`.
 
-**7.1-3 · Verifica in sola lettura dopo la distribuzione:**
+**7.2-B · Distribuzione della funzione dal commit di merge:**
+
+```bash
+git fetch origin main
+git checkout --detach origin/main
+git log -1 --format='%H %s'
+```
+
+Controllare che il commit sia quello del merge della PR #69. Poi eseguire
+`supabase functions deploy nmre-gmail-scheduled --project-ref <project-ref>`.
+Aggiungere `--no-verify-jwt` **soltanto se** al passo 7.1-B la verifica JWT
+della funzione risultava disattivata in produzione. Se la verifica risultava
+attiva, omettere l'opzione. Non impostare
+`NMRE_CAPTURE_DUBIOUS_ALERTS`; non distribuire `nmre-insights-sync`.
+
+**7.2-C · Verifica in sola lettura dopo la distribuzione:**
+
 ```sql
 BEGIN TRANSACTION READ ONLY;
 select status, return_message, start_time
@@ -498,39 +558,42 @@ select id, status_code, left(content::text, 300) as risposta, created
 ROLLBACK;
 ```
 
-Storico: i passi 1 e 1-bis (migrazioni dei trigger) e 2 (versione 68 della funzione) della
-procedura precedente sono stati eseguiti dal titolare il 26/11/2026. Lo stato del database va
-comunque confermato con la query 7.1-A.
+Attendere almeno una nuova esecuzione programmata prima di giudicare il risultato.
+La verifica del job da sola non sostituisce il controllo dei log e dell'email reale.
 
-### 7.2 Rollback
-Per la funzione e il frontend, prima la funzione (B), poi il frontend (C) solo se necessario.
-Le righe scritte nel frattempo restano: non vanno cancellate.
+### 7.3 · Rollback
 
-| Codice | Cosa annullare | Procedura | Dati |
-|---|---|---|---|
-| B | Funzione di sincronizzazione | Ridistribuire la copia della versione 68 salvata al passo C (comando sotto), con la stessa impostazione JWT annotata al passo B | Le righe e lo storico scritti nel frattempo restano |
-| C | Frontend | Revert del commit di merge della PR #69 con una nuova PR (comandi sotto); Pages ripubblica in automatico | Nessuno |
-| A | Migrazione del trigger dei nuovi candidati (non toccata da questo rilascio) | Eseguire `supabase/rollback/20261126004257_guard_agency_candidate_notifications.rollback.sql`: ripristina la definizione originale salvata e lo stato di abilitazione; si ferma se il backup manca | Nessun dato toccato; il backup resta |
-| E | Migrazione del trigger dei ribassi (non toccata da questo rilascio) | Eseguire `supabase/rollback/20261126004310_guard_agency_price_drop_notifications.rollback.sql`: ripristina la definizione originale e lo stato, rimuove la funzione di supporto se inutilizzata | Storico notifiche intatto; il backup resta |
-| D | Fase 2 (non applicata) | 1) rimuovere `NMRE_CAPTURE_DUBIOUS_ALERTS`; 2) eseguire `supabase/rollback/20261125201000_gmail_dubious_alerts.rollback.sql` | Gli avvisi raccolti restano; l'eliminazione della tabella è facoltativa, irreversibile e da approvare |
+In caso di errore, ripristinare **prima la funzione** e solo dopo, se necessario,
+il frontend. Le righe e lo storico scritti nel frattempo restano: non cancellarli.
 
-**Rollback B:**
+**B · Ripristino della funzione:** distribuire la copia scaricata al passo 7.1-C,
+mantenendo la stessa impostazione JWT annotata al passo 7.1-B. Da
+`~/nmre-backup-v68`, eseguire
+`supabase functions deploy nmre-gmail-scheduled --project-ref <project-ref>`.
+Aggiungere `--no-verify-jwt` soltanto se la verifica JWT risultava disattivata;
+altrimenti ometterlo.
+
+**C · Ripristino del frontend:** solo se necessario e dopo il ripristino della
+funzione, creare un nuovo branch dal `main`, annullare il merge con un revert
+esplicito del merge commit e aprire una PR separata. Dopo il merge della PR di
+revert, GitHub Pages ripubblica il frontend precedente.
+
 ```bash
-cd ~/nmre-backup-v68 && supabase functions deploy nmre-gmail-scheduled --project-ref <project-ref> --no-verify-jwt
-```
-Anche qui usare `--no-verify-jwt` soltanto se la verifica JWT risultava disattivata al passo B.
-
-**Rollback C:**
-```bash
-git fetch origin main && git checkout -b revert-subito origin/main
+git fetch origin main
+git checkout -b revert-subito origin/main
 git revert -m 1 <sha-del-merge-di-69>
 git push -u origin revert-subito
 ```
-Poi aprire la PR del revert e farne il merge.
 
-Rollback del database (A, E): questo rilascio non li richiede, perché non applica né modifica
-migrazioni. Se si annullano entrambi, E va eseguito prima di A. Tutti i rollback del database
-sono coperti dai test (§3.2, §3.3, §4.2, §13).
+Poi aprire la PR del revert e farne il merge dopo revisione.
+
+**Database:** questo rilascio non applica né modifica migrazioni. Non eseguire i
+rollback A/E per annullare il rilascio Subito. I file
+`supabase/rollback/20261126004257_guard_agency_candidate_notifications.rollback.sql`
+e
+`supabase/rollback/20261126004310_guard_agency_price_drop_notifications.rollback.sql`
+restano disponibili per un intervento separato sul database, da valutare e
+autorizzare espressamente. La Fase 2 resta fuori da questo rilascio.
 
 ## 8. Recupero dei "Da verificare" scartati (88 alla rilevazione AQ2 del 25/11/2026)
 
