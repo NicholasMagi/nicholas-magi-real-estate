@@ -5316,9 +5316,9 @@ function renderSourceDetails(item){
 function nmreSubitoBrowserAdId(value){
   try{
     const url=new URL(String(value||""));
-    const host=url.hostname.toLowerCase().replace(/^www\\./,"");
+    const host=url.hostname.toLowerCase().replace(/^www\./,"");
     if(host!=="subito.it"&&!host.endsWith(".subito.it"))return null;
-    const match=url.pathname.match(/^\\/[a-z0-9-]+\\/[a-z0-9-]*?-?(\\d{6,})\\.htm$/i);
+    const match=url.pathname.match(/^\/[a-z0-9-]+\/[a-z0-9-]*?-?(\d{6,})\.htm$/i);
     return match?match[1]:null;
   }catch{return null;}
 }
@@ -5333,7 +5333,7 @@ function nmreParseSubitoBrowserPayload(value){
   const searchUrl=validUrl(payload.search_url);
   let search;
   try{search=new URL(searchUrl||"");}catch{return {ok:false,error:"Link della ricerca Subito mancante o non valido."};}
-  const searchHost=search.hostname.toLowerCase().replace(/^www\\./,"");
+  const searchHost=search.hostname.toLowerCase().replace(/^www\./,"");
   if(search.protocol!=="https:"||(searchHost!=="subito.it"&&!searchHost.endsWith(".subito.it"))){
     return {ok:false,error:"Il link della pagina deve appartenere a Subito ed essere HTTPS."};
   }
@@ -5352,7 +5352,7 @@ function nmreParseSubitoBrowserPayload(value){
       const n=Number(input);
       return Number.isFinite(n)&&n>=min&&n<=max&&(!integer||Number.isInteger(n))?n:null;
     };
-    const text=(input,max)=>String(input??"").replace(/\\s+/g," ").trim().slice(0,max)||null;
+    const text=(input,max)=>String(input??"").replace(/\s+/g," ").trim().slice(0,max)||null;
     const images=Array.isArray(raw.images)?raw.images.map(validUrl).filter(src=>{
       try{return !!src&&new URL(src).protocol==="https:";}catch{return false;}
     }).slice(0,10):[];
@@ -5437,7 +5437,7 @@ function nmreBuildSubitoBrowserCandidate(item,meta,ownerId,batchId){
 let nmreSubitoBrowserPreviewState=null;
 
 function nmreSubitoBrowserRowAdId(row){
-  const dedup=String(row&&row.dedup_key||"").match(/^subito:(\\d{6,})$/);
+  const dedup=String(row&&row.dedup_key||"").match(/^subito:(\d{6,})$/);
   if(dedup)return dedup[1];
   for(const value of [row&&row.url,row&&row.listing_key]){
     if(!value)continue;
