@@ -115,6 +115,8 @@ Deno.test("2 · link del pulsante «Vedi i nuovi annunci», senza tracciamento, 
   eq(link.source, "pulsante", "dal pulsante");
   eq(link.url, SEARCH_URL, "URL della ricerca: UTM rimossi, kxconfid conservato");
   eq(subitoSavedSearchDigest(EMAIL_26)!.searchKey, "subito.it/annunci-marche/vendita/appartamenti/ancona?advt=0,2", "chiave stabile della ricerca");
+  const changedToken = subitoSavedSearchDigest({ ...EMAIL_26, bodyHtml: EMAIL_HTML.replace("kxconfid=u2p484vrw", "kxconfid=token-diverso") });
+  eq(changedToken?.searchKey, subitoSavedSearchDigest(EMAIL_26)!.searchKey, "kxconfid variabile non crea una nuova ricerca");
 });
 Deno.test("2 · pulsante con redirect di tracciamento, link alternativo, link mancante", () => {
   const tracked = EMAIL_HTML.replace(/href="https:\/\/www\.subito\.it\/annunci-marche[^"]+"/,
