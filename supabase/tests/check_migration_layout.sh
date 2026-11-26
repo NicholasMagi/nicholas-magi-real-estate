@@ -18,6 +18,11 @@ if ls "$MIG" | grep -qi 'dubious'; then bad "un file della Fase 2 è in supabase
 if grep -lqi 'nmre_gmail_avvisi_dubbi' "$MIG"/*.sql 2>/dev/null; then bad "una migrazione applicabile crea o modifica nmre_gmail_avvisi_dubbi"; else ok "nessuna migrazione applicabile tocca nmre_gmail_avvisi_dubbi"; fi
 [[ -f "$ROOT/supabase/migrations_pending/20261125201000_gmail_dubious_alerts.sql" ]] && ok "Fase 2 conservata in supabase/migrations_pending/" || bad "migrazione della Fase 2 mancante in supabase/migrations_pending/"
 
+# 1-ter. Notifiche delle schede Subito con novità non dimostrata: in attesa di approvazione
+if ls "$MIG" | grep -qi 'quiet_unproven_subito_candidates'; then bad "la migrazione delle schede Subito è in supabase/migrations/ senza approvazione"; else ok "migrazione delle schede Subito non applicabile automaticamente"; fi
+[[ -f "$ROOT/supabase/migrations_pending/20261126210000_quiet_unproven_subito_candidates.sql" && -f "$ROOT/supabase/rollback/20261126210000_quiet_unproven_subito_candidates.rollback.sql" ]] \
+  && ok "migrazione delle schede Subito e rollback presenti" || bad "migrazione o rollback delle schede Subito mancanti"
+
 # 2. Versioni delle protezioni allineate alla produzione
 for f in 20261126004257_guard_agency_candidate_notifications.sql 20261126004310_guard_agency_price_drop_notifications.sql; do
   [[ -f "$MIG/$f" ]] && ok "presente $f" || bad "mancante $f"
