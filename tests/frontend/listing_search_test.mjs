@@ -92,4 +92,4 @@ assert.ok(
   "Opportunità deve usare il motore di ricerca condiviso"
 );
 
-console.log("Ricerca condivisa: tutti i 20 controlli superati.");
+console.log("Ricerca condivisa: tutti i 21 controlli superati.");
