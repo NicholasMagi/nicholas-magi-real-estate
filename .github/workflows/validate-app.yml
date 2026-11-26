@@ -28,7 +28,7 @@ jobs:
           deno-version: v2.x
 
       - name: Check Gmail Edge Function TypeScript
-        run: deno check supabase/functions/nmre-gmail-scheduled/index.ts supabase/functions/nmre-gmail-push/index.ts supabase/functions/nmre-search-engine/index.ts supabase/functions/nmre-insights-sync/index.ts
+        run: deno check supabase/functions/nmre-gmail-scheduled/index.ts supabase/functions/nmre-gmail-push/index.ts supabase/functions/nmre-search-engine/index.ts supabase/functions/nmre-insights-sync/index.ts supabase/functions/nmre-subito-dry-run/index.ts
 
       - name: Test Gmail parser and incremental history adapter
         run: deno test supabase/functions/nmre-gmail-scheduled/parser_test.ts supabase/functions/nmre-gmail-scheduled/history_test.ts supabase/functions/nmre-gmail-scheduled/_shared/parser.test.ts
@@ -69,6 +69,9 @@ jobs:
             exit 1
           fi
           echo "Auto-verifica superata: la Fase 2 in supabase/migrations viene rilevata."
+
+      - name: Test Subito dry run (single email, read-only database and Gmail, no writes)
+        run: deno test --allow-read=. supabase/functions/nmre-subito-dry-run/dry_run_test.ts supabase/functions/nmre-subito-dry-run/readonly_test.ts supabase/functions/nmre-subito-dry-run/index_guard_test.ts
 
       - name: Test Immobiliare Insights API adapter
         run: deno test supabase/functions/nmre-insights-sync/provider_test.ts
