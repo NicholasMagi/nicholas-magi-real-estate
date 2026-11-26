@@ -3710,7 +3710,7 @@ function nmrePhoneKey(value){
 }
 function nmreExtractListingPhones(item){
  const fields=Object.entries(item||{}).filter(([key,value])=>
-  typeof value==="string"&&/(^|_)(contatto|seller_identity|phone|telefono|telephone|tel|mobile|cellulare|recapito)(_|$)/i.test(key)
+  typeof value==="string"&&/(^|_)(contatto|seller_identity|phone|telefono|telephone|tel|mobile|cellulare|recapito|contact|proprietario|venditore)(_|$)/i.test(key)
  ).map(([,value])=>value);
  const text=fields.join(" ");
  const matches=text.match(/(?:\+|00)?\d[\d\s().\/-]{6,}\d/g)||[];
@@ -3740,8 +3740,10 @@ function nmreMatchContactForListing(item){
 }
 async function nmreSyncArchiveContactLinks(){
  if(!currentUser||!supabase||!Array.isArray(listingCache)||!nmreCrmContacts?.length)return;
+ const crmSourceIds=new Set((nmreCrmProperties||[]).map(property=>String(property.source_listing_id||"")).filter(Boolean));
  for(const item of listingCache){
   if(item.deleted_at)continue;
+  if(item.contact_id&&!crmSourceIds.has(String(item.id)))continue;
   const contact=nmreMatchContactForListing(item);
   if(!contact)continue;
   const contactId=String(contact.id);
