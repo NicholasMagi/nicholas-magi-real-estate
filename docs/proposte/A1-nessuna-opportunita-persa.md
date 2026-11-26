@@ -352,7 +352,7 @@ L'eliminazione della tabella è solo commentata, facoltativa e da approvare.
 | `dubious_test.ts` (rete di sicurezza, mittente e portale, promozione, interruttore) | 10 superati |
 | `nmre-insights-sync/provider_test.ts` | 6 superati |
 | `deno check` di `nmre-gmail-scheduled` e `nmre-gmail-push` | superato |
-| `tests/frontend/recovery_test.mjs` (provenienza delle agenzie, data dello scarto, notifiche dopo lo scarto, presa visione, scarti storici, agenzia riaperta per ribasso) | 24 superati |
+| `tests/frontend/recovery_test.mjs` (provenienza delle agenzie, data dello scarto, notifiche dopo lo scarto, presa visione, scarti storici, agenzia riaperta per ribasso; dal 26/11 anche secondo scarto, date come timestamp, lettura parziale e paginazione oltre 1000 righe) | 43 superati |
 | `supabase/tests/run_migration_tests.sh` su PostgreSQL 16 (trigger `new_opportunities`, trigger `price_drop` in due varianti, avvisi dubbi, rollback inclusi) | 59 superati |
 | Sintassi JavaScript, 362 ID univoci, analisi SQL (42 `SELECT` nell'audit; migrazioni e rollback validi) | superati |
 | Browser Chromium con Supabase simulato e dati sintetici: etichette di provenienza, contrassegno e avviso "Nuova notifica dopo lo scarto", presa visione, avvisi dubbi con link Gmail e richiesta di promozione, sezione nascosta senza tabella, nessun errore di pagina | superato |
@@ -715,3 +715,32 @@ Dopo l'applicazione, rieseguire AQ17 e AQ17b. Atteso:
 | `abilitazione` diversa da `O` | Il trigger è disattivato o in modalità replica: va chiarito prima |
 | `considera_tipo_venditore = true` | La funzione filtra già per tipo: la protezione potrebbe essere ridondante o in conflitto |
 | Tipi diversi da `uuid` / `uuid` / `text` | La condizione aggiunta dalla migrazione 1-bis non sarebbe valida |
+
+
+---
+
+## 15. Correzioni del frontend dopo la revisione tecnica (26/11/2026)
+
+Interventi limitati a `index.html`, `sw.js` (versione `20261126-recovery-panel-1`) e
+`tests/frontend/recovery_test.mjs`. Nessuna modifica a Edge Functions, migrazioni,
+rollback, regole di classificazione o filtro delle email.
+
+| Punto | Correzione |
+|---|---|
+| M1 | Le schede del pannello e degli avvisi dubbi usano la classe dedicata `candidate-recovery-card`: impaginazione verticale su desktop e smartphone |
+| M2 | «Riporta in revisione» di un'agenzia scartata imposta anche `seller_manual_override: true` e `seller_classification_version: 100` (classificazione «Da verificare»): né la funzione distribuita né quella della PR possono riclassificarla come agenzia |
+| M4 | A pannello chiuso: solo la coda, un indice leggero degli scartati (id, link, tipo, data; al massimo ogni 10 minuti) e un controllo filtrato dal database degli scartati con contrassegno attivo, che mantiene l'avviso. I dati completi si leggono all'apertura del pannello (e di nuovo dopo 5 minuti se resta aperto), con soli `storico_stato` e `notifiche_dopo_scarto` al posto dell'intero `dati_estratti`. Tutti gli scartati restano raggiungibili («Mostra altri») |
+| B1 | Dopo un errore `PGRST205` la tabella `nmre_gmail_avvisi_dubbi` non viene più interrogata fino al ricaricamento della pagina; la sezione resta nascosta |
+| B2 | «Nuova notifica dopo lo scarto» considera l'ultima data di scarto e l'ultima presa visione, anche per il contrassegno della sincronizzazione |
+| B3 | La scheda in coda di un annuncio riaperto per ribasso mostra «Riaperto dopo lo scarto» con il motivo |
+| B4 | Agenzie in attesa: «Ricevuto il» (data dell'email) e motivo non presentato come scarto precedente |
+| B5 | Paginazione effettiva: a chiave (`id`) per i candidati, a scostamento fino a pagina vuota per le notifiche; date confrontate come timestamp |
+| B6 | «Apri annuncio» e «Apri in Gmail» con area interattiva di almeno 44 px |
+| Concorrenza | `nmreUpdateCandidateWithHistory` (usata anche dalla presa visione, dallo scarto e dalla verifica del venditore) aggiorna solo se `updated_at` è invariato rispetto alla lettura; altrimenti non scrive nulla e chiede di aggiornare la lista. Tutte le scritture della sincronizzazione su stato, venditore e `dati_estratti` aggiornano `updated_at` |
+
+Test eseguiti in locale: 43 test unitari; 37 controlli nel browser (Chromium 1366 px e
+iPhone 13, Supabase simulato con limite di 1000 righe per richiesta), tra cui tabella
+Fase 2 assente, recupero di un'agenzia seguito da una sincronizzazione, presa visione e
+secondo scarto, scritture concorrenti e paginazione oltre 1000 notifiche e 1000 scartati;
+verifica con la funzione reale `sellerFieldsForExisting`. Il pannello non è stato provato
+contro il database reale.

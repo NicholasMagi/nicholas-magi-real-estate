@@ -152,6 +152,15 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .candidate-recovery-metric strong{display:block;font-size:20px;line-height:1.2;color:var(--ink)}
 .candidate-recovery-metric span{display:block;margin-top:4px;font-size:10px;line-height:1.35;color:var(--muted)}
 .candidate-recovery-list{display:grid;gap:8px}
+.candidate.candidate-recovery-card{display:block;margin:10px 0;padding:14px 14px 12px;border:1px solid var(--line);border-left:4px solid #c9a35b;border-radius:10px;background:#fff}
+.candidate-recovery-card .candidate-email-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.candidate-recovery-card h3{margin:8px 0 4px;font-size:16px;line-height:1.35}
+.candidate-recovery-card .candidate-quick-facts{margin:0 0 8px}
+.candidate-recovery-card .candidate-quality{margin:8px 0}
+.candidate-recovery-card .candidate-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
+.candidate-recovery-card .candidate-actions a{display:inline-flex;align-items:center;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:8px;text-decoration:none;font-weight:600}
+.candidate-recovery-card .candidate-actions button{min-height:44px}
+@media(max-width:520px){.candidate-recovery-card .candidate-actions>*{flex:1 1 100%;justify-content:center}}
 .candidate-recovery-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid var(--line);border-radius:9px;background:#fff}
 .candidate-recovery-item-main{display:grid;gap:4px;min-width:0}
 .candidate-recovery-item-main strong{font-size:12px;line-height:1.4;color:var(--ink)}
@@ -1427,6 +1436,14 @@ let candidateCache = [];
 let candidateAgencyCache = [];
 let candidateDismissedCache = [];
 let candidateDubiousCache = [];
+let candidateDismissedIndex = [];      // indice leggero degli scartati (id, link, tipo, data)
+let candidateDismissedIndexAt = 0;
+let candidateRecoveryLoadedAt = 0;     // dati completi del pannello, letti solo a pannello aperto
+let candidateRecoveryLoading = null;
+let candidateRecoveryFlagged = [];     // scartati con una notifica successiva segnalata dalla sincronizzazione
+let candidateRecoveryLimit = 300;
+let nmreDubiousTableMissing = false;   // Fase 2: tabella non ancora creata (errore PGRST205)
+let nmreDubiousLoadedAt = 0;
 let sellerRegistryCache = [];
 let insightsCanImport = false;
 let omiQuotationCache = [];
@@ -1463,7 +1480,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-no-lost-opportunity-2");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1538,7 +1555,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261125-no-lost-opportunity-2");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-1");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -4247,7 +4264,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261125-no-lost-opportunity-2");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-1");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);
@@ -4915,6 +4932,10 @@ function renderCandidates(){
     const emailCount=Number(c.notification_count)>1?Number(c.notification_count)+" email collegate":"1 email";
     const sellerStateLabel=isPrivate?"Privato riconosciuto · archiviazione da completare":"Venditore da verificare";
     const duplicateBadge=quality.duplicate?'<span class="candidate-email-duplicate">Possibile duplicato</span>':"";
+    const lastDecision=nmreLastStatusEntry(c);
+    const reopenBadge=lastDecision&&lastDecision.azione==="riaperto_per_ribasso"
+      ?'<span class="candidate-email-duplicate candidate-reopened-badge">Riaperto dopo lo scarto · '+safe(lastDecision.motivo||"nuovo ribasso documentato")+'</span>'
+      :"";
     const dismissedBadge=c.previously_dismissed?'<span class="candidate-email-duplicate">Già scartato in passato · verificare'+(Number(c.price_drop_percent)>0?' · nuovo ribasso':'')+'</span>':"";
 
     return '<article id="candidate-'+safe(c.id)+'" class="candidate candidate-email-card candidate-source-'+sourceTheme+'" data-candidate="'+safe(c.id)+'" data-url="'+safe(c.url||"")+'" data-url-originale="'+safe(c.url_originale||"")+'" data-portal="'+safe(c.portale||"Portale non indicato")+'">'
@@ -4928,7 +4949,7 @@ function renderCandidates(){
       +'<div class="candidate-email-subject"><span>Oggetto email</span> '+safe(emailSubject)+'</div>'
       +'<h3>'+safe(c.titolo||"Annuncio immobiliare")+'</h3>'
       +'<p class="candidate-quick-facts">'+safe(quickFacts||"Caratteristiche dell’immobile da completare")+'</p>'
-      +'<div class="candidate-email-status">'+safe(sellerStateLabel)+' '+duplicateBadge+' '+dismissedBadge+'</div>'
+      +'<div class="candidate-email-status">'+safe(sellerStateLabel)+' '+reopenBadge+' '+duplicateBadge+' '+dismissedBadge+'</div>'
       +'</div>'
       +'<div class="candidate-actions candidate-actions-primary">'+reviewAction+linkHtml+'<button class="gold" type="button" data-confirm="'+safe(c.id)+'">Archivia</button><button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta email</button></div>'
       +'<details class="candidate-detail-panel" data-candidate-details>'
@@ -4981,7 +5002,7 @@ function renderCandidates(){
   renderDashboard();
 }
 
-async function loadCandidates(){
+async function loadCandidates(options={}){
   if(!currentUser)return;
   const box=$("candidateList");
   const data=[];
@@ -5070,46 +5091,147 @@ async function loadCandidates(){
   // notifiche dello stesso immobile e non viene più replicato automaticamente.
   // Gli annunci con lo stesso link di uno scartato restano in coda con il
   // contrassegno "già scartato in passato" (e l'eventuale nuovo ribasso).
-  const dismissed=[];
-  for(let offset=0;;offset+=pageSize){
-    const {data:page,error}=await supabase.from("annunci_candidati")
-      .select("id,titolo,comune,prezzo,portale,url,url_originale,tipo_venditore,seller_manual_override,seller_evidence,notification_sender,email_subject,dati_estratti,data_pubblicazione,created_at,updated_at")
-      .eq("stato","scartato")
-      .order("updated_at",{ascending:false}).order("id",{ascending:true})
-      .range(offset,offset+pageSize-1);
-    if(error){msg("candidateMsg","Impossibile leggere gli annunci scartati: "+error.message,"error");break;}
-    dismissed.push(...(page||[]));
-    if(!page||page.length<pageSize)break;
-  }
-  const dismissedListingUrls=new Set(dismissed.map(item=>canonicalCandidateUrl(item.url)).filter(Boolean));
+  // Per la coda basta un indice leggero degli scartati (id, link, data), aggiornato
+  // al massimo ogni 10 minuti; i dati completi si leggono solo a pannello aperto.
+  const force=options&&options.force===true;
+  await nmreRefreshDismissedIndex(force);
+  const dismissedListingUrls=new Set(candidateDismissedIndex.map(item=>canonicalCandidateUrl(item.url)).filter(Boolean));
   data.forEach(item=>{
     const key=canonicalCandidateUrl(item.url);
     item.previously_dismissed=!!(key&&dismissedListingUrls.has(key));
   });
-  // Storico notifiche degli scartati: serve a evidenziare gli aggiornamenti
-  // arrivati dopo lo scarto, anche senza ribasso.
-  const dismissedNotifications=new Map();
-  const dismissedIds=dismissed.map(item=>String(item.id));
-  for(let batch=0;batch<dismissedIds.length;batch+=100){
-    const ids=dismissedIds.slice(batch,batch+100);
-    const {data:notifications,error}=await supabase.from("annunci_candidati_notifiche")
-      .select("candidate_id,source_email_id,notified_at,created_at,listing_price,price_drop_percent,listing_title,listing_municipality")
-      .in("candidate_id",ids).order("created_at",{ascending:false}).limit(2000);
-    if(error){msg("candidateMsg","Storico notifiche degli scartati non disponibile: "+error.message,"error");break;}
-    for(const notification of notifications||[]){
-      const key=String(notification.candidate_id);
-      if(!dismissedNotifications.has(key))dismissedNotifications.set(key,[]);
-      dismissedNotifications.get(key).push(notification);
-    }
-  }
-  dismissed.forEach(item=>{item.notification_history=dismissedNotifications.get(String(item.id))||[];});
-  candidateDismissedCache=dismissed;
   candidateAgencyCache=data.filter(item=>item.tipo_venditore==="Agenzia");
   candidateCache=data.filter(item=>item.tipo_venditore!=="Agenzia");
+  // Controllo leggero e filtrato dal database: solo gli scartati con una notifica
+  // successiva segnalata dalla sincronizzazione. Mantiene l'avviso anche a pannello chiuso.
+  await nmreRefreshRecoveryFlags();
+  const recoveryOpen=!!$("candidateRecoveryPanel")?.open;
+  if(recoveryOpen&&(force||nmreRecoveryStale()))await loadCandidateRecovery();
+  else if(!recoveryOpen&&force){candidateDismissedCache=[];candidateRecoveryLoadedAt=0;}
   renderDashboard();
   renderCandidates();
   renderCandidateRecovery();
-  loadDubiousAlerts();
+  nmreMaybeLoadDubiousAlerts(force);
+}
+
+// Pannello "Annunci fuori dalla coda": caricamento leggero e paginato.
+const NMRE_PAGE_SIZE=1000;                    // limite predefinito di righe per richiesta in Supabase
+const NMRE_DISMISSED_INDEX_TTL=10*60*1000;    // indice leggero degli scartati
+const NMRE_RECOVERY_FULL_TTL=5*60*1000;       // dati completi del pannello, solo se aperto
+const NMRE_DUBIOUS_TTL=5*60*1000;             // avvisi dubbi (Fase 2)
+const NMRE_RECOVERY_PAGE=300;                 // schede mostrate per volta
+const NMRE_RECOVERY_COLUMNS="id,titolo,comune,prezzo,portale,url,url_originale,tipo_venditore,seller_manual_override,seller_evidence,notification_sender,email_subject,data_pubblicazione,created_at,updated_at,"
+  +"storico:dati_estratti->storico_stato,notifiche:dati_estratti->notifiche_dopo_scarto";
+// Converte una data in millisecondi confrontabili; null se assente o non valida.
+function nmreTime(value){
+  if(value===null||value===undefined||value==="")return null;
+  const time=Date.parse(String(value));
+  return Number.isFinite(time)?time:null;
+}
+// Legge tutte le righe ordinate per id con paginazione a chiave (id > ultimo letto):
+// non salta né duplica righe se la tabella cambia durante la lettura e funziona
+// anche se il server restituisce meno righe di quelle richieste.
+async function nmreFetchAllById(buildQuery,pageSize=NMRE_PAGE_SIZE){
+  const rows=[];let last=null;
+  for(let guard=0;guard<10000;guard++){
+    let query=buildQuery().order("id",{ascending:true}).limit(pageSize);
+    if(last!==null)query=query.gt("id",last);
+    const {data,error}=await query;
+    if(error)return {data:rows,error};
+    const page=data||[];
+    if(!page.length)break;
+    rows.push(...page);
+    last=page[page.length-1].id;
+  }
+  return {data:rows,error:null};
+}
+// Paginazione a scostamento per tabelle senza chiave unica singola: si ferma solo
+// con una pagina vuota, quindi non tronca i risultati oltre il limite del server.
+async function nmreFetchAllPages(buildQuery,pageSize=NMRE_PAGE_SIZE){
+  const rows=[];
+  for(let offset=0,guard=0;guard<10000;guard++){
+    const {data,error}=await buildQuery().range(offset,offset+pageSize-1);
+    if(error)return {data:rows,error};
+    const page=data||[];
+    if(!page.length)break;
+    rows.push(...page);
+    offset+=page.length;
+  }
+  return {data:rows,error:null};
+}
+// Le righe del pannello leggono solo storico_stato e notifiche_dopo_scarto, non
+// l'intero dati_estratti. Le scritture rileggono sempre il dato completo dal database.
+function nmreNormalizeRecoveryRow(row){
+  const {storico,notifiche,...rest}=row||{};
+  return {...rest,dati_estratti:{
+    storico_stato:Array.isArray(storico)?storico:[],
+    notifiche_dopo_scarto:notifiche&&typeof notifiche==="object"&&!Array.isArray(notifiche)?notifiche:null
+  }};
+}
+function nmreRecoveryStale(){
+  return !candidateRecoveryLoadedAt||Date.now()-candidateRecoveryLoadedAt>NMRE_RECOVERY_FULL_TTL;
+}
+async function nmreRefreshDismissedIndex(force){
+  if(!force&&candidateDismissedIndexAt&&Date.now()-candidateDismissedIndexAt<NMRE_DISMISSED_INDEX_TTL)return true;
+  const {data,error}=await nmreFetchAllById(()=>supabase.from("annunci_candidati")
+    .select("id,url,tipo_venditore,updated_at").eq("stato","scartato"));
+  if(error){msg("candidateMsg","Impossibile leggere l’elenco degli annunci scartati: "+error.message,"error");return false;}
+  candidateDismissedIndex=data;
+  candidateDismissedIndexAt=Date.now();
+  return true;
+}
+async function nmreRefreshRecoveryFlags(){
+  const {data,error}=await nmreFetchAllById(()=>supabase.from("annunci_candidati")
+    .select("id,updated_at,storico:dati_estratti->storico_stato,notifiche:dati_estratti->notifiche_dopo_scarto")
+    .eq("stato","scartato")
+    .eq("dati_estratti->notifiche_dopo_scarto->>da_rivedere","true"));
+  // In caso di errore resta valido l'ultimo controllo riuscito.
+  if(error)return false;
+  candidateRecoveryFlagged=data.map(nmreNormalizeRecoveryRow);
+  return true;
+}
+// Dati completi del pannello: tutti gli scartati (nessun limite) e il loro storico
+// notifiche, paginato. Chiamate concorrenti condividono la stessa lettura.
+async function loadCandidateRecovery(){
+  if(!currentUser)return false;
+  if(candidateRecoveryLoading)return candidateRecoveryLoading;
+  candidateRecoveryLoading=(async()=>{
+    const {data:rows,error}=await nmreFetchAllById(()=>supabase.from("annunci_candidati")
+      .select(NMRE_RECOVERY_COLUMNS).eq("stato","scartato"));
+    if(error){msg("candidateMsg","Impossibile leggere gli annunci scartati: "+error.message,"error");return false;}
+    const items=rows.map(nmreNormalizeRecoveryRow);
+    const history=new Map();
+    const seen=new Set();
+    const ids=items.map(item=>String(item.id));
+    for(let batch=0;batch<ids.length;batch+=100){
+      const slice=ids.slice(batch,batch+100);
+      // Ordine crescente: le notifiche inserite durante la lettura finiscono in coda
+      // e non spostano le pagine già lette.
+      const {data:notifications,error:notificationError}=await nmreFetchAllPages(()=>supabase.from("annunci_candidati_notifiche")
+        .select("candidate_id,source_email_id,notified_at,created_at,listing_price,price_drop_percent,listing_title,listing_municipality")
+        .in("candidate_id",slice)
+        .order("created_at",{ascending:true}).order("candidate_id",{ascending:true}).order("source_email_id",{ascending:true}));
+      if(notificationError){msg("candidateMsg","Storico notifiche degli scartati non disponibile: "+notificationError.message,"error");break;}
+      for(const notification of notifications){
+        const unique=String(notification.candidate_id)+"|"+String(notification.source_email_id||"")+"|"+String(notification.created_at||"");
+        if(seen.has(unique))continue;
+        seen.add(unique);
+        const key=String(notification.candidate_id);
+        if(!history.has(key))history.set(key,[]);
+        history.get(key).push(notification);
+      }
+    }
+    const notificationTime=entry=>nmreTime(entry.notified_at)??nmreTime(entry.created_at)??0;
+    items.forEach(item=>{
+      item.notification_history=(history.get(String(item.id))||[]).sort((a,b)=>notificationTime(b)-notificationTime(a));
+    });
+    candidateDismissedCache=items;
+    candidateRecoveryLoadedAt=Date.now();
+    candidateDismissedIndex=items.map(({id,url,tipo_venditore,updated_at})=>({id,url,tipo_venditore,updated_at}));
+    candidateDismissedIndexAt=Date.now();
+    return true;
+  })();
+  try{return await candidateRecoveryLoading;}finally{candidateRecoveryLoading=null;}
 }
 
 // Storico delle decisioni su un candidato, conservato in dati_estratti.storico_stato
@@ -5126,22 +5248,31 @@ function nmreLastStatusEntry(item){
   const history=item&&item.dati_estratti&&Array.isArray(item.dati_estratti.storico_stato)?item.dati_estratti.storico_stato:[];
   return history.length?history[history.length-1]:null;
 }
-// Rilegge dati_estratti dal database subito prima di scrivere, per non
-// sovrascrivere dati salvati nel frattempo (per esempio dall'analisi della pagina).
-async function nmreUpdateCandidateWithHistory(id,entry,fields,guard={}){
+// Rilegge dati_estratti dal database subito prima di scrivere e aggiorna solo se il
+// record non è cambiato nel frattempo (controllo ottimistico su updated_at): una
+// modifica della sincronizzazione Gmail tra lettura e scrittura non viene mai
+// sovrascritta. In quel caso restituisce conflict:true e nessun dato viene toccato.
+// transform (facoltativo) prepara dati_estratti prima di aggiungere la voce di storico.
+async function nmreUpdateCandidateWithHistory(id,entry,fields,guard={},transform=null){
   const {data:current,error:readError}=await supabase.from("annunci_candidati")
-    .select("id,dati_estratti").eq("id",id).eq("owner_id",currentUser.id).maybeSingle();
-  if(readError)return {error:readError,updated:0};
-  if(!current)return {error:null,updated:0};
+    .select("id,dati_estratti,updated_at").eq("id",id).eq("owner_id",currentUser.id).maybeSingle();
+  if(readError)return {error:readError,updated:0,conflict:false};
+  if(!current)return {error:null,updated:0,conflict:true};
+  const base=typeof transform==="function"?transform(current.dati_estratti):current.dati_estratti;
   let query=supabase.from("annunci_candidati").update({
     ...fields,
-    dati_estratti:nmreAppendStatusHistory(current.dati_estratti,entry),
+    dati_estratti:nmreAppendStatusHistory(base,entry),
     updated_at:new Date().toISOString()
   }).eq("id",id).eq("owner_id",currentUser.id);
+  query=current.updated_at===null||current.updated_at===undefined
+    ?query.is("updated_at",null)
+    :query.eq("updated_at",current.updated_at);
   for(const [column,value] of Object.entries(guard))query=query.eq(column,value);
   const {data,error}=await query.select("id");
-  return {error,updated:Array.isArray(data)?data.length:0};
+  const updated=Array.isArray(data)?data.length:0;
+  return {error,updated,conflict:!error&&updated===0};
 }
+const NMRE_CONFLICT_MESSAGE="L’annuncio è stato modificato nel frattempo (per esempio da una nuova email): nessun dato è stato sovrascritto. Aggiorni la lista e riprovi.";
 
 const NMRE_RECOVERY_GROUP_LABELS={
   agency_auto:"Agenzia · classificazione automatica della sincronizzazione",
@@ -5152,7 +5283,7 @@ const NMRE_RECOVERY_GROUP_LABELS={
   manual:"Scartato manualmente o storico"
 };
 const NMRE_DISCARD_ACTIONS=["scartato","classificato_agenzia_e_scartato"];
-// Data dello scarto dallo storico delle decisioni; null per gli scarti precedenti
+// Ultimo scarto registrato nello storico delle decisioni; null per gli scarti precedenti
 // alla registrazione dello storico (updated_at non è affidabile: cambia a ogni notifica).
 function nmreDiscardEntry(item){
   const history=item&&item.dati_estratti&&Array.isArray(item.dati_estratti.storico_stato)?item.dati_estratti.storico_stato:[];
@@ -5182,32 +5313,40 @@ function candidateRecoveryGroup(item,earliestDismissByUrl,kind="dismissed"){
   if(item.seller_manual_override!==true&&!item.notification_sender&&!item.email_subject)return "sync";
   const key=canonicalCandidateUrl(item.url);
   const earliest=key?earliestDismissByUrl.get(key):null;
-  if(earliest&&earliest.id!==String(item.id)&&earliest.updated_at<String(item.updated_at||""))return "same_url";
+  const itemTime=nmreTime(item.updated_at);
+  if(earliest&&earliest.id!==String(item.id)&&earliest.time!==null&&itemTime!==null&&earliest.time<itemTime)return "same_url";
   return "manual";
 }
-// Notifiche arrivate dopo lo scarto (o dopo l'ultima presa visione), con o senza ribasso.
-// Due fonti: lo storico notifiche confrontato con la data dello scarto registrata,
-// e il contrassegno scritto dalla sincronizzazione (dati_estratti.notifiche_dopo_scarto),
-// che funziona anche per gli scarti storici senza data.
+// Notifiche arrivate dopo l'ultimo scarto e dopo l'ultima presa visione, con o senza
+// ribasso. Due fonti: lo storico notifiche e il contrassegno scritto dalla
+// sincronizzazione (dati_estratti.notifiche_dopo_scarto), che funziona anche per gli
+// scarti storici senza data. Le date sono confrontate come timestamp: una notifica
+// arrivata prima dell'ultimo scarto o dell'ultima presa visione non è "nuova".
 function nmreNotificationsAfterDiscard(item){
   const extracted=item&&item.dati_estratti&&typeof item.dati_estratti==="object"?item.dati_estratti:{};
   const marker=extracted.notifiche_dopo_scarto&&typeof extracted.notifiche_dopo_scarto==="object"?extracted.notifiche_dopo_scarto:null;
   const discard=nmreDiscardEntry(item);
-  const seen=marker&&marker.visto_il?String(marker.visto_il):null;
-  const reference=[discard?.data,seen].filter(Boolean).sort().pop()||null;
-  const history=Array.isArray(item?.notification_history)?item.notification_history:[];
-  const after=reference?history.filter(entry=>String(entry.created_at||entry.notified_at||"")>reference):[];
+  const references=[nmreTime(discard?.data),nmreTime(marker?.visto_il)].filter(time=>time!==null);
+  const reference=references.length?Math.max(...references):null;
+  const notificationTime=entry=>nmreTime(entry?.notified_at)??nmreTime(entry?.created_at);
+  const history=(Array.isArray(item?.notification_history)?item.notification_history:[])
+    .slice().sort((a,b)=>(notificationTime(b)??0)-(notificationTime(a)??0));
+  const after=reference===null?[]:history.filter(entry=>{const time=notificationTime(entry);return time!==null&&time>reference;});
   const markerList=marker&&Array.isArray(marker.elenco)?marker.elenco:[];
-  const markerPending=marker&&marker.da_rivedere===true
-    ?markerList.filter(entry=>!seen||String(entry.data||"")>seen)
+  const markerActive=!!(marker&&marker.da_rivedere===true);
+  // Voci senza data valida restano visibili: nel dubbio un annuncio in più da guardare.
+  const markerPending=markerActive
+    ?markerList.filter(entry=>{const time=nmreTime(entry?.data);return reference===null||time===null||time>reference;})
     :[];
+  const markerOnly=markerActive&&!markerList.length?1:0;
+  const count=Math.max(after.length,markerPending.length||markerOnly);
   const fromMarker=markerPending.length?markerPending[markerPending.length-1]:null;
-  const count=Math.max(after.length,markerPending.length||(marker&&marker.da_rivedere===true?1:0));
   const latest=after[0]||(fromMarker?{
     notified_at:fromMarker.data,listing_price:fromMarker.prezzo,price_drop_percent:fromMarker.ribasso_percentuale,
     listing_title:fromMarker.titolo,listing_municipality:fromMarker.comune
   }:null);
-  return {count,latest,reference,discardKnown:!!discard,totalNotifications:history.length,lastNotification:history[0]||null};
+  return {count,latest,reference:reference===null?null:new Date(reference).toISOString(),discardKnown:!!discard,
+    totalNotifications:history.length,lastNotification:history[0]||null};
 }
 // Un'agenzia scartata e riaperta dalla sincronizzazione per un ribasso resta nella
 // sezione agenzie: il ribasso viene evidenziato finché non c'è una nuova decisione.
@@ -5216,57 +5355,81 @@ function nmreAgencyReopenUpdates(item){
   if(!last||last.azione!=="riaperto_per_ribasso")return {count:0};
   return {count:1,reopenedForPriceDrop:true,latest:{notified_at:last.data,listing_title:last.motivo||null}};
 }
+// Annunci fuori dalla coda con aggiornamenti da guardare. Usa il controllo leggero
+// sempre disponibile e, se caricati, i dati completi del pannello.
+function nmreRecoveryAlertIds(){
+  const ids=new Set();
+  const dismissedIds=new Set(candidateDismissedIndex.map(item=>String(item.id)));
+  candidateAgencyCache.forEach(item=>{if(nmreAgencyReopenUpdates(item).count>0)ids.add(String(item.id));});
+  candidateRecoveryFlagged.forEach(item=>{if(nmreNotificationsAfterDiscard(item).count>0)ids.add(String(item.id));});
+  if(candidateRecoveryLoadedAt){
+    candidateDismissedCache.forEach(item=>{
+      if(dismissedIds.has(String(item.id))&&nmreNotificationsAfterDiscard(item).count>0)ids.add(String(item.id));
+    });
+  }
+  return ids;
+}
 function renderCandidateRecovery(){
-  const box=$("candidateRecoveryList"),summary=$("candidateRecoverySummary");
-  if(!box||!summary)return;
+  const box=$("candidateRecoveryList"),summary=$("candidateRecoverySummary"),panel=$("candidateRecoveryPanel");
+  if(!box||!summary||!panel)return;
+  const alertIds=nmreRecoveryAlertIds();
+  summary.textContent=candidateAgencyCache.length+" classificati come agenzia · "+candidateDismissedIndex.length+" scartati"
+    +(alertIds.size?" · "+alertIds.size+" con nuove notifiche dopo lo scarto":"");
+  const alert=$("candidateRecoveryAlert");
+  if(alert){
+    alert.hidden=!alertIds.size;
+    if(alertIds.size){
+      alert.innerHTML='<strong>'+alertIds.size+(alertIds.size===1?' annuncio fuori dalla coda ha':' annunci fuori dalla coda hanno')+' nuove notifiche o ribassi dopo lo scarto.</strong> '
+        +'<button class="secondary" type="button" id="candidateRecoveryAlertOpen">Mostra</button>';
+      $("candidateRecoveryAlertOpen").addEventListener("click",()=>{
+        $("candidateRecoveryFilter").value="with_new";candidateRecoveryLimit=NMRE_RECOVERY_PAGE;
+        if(panel.open)renderCandidateRecovery();else panel.open=true;
+        panel.scrollIntoView({behavior:"smooth",block:"start"});
+      });
+    }
+  }
+  // A pannello chiuso non si costruisce l'elenco.
+  if(!panel.open)return;
+  if(!candidateRecoveryLoadedAt){box.innerHTML='<p class="hint">Caricamento degli annunci fuori dalla coda…</p>';return;}
   const filter=$("candidateRecoveryFilter")?.value||"all";
   const earliestDismissByUrl=new Map();
   for(const item of candidateDismissedCache){
     const key=canonicalCandidateUrl(item.url);if(!key)continue;
+    const time=nmreTime(item.updated_at);
     const current=earliestDismissByUrl.get(key);
-    if(!current||String(item.updated_at||"")<current.updated_at)earliestDismissByUrl.set(key,{id:String(item.id),updated_at:String(item.updated_at||"")});
+    if(!current||(time!==null&&(current.time===null||time<current.time)))earliestDismissByUrl.set(key,{id:String(item.id),time});
   }
   const items=[
     ...candidateAgencyCache.map(item=>({item,kind:"agency",group:candidateRecoveryGroup(item,earliestDismissByUrl,"agency"),updates:nmreAgencyReopenUpdates(item)})),
     ...candidateDismissedCache.map(item=>({item,kind:"dismissed",group:candidateRecoveryGroup(item,earliestDismissByUrl,"dismissed"),updates:nmreNotificationsAfterDiscard(item)}))
   ];
-  const withNew=items.filter(entry=>entry.updates.count>0);
-  summary.textContent=candidateAgencyCache.length+" classificati come agenzia · "+candidateDismissedCache.length+" scartati"
-    +(withNew.length?" · "+withNew.length+" con nuove notifiche dopo lo scarto":"");
-  const alert=$("candidateRecoveryAlert");
-  if(alert){
-    alert.hidden=!withNew.length;
-    if(withNew.length){
-      alert.innerHTML='<strong>'+withNew.length+(withNew.length===1?' annuncio fuori dalla coda ha':' annunci fuori dalla coda hanno')+' nuove notifiche o ribassi dopo lo scarto.</strong> '
-        +'<button class="secondary" type="button" id="candidateRecoveryAlertOpen">Mostra</button>';
-      $("candidateRecoveryAlertOpen").addEventListener("click",()=>{
-        $("candidateRecoveryFilter").value="with_new";$("candidateRecoveryPanel").open=true;renderCandidateRecovery();
-        $("candidateRecoveryPanel").scrollIntoView({behavior:"smooth",block:"start"});
-      });
-    }
-  }
+  const latestTime=entry=>nmreTime(entry.updates.latest?.notified_at)??nmreTime(entry.updates.latest?.created_at)??0;
   const visible=items
     .filter(entry=>filter==="all"||(filter==="with_new"?entry.updates.count>0:entry.group===filter))
-    .sort((a,b)=>(b.updates.count>0)-(a.updates.count>0)
-      ||String(b.updates.latest?.created_at||b.updates.latest?.notified_at||"").localeCompare(String(a.updates.latest?.created_at||a.updates.latest?.notified_at||"")));
+    .sort((a,b)=>(b.updates.count>0)-(a.updates.count>0)||latestTime(b)-latestTime(a)
+      ||(nmreTime(b.item.updated_at)??0)-(nmreTime(a.item.updated_at)??0));
   if(!visible.length){box.innerHTML='<p class="hint">Nessun annuncio in questa categoria.</p>';return;}
-  const formatDate=value=>value&&!Number.isNaN(Date.parse(value))?new Date(value).toLocaleDateString("it-IT"):"data non disponibile";
-  box.innerHTML=visible.slice(0,300).map(({item,kind,group,updates})=>{
+  const formatDate=value=>nmreTime(value)!==null?new Date(nmreTime(value)).toLocaleDateString("it-IT"):"data non disponibile";
+  const shown=visible.slice(0,candidateRecoveryLimit);
+  box.innerHTML=shown.map(({item,kind,group,updates})=>{
     const last=nmreLastStatusEntry(item);
     const discard=nmreDiscardEntry(item);
     const url=validUrl(item.url||item.url_originale);
+    // Per le agenzie in attesa non esiste una data di classificazione: si mostra la ricezione.
     const when=kind==="agency"
-      ?"Classificato il "+formatDate(item.created_at)
+      ?"Ricevuto il "+formatDate(item.data_pubblicazione||item.created_at)
       :(discard?"Scartato il "+formatDate(discard.data):"Data dello scarto non registrata");
     const facts=[item.comune,item.portale,Number(item.prezzo)>0?euro(item.prezzo):null].filter(Boolean).join(" · ");
     const reason=last
       ?(last.motivo||last.azione)+" · "+(last.origine==="utente"?"utente":"automatico")
-      :(item.seller_evidence||"Motivo non registrato (scarto precedente alla registrazione dei motivi)");
+      :(item.seller_evidence||(kind==="agency"
+        ?"Classificazione automatica come agenzia, in attesa di conferma (motivo non indicato)"
+        :"Motivo non registrato (scarto precedente alla registrazione dei motivi)"));
     let updatesHtml="";
     if(updates.count>0){
       const latest=updates.latest||{};
       const latestFacts=[
-        "ultima il "+formatDate(latest.created_at||latest.notified_at),
+        "ultima il "+formatDate(latest.notified_at||latest.created_at),
         Number(latest.listing_price)>0?euro(latest.listing_price):null,
         Number(latest.price_drop_percent)>0?"ribasso "+Number(latest.price_drop_percent).toLocaleString("it-IT")+"%":null,
         latest.listing_title||null
@@ -5275,10 +5438,10 @@ function renderCandidateRecovery(){
         +safe(updates.count+(updates.count===1?" notifica":" notifiche"))+' · '+safe(latestFacts)+'</div>';
     }else if(kind==="dismissed"&&!updates.discardKnown&&updates.totalNotifications>0){
       updatesHtml='<p class="small">Notifiche ricevute in totale: '+safe(updates.totalNotifications)+' · ultima il '
-        +safe(formatDate(updates.lastNotification?.created_at||updates.lastNotification?.notified_at))
+        +safe(formatDate(updates.lastNotification?.notified_at||updates.lastNotification?.created_at))
         +' (la data dello scarto non è registrata: non è possibile stabilire quali siano successive).</p>';
     }
-    return '<article class="candidate candidate-recovery-item" data-recovery-item="'+safe(item.id)+'">'
+    return '<article class="candidate candidate-recovery-card" data-recovery-item="'+safe(item.id)+'">'
       +'<div class="candidate-email-meta"><span class="candidate-source-badge">'+safe(NMRE_RECOVERY_GROUP_LABELS[group]||group)+'</span>'
       +(updates.count>0?'<span class="candidate-email-duplicate">'+(updates.reopenedForPriceDrop?"Ribasso dopo lo scarto":"Nuova notifica dopo lo scarto")+'</span>':'')
       +'<span class="candidate-email-date">'+safe(when)+'</span></div>'
@@ -5291,35 +5454,40 @@ function renderCandidateRecovery(){
       +'<button class="gold" type="button" data-recover="'+safe(item.id)+'" data-recover-kind="'+safe(kind)+'">Riporta in revisione</button>'
       +(updates.count>0&&kind==="dismissed"?'<button class="secondary" type="button" data-recovery-seen="'+safe(item.id)+'">Ho visto: resta scartato</button>':'')
       +'</div></article>';
-  }).join("")+(visible.length>300?'<p class="hint">Mostrati i primi 300 annunci su '+visible.length+'. Usi il filtro per restringere.</p>':'');
+  }).join("")+(visible.length>shown.length
+    ?'<p class="hint">Mostrati '+shown.length+' annunci su '+visible.length+'.</p><button class="secondary" type="button" id="candidateRecoveryMore">Mostra altri '+Math.min(NMRE_RECOVERY_PAGE,visible.length-shown.length)+'</button>'
+    :'');
   box.querySelectorAll("[data-recover]").forEach(btn=>btn.addEventListener("click",()=>recoverCandidate(btn.dataset.recover,btn.dataset.recoverKind,btn)));
   box.querySelectorAll("[data-recovery-seen]").forEach(btn=>btn.addEventListener("click",()=>markDiscardedNotificationsSeen(btn.dataset.recoverySeen,btn)));
+  $("candidateRecoveryMore")?.addEventListener("click",()=>{candidateRecoveryLimit+=NMRE_RECOVERY_PAGE;renderCandidateRecovery();});
 }
 // Presa visione: l'annuncio resta scartato; una notifica successiva lo evidenzierà di nuovo.
 async function markDiscardedNotificationsSeen(id,button){
   const item=candidateDismissedCache.find(entry=>String(entry.id)===String(id));
   if(!item)return;
   if(button)button.disabled=true;
-  const {data:current,error:readError}=await supabase.from("annunci_candidati")
-    .select("id,dati_estratti").eq("id",id).eq("owner_id",currentUser.id).eq("stato","scartato").maybeSingle();
-  if(readError||!current){
-    msg("candidateMsg",readError?"Impossibile registrare la presa visione: "+readError.message:"L’annuncio non è più scartato. Aggiorni la lista.","error");
-    if(button)button.disabled=false;return;
-  }
   const now=new Date().toISOString();
-  const base=current.dati_estratti&&typeof current.dati_estratti==="object"&&!Array.isArray(current.dati_estratti)?{...current.dati_estratti}:{};
-  const marker=base.notifiche_dopo_scarto&&typeof base.notifiche_dopo_scarto==="object"?{...base.notifiche_dopo_scarto}:{conteggio:0};
-  base.notifiche_dopo_scarto={...marker,da_rivedere:false,visto_il:now};
-  const {error}=await supabase.from("annunci_candidati").update({
-    dati_estratti:nmreAppendStatusHistory(base,{data:now,origine:"utente",azione:"notifica_dopo_scarto_vista",motivo:"Presa visione: l’annuncio resta scartato"}),
-    updated_at:now
-  }).eq("id",id).eq("owner_id",currentUser.id).eq("stato","scartato");
-  if(error){msg("candidateMsg","Impossibile registrare la presa visione: "+error.message,"error");if(button)button.disabled=false;return;}
-  await loadCandidates();
+  const result=await nmreUpdateCandidateWithHistory(id,
+    {data:now,origine:"utente",azione:"notifica_dopo_scarto_vista",motivo:"Presa visione: l’annuncio resta scartato"},
+    {},{stato:"scartato"},
+    datiEstratti=>{
+      const base=datiEstratti&&typeof datiEstratti==="object"&&!Array.isArray(datiEstratti)?{...datiEstratti}:{};
+      const marker=base.notifiche_dopo_scarto&&typeof base.notifiche_dopo_scarto==="object"?{...base.notifiche_dopo_scarto}:{conteggio:0};
+      base.notifiche_dopo_scarto={...marker,da_rivedere:false,visto_il:now};
+      return base;
+    });
+  if(result.error||result.updated!==1){
+    msg("candidateMsg",result.error?"Impossibile registrare la presa visione: "+result.error.message:NMRE_CONFLICT_MESSAGE,"error");
+    if(button)button.disabled=false;
+    return;
+  }
+  await loadCandidates({force:true});
   msg("candidateMsg","Presa visione registrata: l’annuncio resta scartato e verrà evidenziato di nuovo alla prossima notifica.","success");
 }
 
 // Avvisi dubbi (Fase 2): email escluse dal filtro ma con una prova di annuncio.
+// La sezione resta nascosta finché la tabella non esiste; dopo un errore
+// "tabella inesistente" non viene più interrogata per tutta la sessione.
 const NMRE_DUBIOUS_RULE_LABELS={
   esclusione_nell_oggetto:"Parola esclusa nell’oggetto",
   esclusione_nel_testo:"Parola esclusa nel testo (per esempio nel piè di pagina)",
@@ -5328,14 +5496,27 @@ const NMRE_DUBIOUS_RULE_LABELS={
   link_principale_generico:"Link principale generico (ricerca o pagina iniziale)"
 };
 const NMRE_DUBIOUS_PROOF_LABELS={scheda_specifica:"Contiene la scheda di un annuncio",mittente_portale:"Inviata da un portale immobiliare"};
+function nmreIsMissingTableError(error){
+  return !!error&&(error.code==="PGRST205"||error.code==="42P01");
+}
+function nmreMaybeLoadDubiousAlerts(force){
+  if(nmreDubiousTableMissing)return;
+  if(!force&&nmreDubiousLoadedAt&&Date.now()-nmreDubiousLoadedAt<NMRE_DUBIOUS_TTL)return;
+  loadDubiousAlerts();
+}
 async function loadDubiousAlerts(){
   const panel=$("candidateDubiousPanel");
   if(!panel||!currentUser)return;
+  if(nmreDubiousTableMissing){panel.hidden=true;return;}
+  nmreDubiousLoadedAt=Date.now();
   const {data,error}=await supabase.from("nmre_gmail_avvisi_dubbi")
     .select("id,gmail_message_id,rfc822_message_id,ricevuto_il,regola_esclusione,prova,portale,link_annuncio,oggetto,stato,candidato_id,decisione_motivo,deciso_il,created_at,updated_at")
     .eq("owner_id",currentUser.id).order("created_at",{ascending:false}).limit(500);
-  // Tabella non ancora creata o accesso ritirato: la sezione resta nascosta.
-  if(error){panel.hidden=true;candidateDubiousCache=[];return;}
+  if(error){
+    panel.hidden=true;candidateDubiousCache=[];
+    if(nmreIsMissingTableError(error))nmreDubiousTableMissing=true;
+    return;
+  }
   candidateDubiousCache=data||[];
   panel.hidden=false;
   renderDubiousAlerts();
@@ -5351,13 +5532,13 @@ function renderDubiousAlerts(){
   box.innerHTML=visible.map(item=>{
     const url=validUrl(item.link_annuncio);
     const gmail=item.rfc822_message_id?"https://mail.google.com/mail/#search/"+encodeURIComponent("rfc822msgid:"+item.rfc822_message_id):null;
-    const when=item.ricevuto_il?new Date(item.ricevuto_il).toLocaleString("it-IT"):"data non disponibile";
+    const when=nmreTime(item.ricevuto_il)!==null?new Date(nmreTime(item.ricevuto_il)).toLocaleString("it-IT"):"data non disponibile";
     let actions="";
     if(item.stato==="da_verificare")actions='<button class="gold" type="button" data-dubious-action="da_promuovere" data-dubious-id="'+safe(item.id)+'">Crea candidato</button><button class="secondary" type="button" data-dubious-action="ignorato" data-dubious-id="'+safe(item.id)+'">Ignora</button>';
     else if(item.stato==="da_promuovere")actions='<span class="small">Il candidato verrà creato alla prossima sincronizzazione.</span><button class="secondary" type="button" data-dubious-action="da_verificare" data-dubious-id="'+safe(item.id)+'">Annulla</button>';
     else if(item.stato==="ignorato")actions='<button class="secondary" type="button" data-dubious-action="da_verificare" data-dubious-id="'+safe(item.id)+'">Ripristina</button>';
     else actions='<span class="small">Promosso tra le nuove opportunità.</span>';
-    return '<article class="candidate candidate-recovery-item" data-dubious-item="'+safe(item.id)+'">'
+    return '<article class="candidate candidate-recovery-card" data-dubious-item="'+safe(item.id)+'">'
       +'<div class="candidate-email-meta"><span class="candidate-source-badge">'+safe(NMRE_DUBIOUS_RULE_LABELS[item.regola_esclusione]||item.regola_esclusione)+'</span>'
       +'<span class="candidate-email-date">'+safe(when)+'</span></div>'
       +'<h3>'+safe(item.oggetto||"Email senza oggetto")+'</h3>'
@@ -5407,17 +5588,20 @@ async function recoverCandidate(id,kind,button){
     guard={stato:"da_verificare",tipo_venditore:"Agenzia"};
   }else{
     fields={stato:"da_verificare"};
+    // La decisione manuale blocca la riclassificazione automatica ad agenzia alla
+    // prossima sincronizzazione (le funzioni rispettano seller_manual_override).
     if(item.tipo_venditore==="Agenzia")Object.assign(fields,{tipo_venditore:"Da verificare",seller_confidence:0,
+      seller_manual_override:true,seller_classification_version:100,
       seller_evidence:"Riportato in revisione manualmente dopo una classificazione come agenzia"});
     guard={stato:"scartato"};
   }
   const result=await nmreUpdateCandidateWithHistory(id,entry,fields,guard);
   if(result.error||result.updated!==1){
-    msg("candidateMsg",result.error?"Impossibile riportare l’annuncio in revisione: "+result.error.message:"Nessun record modificato: l’annuncio potrebbe essere già cambiato. Aggiorni la lista.","error");
+    msg("candidateMsg",result.error?"Impossibile riportare l’annuncio in revisione: "+result.error.message:NMRE_CONFLICT_MESSAGE,"error");
     if(button)button.disabled=false;
     return;
   }
-  await loadCandidates();
+  await loadCandidates({force:true});
   msg("candidateMsg","Annuncio riportato tra quelli da verificare. La decisione è registrata nello storico.","success");
 }
 
@@ -5598,7 +5782,7 @@ async function saveCandidateSeller(id,button){
   });
 
   if(error||sellerUpdated!==1){
-    msg("candidateMsg",error?error.message:"Nessun record modificato. Aggiorni la lista e riprovi.","error");
+    msg("candidateMsg",error?error.message:NMRE_CONFLICT_MESSAGE,"error");
     button.disabled=false;
     return;
   }
@@ -5631,7 +5815,7 @@ async function saveCandidateSeller(id,button){
     if(archiveError){
       msg("candidateMsg","Verifica del privato salvata, ma archiviazione automatica non riuscita: "+archiveError.message,"error");
       button.disabled=false;
-      await loadCandidates();
+      await loadCandidates({force:true});
       return;
     }
     if(archiveResult?.archived===true){
@@ -5649,7 +5833,7 @@ async function saveCandidateSeller(id,button){
         ?"NMRE potrà riconoscere nuove notifiche che riportano gli stessi identificativi."
         :"Per insegnare a NMRE a riconoscere questo venditore in futuro, inserisca anche nome, telefono o email verificati."),
     seller==="Privato"&&privateArchiveMessage.includes("non riuscita")?"error":"success");
-  await loadCandidates();
+  await loadCandidates({force:true});
 }
 async function confirmCandidate(id,button){
   const card=button.closest("[data-candidate]");
@@ -5730,7 +5914,7 @@ async function discardCandidate(id,button){
   if(reason===null)return;
 
   if(button)button.disabled=true;
-  let discardedCount=0;
+  let discardedCount=0,conflicts=0;
   for(const candidateId of ids){
     const result=await nmreUpdateCandidateWithHistory(candidateId,{
       data:new Date().toISOString(),origine:"utente",azione:"scartato",
@@ -5739,18 +5923,24 @@ async function discardCandidate(id,button){
     if(result.error){
       msg("candidateMsg","Impossibile scartare l'annuncio: "+result.error.message,"error");
       if(button)button.disabled=false;
-      await loadCandidates();
+      await loadCandidates({force:true});
       return;
     }
     discardedCount+=result.updated;
+    if(result.conflict)conflicts++;
   }
   if(discardedCount===0){
-    msg("candidateMsg","Nessun record è stato modificato. Aggiorni la lista e riprovi.","error");
+    msg("candidateMsg",conflicts?NMRE_CONFLICT_MESSAGE:"Nessun record è stato modificato. Aggiorni la lista e riprovi.","error");
     if(button)button.disabled=false;
     return;
   }
 
-  await loadCandidates();
+  await loadCandidates({force:true});
+  if(conflicts){
+    msg("candidateMsg","Scartati "+discardedCount+" annunci. "+conflicts+(conflicts===1?" copia è stata modificata":" copie sono state modificate")
+      +" nel frattempo e non è stata toccata: la trova ancora in coda.","error");
+    return;
+  }
   msg("candidateMsg",discardedCount===1
     ?"Annuncio scartato correttamente."
     :"Immobile scartato: rimosse "+discardedCount+" notifiche duplicate dalla coda.", "success");
@@ -6702,9 +6892,15 @@ $("candidateResetFilters").addEventListener("click",()=>{
   [...candidateTextFilters,...candidateSelectFilters].forEach(id=>$(id).value="");
   renderCandidates();
 });
-$("candidateRecoveryFilter").addEventListener("change",renderCandidateRecovery);
+$("candidateRecoveryFilter").addEventListener("change",()=>{candidateRecoveryLimit=NMRE_RECOVERY_PAGE;renderCandidateRecovery();});
+// I dati completi del pannello si leggono all'apertura (e di nuovo se più vecchi di 5 minuti).
+$("candidateRecoveryPanel").addEventListener("toggle",async()=>{
+  if(!$("candidateRecoveryPanel").open||!currentUser)return;
+  renderCandidateRecovery();
+  if(nmreRecoveryStale()){await loadCandidateRecovery();renderCandidateRecovery();}
+});
 $("candidateDubiousFilter").addEventListener("change",renderDubiousAlerts);
-$("refreshCandidates").addEventListener("click",loadCandidates);
+$("refreshCandidates").addEventListener("click",()=>loadCandidates({force:true}));
 $("archiveManualToggle").addEventListener("click",()=>{
   const panel=$("archiveManualPanel");
   panel.hidden=!panel.hidden;
