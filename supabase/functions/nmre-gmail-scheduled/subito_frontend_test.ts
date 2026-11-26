@@ -47,7 +47,7 @@ Deno.test("12 · la scheda di un annuncio recuperato apre direttamente l'annunci
 
 Deno.test("12 · notifica da verificare: link a ogni annuncio plausibile e alla pagina dei risultati", () => {
   const acquisition: SubitoAcquisition = {
-    status: "da_verificare", reason: "nessuna_notifica_precedente", items: [], pageSource: "next_data", pageCount: 8, attempts: 1, retry: false,
+    status: "da_verificare", reason: "nessuna_notifica_precedente", items: [], archived: [], pageSource: "next_data", pageCount: 8, attempts: 1, retry: false,
     keepDigestRecord: true,
     decision: { certain: false, reason: "nessuna_notifica_precedente", newItems: [], possibleItems: page.items.slice(0, 4), windowCount: null, windowPrivate: null, windowProfessional: null, windowReposted: [] }
   };
@@ -64,7 +64,7 @@ Deno.test("12 · notifica da verificare: link a ogni annuncio plausibile e alla 
 
 Deno.test("12 · nessun link non sicuro o esterno nella scheda", () => {
   const acquisition: SubitoAcquisition = {
-    status: "da_verificare", reason: "date_non_disponibili", items: [], pageSource: "link", pageCount: 2, attempts: 1, retry: false, keepDigestRecord: true,
+    status: "da_verificare", reason: "date_non_disponibili", items: [], archived: [], pageSource: "link", pageCount: 2, attempts: 1, retry: false, keepDigestRecord: true,
     decision: { certain: false, reason: "date_non_disponibili", newItems: [], windowCount: null, windowPrivate: null, windowProfessional: null, windowReposted: [], possibleItems: [
       { ...page.items[0], url: "javascript:alert(1)" }, { ...page.items[1], url: "https://evil.example.com/appartamenti/x-608812345.htm" }, page.items[2]] }
   };

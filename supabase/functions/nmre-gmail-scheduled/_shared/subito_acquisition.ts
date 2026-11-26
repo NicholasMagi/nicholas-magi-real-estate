@@ -30,6 +30,14 @@ export type SubitoAcquisitionDeps = {
   previousDigestDate(searchKey: string, beforeIso: string): Promise<string | null>;
   /** Candidato della stessa email già salvato da un ciclo precedente (tentativi), o null. */
   existingDigest(gmailId: string): Promise<{ dati_estratti?: unknown } | null>;
+  /**
+   * Immobile già nell'Archivio (tabella annunci, anche inserito a mano o nel cestino) con
+   * questo ID Subito, o null. Solleva un errore se il confronto non riesce: in quel caso
+   * nessun annuncio viene classificato come nuovo e l'email viene ritentata.
+   */
+  archivedListing(adId: string): Promise<{ annuncioId: string; eliminato: boolean } | null>;
+  /** true se esiste già un candidato per questo ID Subito (gestito dal salvataggio). */
+  knownCandidate(adId: string): Promise<boolean>;
 };
 
 export type SubitoAcquisition = {
@@ -38,6 +46,8 @@ export type SubitoAcquisition = {
   /** Nuovi annunci individuati con certezza (non ancora confrontati con l'archivio). */
   items: SubitoItem[];
   decision: NewListingsDecision | null;
+  /** Annunci nuovi già presenti solo nell'Archivio: non inseriti, registrati nella notifica. */
+  archived: Array<{ id: string; url: string; title: string | null; annuncio_id: string; eliminato: boolean }>;
   pageSource: SubitoPage["source"] | null;
   pageCount: number;
   attempts: number;
@@ -66,13 +76,13 @@ export async function acquireSubitoDigest(
   // Rinvio per limite di letture nel ciclo: non conta come tentativo.
   if (options.deferred) {
     const attemptsSoFar = previousAttempts(existing);
-    return { status: "errore", reason: "rinviato", items: [], decision: null, pageSource: null, pageCount: 0,
+    return { status: "errore", reason: "rinviato", items: [], decision: null, archived: [], pageSource: null, pageCount: 0,
       attempts: attemptsSoFar, retry: true, keepDigestRecord: true };
   }
   const attempts = previousAttempts(existing) + 1;
   const receivedAt = emailIso(email.date);
   const fail = (reason: string, retryable: boolean): SubitoAcquisition => ({
-    status: "errore", reason, items: [], decision: null, pageSource: null, pageCount: 0, attempts,
+    status: "errore", reason, items: [], decision: null, archived: [], pageSource: null, pageCount: 0, attempts,
     retry: retryable && attempts < SUBITO_MAX_ATTEMPTS, keepDigestRecord: true
   });
   let page: SubitoPage | null = null;
@@ -113,16 +123,31 @@ export async function acquireSubitoDigest(
   });
   if (!decision.certain) {
     return {
-      status: "da_verificare", reason: decision.reason, items: [], decision, pageSource: page?.source ?? null,
+      status: "da_verificare", reason: decision.reason, items: [], decision, archived: [], pageSource: page?.source ?? null,
       pageCount: page?.items.length ?? 0, attempts, retry: false, keepDigestRecord: true
     };
   }
+  // Confronto con l'Archivio: un annuncio nuovo già archiviato senza candidato d'origine
+  // (inserito a mano nella tabella annunci, o eliminato dall'Archivio) non viene
+  // reinserito. Se esiste un candidato, ci pensa il salvataggio (nessun duplicato, la
+  // notifica viene collegata). Un errore qui interrompe l'email: niente "nuovi" senza
+  // il confronto con l'Archivio.
+  const items: SubitoItem[] = [];
+  const archived: SubitoAcquisition["archived"] = [];
+  for (const item of decision.newItems) {
+    const inArchive = await deps.archivedListing(item.id);
+    if (inArchive && !(await deps.knownCandidate(item.id))) {
+      archived.push({ id: item.id, url: item.url, title: item.title, annuncio_id: inArchive.annuncioId, eliminato: inArchive.eliminato });
+    } else {
+      items.push(item);
+    }
+  }
   return {
-    status: "completo", reason: decision.reason, items: decision.newItems, decision, pageSource: page?.source ?? null,
+    status: "completo", reason: decision.reason, items, decision, archived, pageSource: page?.source ?? null,
     pageCount: page?.items.length ?? 0, attempts, retry: false,
-    // La riga riepilogativa serve solo se esiste già (un tentativo precedente non riuscito):
-    // viene aggiornata come "completata" per lasciare traccia dell'esito.
-    keepDigestRecord: !!existing
+    // La riga riepilogativa serve se esiste già (un tentativo precedente non riuscito) o
+    // se un annuncio è stato riconosciuto nell'Archivio: resta traccia dell'esito.
+    keepDigestRecord: !!existing || archived.length > 0
   };
 }
 
@@ -270,7 +295,8 @@ export function subitoDigestRow(ctx: SubitoRowContext, result: SubitoAcquisition
         nuovo_tentativo: result.retry,
         ultimo_tentativo: ctx.nowIso,
         possibili: possible,
-        recuperati: inserted
+        recuperati: inserted,
+        gia_in_archivio: result.archived.map(entry => ({ id: entry.id, url: entry.url, titolo: entry.title, annuncio_id: entry.annuncio_id, eliminato_dall_archivio: entry.eliminato }))
       }
     },
     dati_fonte: {
@@ -333,6 +359,30 @@ export function supabaseSubitoDeps(
         .limit(1);
       if (error) throw new Error("Lettura delle notifiche precedenti della ricerca Subito non riuscita");
       return data?.[0]?.data_pubblicazione ? String(data[0].data_pubblicazione) : null;
+    },
+    async archivedListing(adId) {
+      if (!/^\d{6,}$/.test(adId)) return null;
+      // listing_key per gli immobili archiviati da NMRE, url per quelli inseriti a mano.
+      for (const [column, pattern] of [["listing_key", "subito.it/%-" + adId + ".htm"], ["url", "%subito.it/%-" + adId + ".htm%"]]) {
+        const { data, error } = await admin
+          .from("annunci")
+          .select("id,deleted_at")
+          .eq("owner_id", owner)
+          .like(column, pattern)
+          .limit(1);
+        if (error) throw new Error("Confronto con l'Archivio non riuscito");
+        if (data?.[0]) return { annuncioId: String(data[0].id), eliminato: !!data[0].deleted_at };
+      }
+      return null;
+    },
+    async knownCandidate(adId) {
+      if (!/^\d{6,}$/.test(adId)) return false;
+      const byKey = await admin.from("annunci_candidati").select("id").eq("owner_id", owner).eq("dedup_key", "subito:" + adId).limit(1);
+      if (byKey.error) throw new Error("Confronto con le opportunità non riuscito");
+      if (byKey.data?.length) return true;
+      const byListing = await admin.from("annunci_candidati").select("id").eq("owner_id", owner).like("listing_key", "subito.it/%-" + adId + ".htm").limit(1);
+      if (byListing.error) throw new Error("Confronto con le opportunità non riuscito");
+      return !!byListing.data?.length;
     },
     async existingDigest(gmailId) {
       const { data, error } = await admin

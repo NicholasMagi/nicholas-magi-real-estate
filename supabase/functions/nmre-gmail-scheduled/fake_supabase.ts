@@ -15,9 +15,11 @@ const UNIQUE: Record<string, string[][]> = {
 };
 
 export function fakeSupabase(seed: Partial<Record<string, FakeRow[]>> = {}) {
+  // Tutte le tabelle iniziali (candidati, notifiche, Archivio "annunci", ...).
   const tables: Record<string, FakeRow[]> = {
-    annunci_candidati: structuredClone(seed.annunci_candidati || []),
-    annunci_candidati_notifiche: structuredClone(seed.annunci_candidati_notifiche || [])
+    annunci_candidati: [],
+    annunci_candidati_notifiche: [],
+    ...Object.fromEntries(Object.entries(seed).map(([name, rows]) => [name, structuredClone(rows || [])]))
   };
   let sequence = 0;
   let tick = 0;

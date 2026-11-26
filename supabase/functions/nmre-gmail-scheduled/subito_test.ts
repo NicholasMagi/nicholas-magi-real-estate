@@ -84,8 +84,8 @@ const byAd = (db: ReturnType<typeof fakeSupabase>, id: string) => candidates(db)
 const digestOf = (db: ReturnType<typeof fakeSupabase>, gmailId: string) => candidates(db).find(row => row.dedup_key === "gmail:" + gmailId);
 
 /** Stato dopo l'email del 25/11 (prima email di questa ricerca: notifica da verificare). */
-async function afterPreviousDigest(seed: FakeRow[] = [], notices: FakeRow[] = []) {
-  const db = fakeSupabase({ annunci_candidati: seed, annunci_candidati_notifiche: notices });
+async function afterPreviousDigest(seed: FakeRow[] = [], notices: FakeRow[] = [], archive: FakeRow[] = []) {
+  const db = fakeSupabase({ annunci_candidati: seed, annunci_candidati_notifiche: notices, annunci: archive } as Any);
   await syncCycle(db, [EMAIL_25], pages({ html: PAGE }).fetchPage);
   return db;
 }
@@ -255,7 +255,8 @@ Deno.test("7 · rilettura della stessa email e della stessa pagina: nessun dupli
 
 // ---------- 8 · Annunci già in archivio ----------
 Deno.test("8 · annunci già presenti in archivio o scartati: non reinseriti né modificati, notifica tracciata", async () => {
-  const archived = { owner_id: OWNER, stato: "archiviato", titolo: "Trilocale Adriatico (archiviato)", url: "https://www.subito.it/appartamenti/trilocale-con-balcone-zona-adriatico-ancona-608812345.htm",
+  // Stato reale di un candidato archiviato: "confermato", con il collegamento all'Archivio.
+  const archived = { owner_id: OWNER, stato: "confermato", annuncio_id: "ann-1", titolo: "Trilocale Adriatico (archiviato)", url: "https://www.subito.it/appartamenti/trilocale-con-balcone-zona-adriatico-ancona-608812345.htm",
     listing_key: "subito.it/appartamenti/trilocale-con-balcone-zona-adriatico-ancona-608812345.htm", dedup_key: "gmail:old-a", source_email_id: "old-a", dati_estratti: {} };
   const discarded = { owner_id: OWNER, stato: "scartato", titolo: "Bilocale Falconara", url: "https://www.subito.it/appartamenti/bilocale-arredato-centro-falconara-marittima-608799020.htm",
     listing_key: "subito.it/appartamenti/bilocale-arredato-centro-falconara-marittima-608799020.htm", dedup_key: "gmail:old-b", source_email_id: "old-b",
@@ -263,13 +264,44 @@ Deno.test("8 · annunci già presenti in archivio o scartati: non reinseriti né
   const db = await afterPreviousDigest([archived, discarded]);
   const result = await syncCycle(db, [EMAIL_26], pages({ html: PAGE }).fetchPage);
   eq(result.counters.inserted, 1, "inserito solo l'annuncio non ancora acquisito");
-  eq(byAd(db, "608812345")[0].stato, "archiviato", "l'archiviato resta archiviato");
+  eq(byAd(db, "608812345")[0].stato, "confermato", "l'archiviato resta archiviato");
   eq(byAd(db, "608812345")[0].titolo, "Trilocale Adriatico (archiviato)", "dati dell'archiviato invariati");
   const bilocale = byAd(db, "608799020")[0];
   eq(bilocale.stato, "scartato", "lo scarto manuale resta");
   eq(bilocale.dati_estratti.storico_stato[0].motivo, "Zona non interessante", "decisione manuale conservata");
   eq(bilocale.dati_estratti.notifiche_dopo_scarto?.elenco?.length, 1, "nuova notifica evidenziata sullo scartato");
   eq(db.tables.annunci_candidati_notifiche.filter(n => String(n.source_email_id).startsWith(EMAIL_26.id)).length, 3, "tutte e tre le notifiche tracciate");
+});
+
+Deno.test("8 · immobile nell'Archivio inserito a mano (tabella annunci, senza candidato): non duplicato, esito tracciato", async () => {
+  const manual = { owner_id: OWNER, titolo: "Bilocale Falconara — inserito a mano", url: "https://www.subito.it/appartamenti/bilocale-arredato-centro-falconara-marittima-608799020.htm?utm_source=app", deleted_at: null };
+  const trashed = { owner_id: OWNER, titolo: "Quadrilocale eliminato dall'Archivio", url: "https://www.subito.it/appartamenti/quadrilocale-ristrutturato-pinocchio-ancona-608807711.htm", deleted_at: "2026-11-20T10:00:00.000Z" };
+  const db = await afterPreviousDigest([], [], [manual, trashed]);
+  const archiveBefore = JSON.stringify(db.tables.annunci);
+  const result = await syncCycle(db, [EMAIL_26], pages({ html: PAGE }).fetchPage);
+  eq(result.counters.inserted, 2, "inseriti solo il nuovo annuncio e la notifica riepilogativa");
+  eq(byAd(db, "608812345").length, 1, "annuncio realmente nuovo inserito");
+  eq(byAd(db, "608799020").length, 0, "immobile dell'Archivio non duplicato in Opportunità");
+  eq(byAd(db, "608807711").length, 0, "immobile eliminato dall'Archivio non reinserito (decisione manuale)");
+  const digest = digestOf(db, EMAIL_26.id)!;
+  eq(digest.dati_estratti.ricerca_subito.stato, "completo", "recupero completato");
+  eq(digest.dati_estratti.ricerca_subito.gia_in_archivio.map((entry: Any) => entry.id + ":" + entry.eliminato_dall_archivio).sort().join(","),
+    "608799020:false,608807711:true", "annunci riconosciuti nell'Archivio registrati nella notifica");
+  eq(JSON.stringify(db.tables.annunci), archiveBefore, "Archivio non modificato");
+});
+Deno.test("8 · confronto con l'Archivio non riuscito: nessun annuncio classificato come nuovo, cursore fermo", async () => {
+  const db = await afterPreviousDigest();
+  db.state.fail = (table) => table === "annunci" ? { message: "permission denied for table annunci" } : null;
+  const cursor = { value: "h1", next: "h2" };
+  const result = await syncCycle(db, [EMAIL_26], pages({ html: PAGE }).fetchPage, cursor);
+  eq(result.rows.length, 0, "nessuna riga prodotta");
+  eq(NEW_IDS.every(id => byAd(db, id).length === 0), true, "nessun annuncio inserito come nuovo");
+  eq(result.failures[0]?.sourceEmailId, EMAIL_26.id, "email indicata come non elaborata");
+  eq(cursor.value, "h1", "il cursore Gmail non avanza: l'email verrà rielaborata");
+  db.state.fail = null;
+  const retry = await syncCycle(db, [EMAIL_26], pages({ html: PAGE }).fetchPage, cursor);
+  eq(retry.counters.inserted, 3, "al ciclo successivo, con il confronto riuscito, i 3 annunci vengono inseriti");
+  eq(cursor.value, "h2", "cursore avanzato solo ora");
 });
 
 // ---------- 9 · Modifiche manuali ----------

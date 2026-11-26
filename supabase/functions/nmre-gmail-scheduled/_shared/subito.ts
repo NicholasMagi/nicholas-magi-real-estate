@@ -500,5 +500,6 @@ export const SUBITO_REASON_TEXT: Record<string, string> = {
   pagina_vuota: "Pagina dei risultati vuota o con una struttura non riconosciuta",
   errore_rete: "Pagina dei risultati non raggiungibile (errore di rete o tempo scaduto)",
   errore_http: "La pagina dei risultati ha risposto con un errore",
-  rinviato: "Recupero rinviato al ciclo successivo (troppe pagine da leggere in questo ciclo)"
+  rinviato: "Recupero rinviato al ciclo successivo (troppe pagine da leggere in questo ciclo)",
+  confronto_archivio_non_riuscito: "Confronto con l'Archivio non riuscito: nessun annuncio classificato come nuovo"
 };
