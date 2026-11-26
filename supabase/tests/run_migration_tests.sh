@@ -21,8 +21,8 @@ DUBIOUS="$ROOT/supabase/migrations_pending/20261125201000_gmail_dubious_alerts.s
 PRICE="$ROOT/supabase/migrations/20261126004310_guard_agency_price_drop_notifications.sql"
 PRICE_RB="$ROOT/supabase/rollback/20261126004310_guard_agency_price_drop_notifications.rollback.sql"
 DUBIOUS_RB="$ROOT/supabase/rollback/20261125201000_gmail_dubious_alerts.rollback.sql"
-TOKENS_STABLE="$ROOT/supabase/migrations_pending/20261127090000_gmail_tokens_rpc_stable.sql"
-TOKENS_STABLE_RB="$ROOT/supabase/rollback/20261127090000_gmail_tokens_rpc_stable.rollback.sql"
+TOKENS_STABLE="$ROOT/supabase/migrations_pending/20261126200000_gmail_tokens_rpc_stable.sql"
+TOKENS_STABLE_RB="$ROOT/supabase/rollback/20261126200000_gmail_tokens_rpc_stable.rollback.sql"
 DB="nmre_migration_test_$$"
 
 psql_db() { psql -X -q -v ON_ERROR_STOP=1 -d "$DB" "$@"; }
@@ -297,15 +297,21 @@ drop function if exists public.nmre_get_gmail_tokens();
 create function public.nmre_get_gmail_tokens()
 returns table (email text, token_ciphertext text, scope text, expires_at timestamptz)
 language sql volatile security definer set search_path = '' as \$f\$ $1 \$f\$;
+do \$r\$ begin if not exists (select 1 from pg_roles where rolname = 'nmre_fn_owner') then create role nmre_fn_owner nologin; end if; end \$r\$;
+grant usage on schema private to nmre_fn_owner;
+grant select on private.gmail_oauth_tokens to nmre_fn_owner;
+alter function public.nmre_get_gmail_tokens() owner to nmre_fn_owner;
+revoke all on function public.nmre_get_gmail_tokens() from public;
+grant execute on function public.nmre_get_gmail_tokens() to service_role;
 SQL
 }
 volatility() { psql_db -At -c "select provolatile from pg_proc where proname='nmre_get_gmail_tokens'"; }
 tokens_function "select t.email, t.token_ciphertext, t.scope, t.expires_at from private.gmail_oauth_tokens t"
 expect "situazione attuale: funzione VOLATILE e SECURITY DEFINER" "v|true" "$(psql_db -At -c "select provolatile::text || '|' || prosecdef::text from pg_proc where proname='nmre_get_gmail_tokens'")"
-before_def="$(psql_db -At -c "select md5(prosrc) || coalesce(proconfig::text, '') || prosecdef::text from pg_proc where proname='nmre_get_gmail_tokens'")"
+before_def="$(psql_db -At -c "select concat_ws('|', md5(prosrc), coalesce(proconfig::text, ''), prosecdef::text, pg_get_userbyid(proowner), coalesce(proacl::text, '')) from pg_proc where proname='nmre_get_gmail_tokens'")"
 psql_db -f "$TOKENS_STABLE" >/dev/null
 expect "dopo la migrazione la funzione è STABLE" s "$(volatility)"
-expect "corpo, search_path e SECURITY DEFINER invariati" "$before_def" "$(psql_db -At -c "select md5(prosrc) || coalesce(proconfig::text, '') || prosecdef::text from pg_proc where proname='nmre_get_gmail_tokens'")"
+expect "corpo, search_path, SECURITY DEFINER, proprietario e permessi invariati" "$before_def" "$(psql_db -At -c "select concat_ws('|', md5(prosrc), coalesce(proconfig::text, ''), prosecdef::text, pg_get_userbyid(proowner), coalesce(proacl::text, '')) from pg_proc where proname='nmre_get_gmail_tokens'")"
 expect "lettura riuscita in una transazione READ ONLY" 1 "$(psql_db -At <<'SQL' | tail -1
 begin transaction read only;
 select count(*) from public.nmre_get_gmail_tokens();
@@ -328,8 +334,10 @@ select public.nmre_stable_write_probe();
 SQL
 )"
 psql_db -c "drop function if exists public.nmre_stable_write_probe()" >/dev/null
+expect "proprietario e permessi come prima (nmre_fn_owner, execute solo a service_role)" 1 "$(psql_db -At -c "select count(*) from pg_proc where proname='nmre_get_gmail_tokens' and pg_get_userbyid(proowner)='nmre_fn_owner' and has_function_privilege('service_role', oid, 'execute') and not has_function_privilege('anon', oid, 'execute')")"
 psql_db -f "$TOKENS_STABLE_RB" >/dev/null
 expect "rollback: la funzione torna VOLATILE" v "$(volatility)"
+expect "rollback: corpo, proprietario e permessi invariati" "$before_def" "$(psql_db -At -c "select concat_ws('|', md5(prosrc), coalesce(proconfig::text, ''), prosecdef::text, pg_get_userbyid(proowner), coalesce(proacl::text, '')) from pg_proc where proname='nmre_get_gmail_tokens'")"
 for unsafe in \
   "insert into private.gmail_oauth_tokens values ('y@example.test','c','s',now()) returning email, token_ciphertext, scope, expires_at" \
   "select email, token_ciphertext, scope, expires_at from private.gmail_oauth_tokens; select email, token_ciphertext, scope, expires_at from private.gmail_oauth_tokens" \

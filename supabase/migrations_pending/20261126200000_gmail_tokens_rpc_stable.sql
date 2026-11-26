@@ -3,7 +3,7 @@
 -- =====================================================================
 -- STATO: NON APPLICATA. Da applicare solo dopo approvazione, dal SQL Editor,
 -- solo questo file. Rollback:
---   supabase/rollback/20261127090000_gmail_tokens_rpc_stable.rollback.sql
+--   supabase/rollback/20261126200000_gmail_tokens_rpc_stable.rollback.sql
 -- Test: supabase/tests/run_migration_tests.sh (database locale usa e getta).
 --
 -- Motivo: la prova senza scritture nmre-subito-dry-run chiama
@@ -14,7 +14,8 @@
 -- dichiararla STABLE ne descrive correttamente il comportamento.
 --
 -- Cosa cambia: SOLO la volatilità della funzione. Corpo, firma, SECURITY
--- DEFINER, search_path, proprietario e permessi restano invariati. Nessun dato
+-- DEFINER, search_path, proprietario e permessi restano invariati (verificato
+-- dalla migrazione stessa con un'impronta prima e dopo). Nessun dato
 -- viene letto o modificato. Gli altri chiamanti (nmre-gmail-scheduled e
 -- nmre-gmail-oauth-callback) usano la funzione solo per leggere: nessun effetto.
 --
@@ -33,6 +34,8 @@ declare
   v_count integer;
   v_function record;
   v_body text;
+  v_before text;
+  v_after text;
 begin
   select count(*) into v_count
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -77,10 +80,23 @@ begin
     raise exception 'Il corpo della funzione contiene istruzioni o funzioni di scrittura: nessuna modifica eseguita';
   end if;
 
+  -- Impronta di tutto ciò che NON deve cambiare: corpo, linguaggio, risultato,
+  -- SECURITY DEFINER, impostazioni (search_path), proprietario, permessi.
+  select concat_ws('|', md5(p.prosrc), p.prolang::text, pg_get_function_result(p.oid), p.prosecdef::text,
+                   coalesce(p.proconfig::text, ''), p.proowner::text, coalesce(p.proacl::text, ''), p.proisstrict::text, p.proparallel::text)
+    into v_before from pg_proc p where p.oid = v_function.oid;
+
   execute 'alter function public.nmre_get_gmail_tokens() stable';
 
   if (select provolatile from pg_proc where oid = v_function.oid) <> 's' then
     raise exception 'Verifica finale non superata: la funzione non risulta STABLE';
+  end if;
+  select concat_ws('|', md5(p.prosrc), p.prolang::text, pg_get_function_result(p.oid), p.prosecdef::text,
+                   coalesce(p.proconfig::text, ''), p.proowner::text, coalesce(p.proacl::text, ''), p.proisstrict::text, p.proparallel::text)
+    into v_after from pg_proc p where p.oid = v_function.oid;
+  if v_after is distinct from v_before then
+    -- L'eccezione annulla l'intera transazione, compresa la modifica della volatilità.
+    raise exception 'Verifica finale non superata: è cambiato qualcosa oltre la volatilità';
   end if;
   raise notice 'public.nmre_get_gmail_tokens() ora è STABLE (SECURITY DEFINER: %, corpo invariato)', v_function.prosecdef;
 end;

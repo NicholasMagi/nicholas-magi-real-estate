@@ -1,5 +1,5 @@
 -- =====================================================================
--- ROLLBACK di 20261127090000_gmail_tokens_rpc_stable
+-- ROLLBACK di 20261126200000_gmail_tokens_rpc_stable
 -- =====================================================================
 -- Riporta public.nmre_get_gmail_tokens() a VOLATILE (impostazione precedente).
 -- Corpo, SECURITY DEFINER e permessi non vengono toccati. Nessun dato coinvolto.
