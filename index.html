@@ -1220,7 +1220,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
   <div class="candidate-inbox-toolbar">
     <div class="candidate-inbox-search">
       <label for="candidateSearch">Cerca nelle email</label>
-      <input id="candidateSearch" type="search" placeholder="Oggetto, mittente, immobile o comune">
+      <input id="candidateSearch" type="search" placeholder="Immobile, via, comune, contatto, telefono, ID o link">
     </div>
     <div class="candidate-inbox-toolbar-actions">
       <span id="candidateFilterCount" class="search-filter-count">Caricamento email…</span>
@@ -1374,7 +1374,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div class="search-filter-panel">
   <div class="search-filter-head"><div class="search-filter-title">Ricerca archivio · Filtri commerciali e immobiliari</div><span class="small">Combinabili tra loro</span></div>
   <div class="search-filter-grid">
-    <div class="search-filter-field"><label for="listingSearch">Parola chiave</label><input id="listingSearch" type="search" placeholder="Titolo, via, comune, contatto"></div>
+    <div class="search-filter-field"><label for="listingSearch">Parola chiave</label><input id="listingSearch" type="search" placeholder="Immobile, via, comune, contatto, telefono, ID o link"></div>
     <div class="search-filter-field"><label for="listingTownFilter">Comune</label><select id="listingTownFilter"><option value="">Tutti i comuni</option></select></div>
     <div class="search-filter-field"><label for="listingTypeFilter">Tipologia</label><select id="listingTypeFilter"><option value="">Tutte le tipologie</option></select></div>
     <div class="search-filter-field"><label for="listingPortalFilter">Portale / fonte</label><select id="listingPortalFilter"><option value="">Tutte le fonti</option></select></div>
@@ -4907,9 +4907,8 @@ function renderCandidates(){
     return true;
   };
   const visible=data.filter(item=>{
-    const haystack=[item.email_subject,item.notification_sender,item.titolo,item.comune,item.portale,item.tipologia_immobile].filter(Boolean).join(" ").toLocaleLowerCase("it");
     const quality=qualityById.get(String(item.id));
-    return (!term||haystack.includes(term))
+    return (!term||nmreUnifiedListingSearchMatch(item,term))
       &&(!town||item.comune===town)
       &&(!type||item.tipologia_immobile===type)
       &&(!portal||item.portale===portal)
@@ -6385,6 +6384,52 @@ function renderArchiveExtractedDetails(item){
   return '<details class="candidate-quality candidate-source-details"><summary>Altri dati recuperati automaticamente</summary>'+rows+description+imageLinks+source+'</details>';
 }
 
+function nmreListingSearchNormalize(value){
+  return String(value??"").normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLocaleLowerCase("it").replace(/\\s+/g," ").trim();
+}
+function nmreListingSearchPhoneKeysFromText(value){
+  const text=String(value||"");
+  const matches=text.match(/(?:\\+|00)?\\d[\\d\\s().\\/-]{6,}\\d/g)||[];
+  return [...new Set(matches.flatMap(number=>nmrePhoneKeys(number)))];
+}
+function nmreListingSearchContactPhoneKeys(contact){
+  const values=[contact?.phone||""];
+  for(const line of String(contact?.notes||"").split(/\\r?\\n/)){
+    const match=line.match(/^\\s*(?:altri numeri|numeri secondari|telefoni secondari)\\s*:\\s*(.*)$/i);
+    if(!match)continue;
+    values.push(...match[1].split(/[;,]/).map(value=>value.replace(/\\s*\\([^)]*\\)\\s*$/,"").trim()));
+  }
+  return [...new Set(values.flatMap(nmrePhoneKeys))];
+}
+function nmreUnifiedListingSearchMatch(item,query){
+  const normalized=nmreListingSearchNormalize(query);
+  if(!normalized)return true;
+  const linkedContact=(nmreCrmContacts||[]).find(contact=>item?.contact_id&&String(contact.id)===String(item.contact_id));
+  const fields=[
+    item?.id,item?.titolo,item?.comune,item?.indirizzo,item?.portale,item?.contatto,
+    item?.tipologia_immobile,item?.email_subject,item?.notification_sender,
+    item?.seller_identity,item?.url,item?.url_originale,item?.link,item?.descrizione,
+    item?.note_personali,item?.source_email_id
+  ];
+  if(linkedContact){
+    fields.push(linkedContact.full_name,linkedContact.phone,linkedContact.email,
+      linkedContact.municipality,linkedContact.address,linkedContact.notes);
+  }
+  const haystack=fields.filter(value=>value!==null&&value!==undefined)
+    .map(nmreListingSearchNormalize).join(" ");
+  const tokens=normalized.split(/\\s+/).filter(Boolean);
+  if(tokens.every(token=>haystack.includes(token)))return true;
+  const queryPhones=nmreListingSearchPhoneKeysFromText(normalized);
+  if(!queryPhones.length)return false;
+  const itemPhoneKeys=nmreListingSearchPhoneKeysFromText([
+    item?.contatto,item?.seller_identity,item?.phone,item?.telefono,item?.telephone,
+    item?.mobile,item?.cellulare,item?.recapito,item?.proprietario,item?.venditore
+  ].filter(Boolean).join(" "));
+  if(linkedContact)itemPhoneKeys.push(...nmreListingSearchContactPhoneKeys(linkedContact));
+  const available=new Set(itemPhoneKeys);
+  return queryPhones.some(key=>available.has(key));
+}
+
 function renderListings(){
   const data=listingCache||[];
   $("totalCount").textContent=data.length;
@@ -6402,8 +6447,7 @@ function renderListings(){
   const seller=$("sellerFilter").value;
   const contactStatus=$("contactFilter").value;
   const filtered=data.filter(item=>{
-    const haystack=[item.titolo,item.comune,item.portale,item.contatto,item.tipologia_immobile].filter(Boolean).join(" ").toLocaleLowerCase("it");
-    return (!query||haystack.includes(query))
+    return (!query||nmreUnifiedListingSearchMatch(item,query))
       &&(!town||item.comune===town)
       &&(!propertyType||item.tipologia_immobile===propertyType)
       &&(!portal||item.portale===portal)
