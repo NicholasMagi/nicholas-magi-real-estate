@@ -35,6 +35,9 @@ function validUrl(value) {
   }
 }
 
+const getAdId = new Function(adIdSource + "\nreturn nmreSubitoBrowserAdId;")();
+assert.equal(getAdId("https://www.subito.it/appartamenti/citt%C3%A0-669796300.htm"), "669796300");
+
 const parse = new Function(
   "validUrl",
   adIdSource + "\n" + parseSource + "\nreturn nmreParseSubitoBrowserPayload;"
