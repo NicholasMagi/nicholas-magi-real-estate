@@ -392,7 +392,7 @@ Vedi §13 per l'esito dettagliato, con i link alle esecuzioni.
 | 2 ✅ | **Funzione `nmre-gmail-scheduled`** dal commit approvato (versione 68 attiva) | `supabase functions deploy nmre-gmail-scheduled`; `NMRE_CAPTURE_DUBIOUS_ALERTS` **non impostato**; `NMRE_KEEP_AGENCY_CANDIDATES` non impostato (conserva le agenzie) | Risposte 200 con `keptForReview`, `reopenedOnPriceDrop`, `notificationsAfterDiscard`, `propertyFilterRules`; registro senza errori per 24 ore; nessuna notifica "Nuove opportunità" per agenzie | Rollback 7.2-B |
 | 3 ⏳ | **Frontend** (prossimo passo) | Merge della PR su `main` (GitHub Pages); service worker `20261126-recovery-panel-2` | Coda, contrassegni, pannello "Annunci fuori dalla coda" | Rollback 7.2-C |
 | 4 | (Facoltativo) funzione `nmre-insights-sync` | `supabase functions deploy nmre-insights-sync` | Il connettore resta bloccato senza autorizzazione | Versione precedente |
-| 5 | Recupero guidato degli 88 (§8), uno alla volta | Pannello dell'app | AQ13 | Ogni decisione è reversibile dal pannello |
+| 5 | Recupero guidato degli scartati «Da verificare» (§8; 88 alla rilevazione AQ2 del 25/11), uno alla volta | Pannello dell'app | AQ13 | Ogni decisione è reversibile dal pannello |
 | 6 | **Fase 2**: migrazione `20261125201000_gmail_dubious_alerts.sql` | SQL Editor, solo questo file | Tabella con RLS attiva; Q2/Q3: solo policy di select e update per il proprietario | Rollback 7.2-D |
 | 7 | Attivazione della Fase 2 | Secret `NMRE_CAPTURE_DUBIOUS_ALERTS=true` | Sezione "Avvisi dubbi" visibile; AQ15 dopo 48 ore; nessun errore di sincronizzazione | Rollback 7.2-D |
 
@@ -412,7 +412,16 @@ solo non viene approvato, il passo 2 si distribuisce con
 Ordine dei rollback del database: E prima di A, se si annullano entrambi. Tutti
 i rollback del database sono coperti dai test (§3.2, §3.3, §4.2, §13).
 
-## 8. Recupero degli 88 "Da verificare" scartati
+## 8. Recupero dei "Da verificare" scartati (88 alla rilevazione AQ2 del 25/11/2026)
+
+> Il numero 88 è il conteggio della rilevazione AQ2 del 25/11/2026, non un valore
+> fisso. Il numero cambia con la sincronizzazione e con le decisioni manuali; finché
+> il nuovo frontend non è distribuito, cresce anche per gli scarti automatici dei
+> duplicati (§16.5). **Prima del recupero manuale va riletto:** in sola lettura con
+> AQ1/AQ2 (`supabase/audit/p0_verifica_produzione_sola_lettura.sql`), oppure dal
+> riepilogo del pannello «Annunci fuori dalla coda» dopo la distribuzione del
+> frontend. Anche i conteggi per gruppo indicati sotto (per esempio «11») vengono
+> dalla stessa rilevazione.
 
 Nessuna riattivazione in blocco: recupero singolo, motivato, registrato e
 reversibile dal pannello. Nessun URL, identificativo o dato personale nel
@@ -444,7 +453,7 @@ revoke all on table private.backup_candidati_scartati_20261125 from public, anon
 | Priorità | Intervento | Punti |
 |---|---|---|
 | 1 | Distribuzione Fase 1 (§7, passi 0–3) | L8–L10, L12–L16, L21, L22 |
-| 2 | Recupero degli 88 | — |
+| 2 | Recupero degli scartati «Da verificare» (conteggio da rileggere; 88 alla rilevazione AQ2) | — |
 | 3 | Distribuzione Fase 2 (avvisi dubbi) | L1–L4, L7 |
 | 4 | Revisione delle regole del filtro sul corpus degli avvisi dubbi (falsi positivi e negativi documentati) | L1–L4 |
 | 5 | Più annunci per email (migrazione dello storico notifiche) | L5 |
@@ -783,6 +792,30 @@ Versione del service worker: `20261126-recovery-panel-2`.
   storico (primo caricamento, cache valida, «Riprova», pannello chiuso); i 37
   controlli nel browser precedenti rieseguiti senza regressioni.
 
+
+### 15.2 Test persistenti del caricamento del pannello (26/11/2026)
+`tests/frontend/recovery_load_test.mjs`, eseguito in CI, estrae da `index.html` ed
+esegue così come sono `loadCandidateRecovery()` e `renderCandidateRecovery()`, con le
+funzioni e le costanti da cui dipendono, un Supabase simulato (limite di 1000 righe
+per richiesta, guasti programmabili per tabella e per numero di richiesta) e un DOM
+minimo. Controlli (41):
+- **Errore al primo caricamento.** Nessun dato salvato, nessuna data, indice degli
+  scartati non sostituito; errore e pulsante «Riprova» nel pannello; nessuna scheda.
+- **Errore alla seconda pagina dello storico** (dopo 1000 notifiche lette). La cache
+  precedente non viene sovrascritta (stesso oggetto, stesso contenuto), lo storico
+  resta 1500 e non diventa 1000, la data dell'ultimo caricamento è invariata e viene
+  indicata nell'avviso «Dati non aggiornati».
+- **Errore nel secondo gruppo di candidati** (gruppi da 100, 230 scartati). Cache e
+  data invariate.
+- **Errore alla seconda pagina degli scartati** (1205 scartati). Cache e indice
+  invariati; lo storico non viene nemmeno letto.
+- **«Riprova» con il gestore collegato dal pannello.** La cache viene sostituita, la
+  nuova notifica compare, la data viene aggiornata, avviso e messaggio di errore
+  vengono rimossi.
+
+Sul codice del commit `5c6ea1c`, che salvava lo storico parziale, i primi controlli
+falliscono; sul codice attuale passano tutti.
+
 ---
 
 ## 16. Versioni delle migrazioni: file locali e produzione
@@ -843,13 +876,28 @@ select migration, table_name, trigger_name, saved_at
 
 ROLLBACK;
 ```
-Atteso:
-- solo `20261126004257` e `20261126004310`, con i rispettivi nomi; annotare il valore
-  esatto di `name`;
-- `tabella_fase_2` nulla;
-- due backup con i nomi interni indicati al §16.2.4.
+Come leggere il risultato della prima query (versioni dal 25/11/2026):
+- **Righe che non riguardano questo intervento.** La query restituisce anche le
+  migrazioni legittime applicate prima delle protezioni: al controllo del titolare
+  del 26/11/2026 sono **sei**, con versione inferiore a `20261126004257`. Non vanno
+  rinominate, spostate o «corrette» con questa procedura. Se qualcuna non ha un file
+  locale corrispondente, è un disallineamento preesistente (P0 §7), da trattare a
+  parte.
+- **Righe rilevanti.** Solo `20261126004257` e `20261126004310`. Annotare il valore
+  esatto di `name`, che servirà per i nuovi nomi dei file al passo B.
 
-Fermarsi se compare una versione `20261125201000` o un nome `gmail_dubious_alerts`.
+Fermarsi e riesaminare insieme, senza procedere al passo B, se:
+1. manca una delle due versioni `20261126004257` o `20261126004310`;
+2. il `name` di una delle due non corrisponde alla migrazione di protezione attesa
+   (notifiche dei candidati per la prima, ribassi per la seconda);
+3. compare una riga con versione `20261125201000` o con un `name` che contiene
+   `gmail_dubious_alerts`: la Fase 2 risulterebbe registrata;
+4. compare una versione successiva a `20261126004310` che non si sa spiegare;
+5. `tabella_fase_2` non è nulla;
+6. i backup non sono esattamente due, con i nomi interni indicati al §16.2.4: senza
+   backup i rollback A ed E non sarebbero possibili.
+
+Il numero complessivo delle righe restituite **non** è una condizione di blocco.
 
 **Passo B · Riallineamento nel repository** (commit separato, nessuna scrittura in
 produzione):
@@ -869,10 +917,12 @@ produzione):
    la CI deve restare verde.
 
 **Passo C · Verifica senza scritture:**
-- `supabase migration list`: colonne «Local» e «Remote» allineate, nessuna voce
-  della Fase 2;
-- `supabase db push --dry-run`: «Remote database is up to date» (nessuna migrazione
-  da applicare).
+- `supabase migration list`: le versioni `20261126004257` e `20261126004310`
+  risultano presenti sia in «Local» sia in «Remote»; nessuna voce della Fase 2.
+  Eventuali differenze preesistenti sulle migrazioni precedenti (P0 §7) restano
+  visibili e non dipendono da questo intervento;
+- `supabase db push --dry-run`: non deve proporre né la Fase 2 né le due migrazioni
+  di protezione. Se propone qualsiasi altro file, fermarsi: non eseguire il push.
 
 Alternativa sconsigliata: `supabase migration repair`. Scrive nella cronologia di
 produzione; se usata, non deve mai includere `20261125201000`.

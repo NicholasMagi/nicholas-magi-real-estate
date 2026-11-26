@@ -39,6 +39,9 @@ jobs:
       - name: Test recovery panel functions in index.html
         run: node tests/frontend/recovery_test.mjs
 
+      - name: Test recovery panel loading (loadCandidateRecovery) with simulated failures
+        run: node tests/frontend/recovery_load_test.mjs
+
       - name: Test Immobiliare Insights API adapter
         run: deno test supabase/functions/nmre-insights-sync/provider_test.ts
 

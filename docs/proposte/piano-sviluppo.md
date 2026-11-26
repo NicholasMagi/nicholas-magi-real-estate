@@ -102,7 +102,7 @@ siano privati. L'audit serve a stabilirlo con dati e campioni, non a presumerlo.
 
 | Stato attuale dei candidati (tipo venditore / stato) | Numero |
 |---|---|
-| Da verificare / Scartato | 88 (di cui 42 creati nelle ultime 48 ore) |
+| Da verificare / Scartato | 88 (di cui 42 creati nelle ultime 48 ore) · valore della rilevazione del 25/11/2026 (AQ1/AQ2), da rileggere: cambia nel tempo |
 | Agenzia / Scartato | 16 |
 | Da verificare / Confermato | 3 |
 | Privato / Confermato (verifica manuale) | 1 |
@@ -225,7 +225,7 @@ notifica sono applicate in produzione e la funzione `nmre-gmail-scheduled` è at
 nella versione 68; il frontend non è ancora distribuito. Fase 2 (avvisi dubbi):
 preparata, **non applicata**. Le versioni registrate delle migrazioni non coincidono
 con i file (rapporto A1 §16). Dettaglio: `docs/proposte/A1-nessuna-opportunita-persa.md` (§3 patch,
-§5 recupero degli 88 scartati, §6 priorità). I punti che seguono restano
+§8 recupero degli scartati: 88 alla rilevazione AQ2 del 25/11/2026, conteggio da rileggere prima del recupero; §9 priorità). I punti che seguono restano
 l'obiettivo complessivo; quelli coperti dalla Fase 1 sono indicati nel rapporto.
 
 - Le email classificate "Agenzia" vengono **salvate** con stato `agenzia_esclusa`, visibili in un filtro dedicato e recuperabili con un clic.
