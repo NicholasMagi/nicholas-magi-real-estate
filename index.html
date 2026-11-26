@@ -3689,19 +3689,39 @@ function nmreCrmRender(){
  nmreCrmRenderContacts();nmreCrmRenderProperties();nmreCrmRenderAgenda();
 }
 function nmreIdentityKey(value){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("it").replace(/[^a-z0-9@.]+/g," ").trim().replace(/\s+/g," ");}
-function nmrePhoneKey(value){return String(value||"").replace(/\D/g,"");}
+function nmrePhoneKeys(value){
+ const digits=String(value||"").replace(/\D/g,"");
+ if(digits.length<9||digits.length>15)return [];
+ const keys=new Set([digits]);
+ const international=digits.startsWith("00")?digits.slice(2):digits;
+ if(international.startsWith("39")&&international.length>=11&&international.length<=13){
+  keys.add(international.slice(2));
+ }else if(international.length>=9&&international.length<=11){
+  keys.add("39"+international);
+ }
+ return [...keys].filter(key=>key.length>=9&&key.length<=15);
+}
+function nmrePhoneKey(value){return nmrePhoneKeys(value)[0]||"";}
+function nmreExtractListingPhones(item){
+ const fields=Object.entries(item||{}).filter(([key,value])=>
+  typeof value==="string"&&/(^|_)(contatto|seller_identity|phone|telefono|telephone|tel|mobile|cellulare|recapito)(_|$)/i.test(key)
+ ).map(([,value])=>value);
+ const text=fields.join(" ");
+ const matches=text.match(/(?:\+|00)?\d[\d\s().\/-]{6,}\d/g)||[];
+ return [...new Set(matches.map(value=>value.trim()))];
+}
 function nmreMatchContactForListing(item){
  const contacts=nmreCrmContacts||[];
  const identity=[item?.contatto,item?.seller_identity].map(nmreIdentityKey).filter(Boolean);
  const listingTown=nmreIdentityKey(item?.comune);
  const listingText=nmreIdentityKey([item?.indirizzo,item?.titolo].filter(Boolean).join(" "));
- const listingPhones=String([item?.contatto,item?.seller_identity].filter(Boolean).join(" ")).match(/\+?\d[\d .()\/-]{6,}\d/g)||[];
+ const listingPhoneKeys=new Set(nmreExtractListingPhones(item).flatMap(nmrePhoneKeys));
  const matches=contacts.filter(contact=>{
   const name=nmreIdentityKey(contact.full_name);
   const email=String(contact.email||"").trim().toLowerCase();
-  const contactPhone=nmrePhoneKey(contact.phone);
+  const contactPhoneKeys=nmrePhoneKeys(contact.phone);
   const emailInListing=identity.some(x=>x.includes(email)&&email.length>5);
-  const phoneInListing=listingPhones.some(x=>nmrePhoneKey(x)===contactPhone&&contactPhone.length>=7);
+  const phoneInListing=contactPhoneKeys.some(key=>listingPhoneKeys.has(key));
   const nameMatch=name.length>=4&&identity.includes(name);
   const contactAddress=nmreIdentityKey(contact.address);
   const contactTown=nmreIdentityKey(contact.municipality);
@@ -3714,8 +3734,59 @@ function nmreMatchContactForListing(item){
 }
 async function nmreSyncArchiveContactLinks(){
  if(!currentUser||!supabase||!Array.isArray(listingCache)||!nmreCrmContacts?.length)return;
- const pending=listingCache.filter(x=>!x.contact_id&&!x.deleted_at).map(item=>({item,contact:nmreMatchContactForListing(item)})).filter(x=>x.contact);
- for(const row of pending){const {error}=await supabase.from("annunci").update({contact_id:row.contact.id}).eq("id",row.item.id).eq("owner_id",currentUser.id).is("contact_id",null).is("deleted_at",null);if(!error)row.item.contact_id=row.contact.id;}
+ for(const item of listingCache){
+  if(item.deleted_at)continue;
+  const contact=nmreMatchContactForListing(item);
+  if(!contact)continue;
+  const contactId=String(contact.id);
+  const currentListingContact=String(item.contact_id||"");
+  if(currentListingContact&&currentListingContact!==contactId)continue;
+  if(!currentListingContact){
+   const {data,error}=await supabase.from("annunci").update({contact_id:contact.id})
+    .eq("id",item.id).eq("owner_id",currentUser.id).is("contact_id",null).is("deleted_at",null)
+    .select("id,contact_id").maybeSingle();
+   if(error){
+    console.warn("Associazione automatica Rubrica/Archivio non riuscita:",error.message);
+    continue;
+   }
+   if(!data||String(data.contact_id||"")!==contactId)continue;
+   item.contact_id=contact.id;
+  }
+
+  // Se l'annuncio è già rappresentato nel CRM, porta lo stesso collegamento anche
+  // sulla scheda immobile. Non sostituisce mai un referente o una relazione esistenti.
+  const sourceId=String(item.id);
+  const properties=(nmreCrmProperties||[]).filter(property=>String(property.source_listing_id||"")===sourceId);
+  for(const property of properties){
+   const propertyId=String(property.id);
+   const primaryId=String(property.contact_id||"");
+   if(primaryId&&primaryId!==contactId)continue;
+   const relations=(nmreCrmPropertyContacts||[]).filter(link=>String(link.property_id)===propertyId);
+   if(!primaryId&&relations.some(link=>String(link.contact_id)!==contactId))continue;
+   const hasRelation=relations.some(link=>String(link.contact_id)===contactId);
+   if(!hasRelation){
+    const {error:relationError}=await supabase.from("nmre_property_contacts").upsert({
+     owner_id:currentUser.id,property_id:property.id,contact_id:contact.id,relation_role:"proprietario"
+    },{onConflict:"owner_id,property_id,contact_id",ignoreDuplicates:true});
+    if(relationError){
+     console.warn("Relazione contatto/immobile non salvata:",relationError.message);
+     continue;
+    }
+    nmreCrmPropertyContacts.push({owner_id:currentUser.id,property_id:property.id,contact_id:contact.id,relation_role:"proprietario"});
+   }
+   if(!primaryId){
+    const {data:updatedProperty,error:propertyError}=await supabase.from("nmre_properties")
+     .update({contact_id:contact.id,updated_at:new Date().toISOString()})
+     .eq("id",property.id).eq("owner_id",currentUser.id).is("contact_id",null)
+     .select("id,contact_id").maybeSingle();
+    if(propertyError){
+     console.warn("Referente principale dell'immobile non aggiornato:",propertyError.message);
+    }else if(updatedProperty&&String(updatedProperty.contact_id||"")===contactId){
+     property.contact_id=contact.id;
+    }
+   }
+  }
+ }
 }
 async function nmreSetArchiveContact(listingId,contactId){
  const {error}=await supabase.from("annunci").update({contact_id:contactId||null}).eq("id",listingId).eq("owner_id",currentUser.id);if(error)throw error;
