@@ -118,7 +118,7 @@ Deno.test("2 · link del pulsante «Vedi i nuovi annunci», senza tracciamento, 
 });
 Deno.test("2 · pulsante con redirect di tracciamento, link alternativo, link mancante", () => {
   const tracked = EMAIL_HTML.replace(/href="https:\/\/www\.subito\.it\/annunci-marche[^"]+"/,
-    'href="https://click.subito.it/track?url=' + encodeURIComponent("https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&order=datedesc&utm_source=knocker") + '"');
+    'href="https://click.subito.it/track?url=' + encodeURIComponent("https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&kxconfid=u2p484vrw&order=datedesc&utm_source=knocker") + '"');
   eq(extractSavedSearchLink(tracked).url, SEARCH_URL, "redirect con URL annidato");
   const noButton = '<p>Ci sono 3 nuovi risultati</p><a href="https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&amp;utm_source=x">qui</a>';
   eq(extractSavedSearchLink(noButton).source, "altro_link", "senza pulsante: altro link alla ricerca");
