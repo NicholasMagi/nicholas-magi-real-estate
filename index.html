@@ -5403,7 +5403,8 @@ function nmreBuildSubitoBrowserCandidate(item,meta,ownerId,batchId){
     source_email_id:sourceId,
     dedup_key:"subito:"+item.id,
     stato:"da_verificare",
-    data_extraction_version:1,
+    data_extraction_version:6,
+    seller_classification_version:3,
     deduplication_version:1,
     listing_key:listingKey,
     dati_fonte:{
@@ -5634,7 +5635,7 @@ function renderCandidates(){
   visible.forEach(item=>{
     const history=Array.isArray(item.notification_history)?item.notification_history:[];
     history.forEach(entry=>{if(entry.source_email_id)visibleNotificationIds.add(String(entry.source_email_id));});
-    if(!history.length&&item.source_email_id)visibleNotificationIds.add(String(item.source_email_id));
+    if(!history.length&&item.source_email_id&&!item.is_browser_import)visibleNotificationIds.add(String(item.source_email_id));
   });
   const visibleNotifications=visibleNotificationIds.size;
   $("candidateFilterCount").textContent=visibleNotifications+" email da verificare · "+uniqueRanked.length+" immobili";
@@ -5653,7 +5654,7 @@ function renderCandidates(){
   box.innerHTML=uniqueRanked.map(({item:c,priority,quality})=>{
     const isPrivate=c.tipo_venditore==="Privato";
     const notificationDate=quality.hasNotificationDate
-      ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data email non indicata";
+      ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):(c.is_browser_import?"Importazione browser":"Data email non indicata");
     const url=nmreCandidateListingUrl(c);
     const linkLabel=nmreCandidateListingLabel(c);
     const linkHtml=url
@@ -5740,12 +5741,12 @@ function renderCandidates(){
       '<span class="candidate-quick-tag">Qualità dati '+quality.qualityScore+'/100</span>',
       latestPriceDrop?'<span class="candidate-quick-tag candidate-quick-tag-price">Ribasso documentato</span>':""
     ].filter(Boolean).join("");
-    const reviewAction='<button class="gold" type="button" data-open-candidate-details="'+safe(c.id)+'">Verifica email</button>';
+    const reviewAction='<button class="gold" type="button" data-open-candidate-details="'+safe(c.id)+'">'+(c.is_browser_import?"Verifica annuncio":"Verifica email")+'</button>';
     const sourceTheme=candidateSourceTheme(c.portale);
     const sourceLabel=sourceTheme==="idealista"?"Idealista":sourceTheme==="immobiliare"?"Immobiliare.it":sourceTheme==="subito"?"Subito":(c.portale||"Portale non indicato");
     const emailSubject=String(c.email_subject||"Notifica immobiliare").trim();
     const emailSender=String(c.notification_sender||sourceLabel).trim();
-    const emailCount=Number(c.notification_count)>1?Number(c.notification_count)+" email collegate":"1 email";
+    const emailCount=c.is_browser_import?"Importata da browser":Number(c.notification_count)>1?Number(c.notification_count)+" email collegate":"1 email";
     const sellerStateLabel=isPrivate?"Privato riconosciuto · archiviazione da completare":"Venditore da verificare";
     const duplicateBadge=quality.duplicate?'<span class="candidate-email-duplicate">Possibile duplicato</span>':"";
     const lastDecision=nmreLastStatusEntry(c);
@@ -5762,15 +5763,15 @@ function renderCandidates(){
       +'<span class="candidate-email-count">'+safe(emailCount)+'</span>'
       +'</div>'
       +'<div class="candidate-quick-summary">'
-      +'<div class="candidate-email-subject"><span>Oggetto email</span> '+safe(emailSubject)+'</div>'
+      +'<div class="candidate-email-subject"><span>'+(c.is_browser_import?"Origine":"Oggetto email")+'</span> '+safe(emailSubject)+'</div>'
       +'<h3>'+safe(c.titolo||"Annuncio immobiliare")+'</h3>'
       +'<p class="candidate-quick-facts">'+safe(quickFacts||"Caratteristiche dell’immobile da completare")+'</p>'
       +'<div class="candidate-email-status">'+safe(sellerStateLabel)+' '+reopenBadge+' '+duplicateBadge+' '+dismissedBadge+'</div>'
       +'</div>'
       +nmreSubitoRecoveryHtml(c)
-      +'<div class="candidate-actions candidate-actions-primary">'+reviewAction+linkHtml+'<button class="gold" type="button" data-confirm="'+safe(c.id)+'">Archivia</button><button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta email</button></div>'
+      +'<div class="candidate-actions candidate-actions-primary">'+reviewAction+linkHtml+'<button class="gold" type="button" data-confirm="'+safe(c.id)+'">Archivia</button><button class="danger" type="button" data-discard="'+safe(c.id)+'">'+(c.is_browser_import?"Scarta opportunità":"Scarta email")+'</button></div>'
       +'<details class="candidate-detail-panel" data-candidate-details>'
-      +'<summary>Apri email e verifica del venditore</summary>'
+      +'<summary>'+(c.is_browser_import?"Dettagli annuncio e verifica del venditore":"Apri email e verifica del venditore")+'</summary>'
       +'<div class="candidate-detail-content">'
       +analysisHtml
       +priceDropHtml
@@ -5869,8 +5870,9 @@ async function loadCandidates(options={}){
     }
   }
   data.forEach(item=>{
+    item.is_browser_import=String(item.source_email_id||"").startsWith("subito-browser:");
     const history=notificationHistory.get(String(item.id))||[];
-    if(!history.length&&item.source_email_id){
+    if(!history.length&&item.source_email_id&&!item.is_browser_import){
       history.push({
         source_email_id:item.source_email_id,
         notification_sender:item.notification_sender,
