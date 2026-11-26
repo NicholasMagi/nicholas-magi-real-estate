@@ -5318,7 +5318,7 @@ function nmreSubitoBrowserAdId(value){
     const url=new URL(String(value||""));
     const host=url.hostname.toLowerCase().replace(/^www\./,"");
     if(host!=="subito.it"&&!host.endsWith(".subito.it"))return null;
-    const match=url.pathname.match(/^\/[a-z0-9-]+\/[a-z0-9-]*?-?(\d{6,})\.htm$/i);
+    const match=url.pathname.match(/-(\d{6,})\.htm$/i);
     return match?match[1]:null;
   }catch{return null;}
 }
