@@ -9,7 +9,7 @@ import { guardedCandidateUpdate } from "./_shared/guarded.ts";
 import { newSaveCounters, saveCandidateRow } from "./_shared/save_candidate.ts";
 import type { CandidateRow } from "./_shared/save_candidate.ts";
 import { classifyMailbox, emailFromGmailMessage, repairEmailId, sellerForEmail } from "./_shared/mailbox.ts";
-import { subitoRowsForEmails, supabaseSubitoDeps } from "./_shared/subito_acquisition.ts";
+import { subitoItemCandidatesEnabled, subitoRowsForEmails, supabaseSubitoDeps } from "./_shared/subito_acquisition.ts";
 import { assertAllRowsSaved, processRowsIsolated } from "./_shared/row_isolation.ts";
 import type { RowFailure } from "./_shared/row_isolation.ts";
 import {
@@ -721,7 +721,13 @@ export default {
       const subitoCycle = await subitoRowsForEmails(
         subitoClassified.map(({ email }) => ({ email, digest: subitoDigestById.get(String(email.id))! })),
         supabaseSubitoDeps(ctx.supabaseAdmin, owner, fetchSubitoPage),
-        { owner, classifySeller: (text: string) => classifySellerWithRegistry(text, sellerRegistry) }
+        {
+          owner, classifySeller: (text: string) => classifySellerWithRegistry(text, sellerRegistry),
+          // Schede singole «Da verificare» quando la novità non è dimostrabile: solo con
+          // NMRE_SUBITO_ITEM_CANDIDATES=true, DOPO la migrazione 20261126210000 (nessuna
+          // notifica per scheda). Senza la variabile il comportamento resta quello attuale.
+          itemCandidates: subitoItemCandidatesEnabled(Deno.env.get("NMRE_SUBITO_ITEM_CANDIDATES"))
+        }
       );
       rowFailures.push(...subitoCycle.failures);
       const subitoRows = subitoCycle.rows;
