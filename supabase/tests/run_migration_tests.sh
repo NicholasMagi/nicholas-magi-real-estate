@@ -21,6 +21,8 @@ DUBIOUS="$ROOT/supabase/migrations_pending/20261125201000_gmail_dubious_alerts.s
 PRICE="$ROOT/supabase/migrations/20261126004310_guard_agency_price_drop_notifications.sql"
 PRICE_RB="$ROOT/supabase/rollback/20261126004310_guard_agency_price_drop_notifications.rollback.sql"
 DUBIOUS_RB="$ROOT/supabase/rollback/20261125201000_gmail_dubious_alerts.rollback.sql"
+QUIET="$ROOT/supabase/migrations_pending/20261126210000_quiet_unproven_subito_candidates.sql"
+QUIET_RB="$ROOT/supabase/rollback/20261126210000_quiet_unproven_subito_candidates.rollback.sql"
 DB="nmre_migration_test_$$"
 
 psql_db() { psql -X -q -v ON_ERROR_STOP=1 -d "$DB" "$@"; }
@@ -283,5 +285,46 @@ select count(*) from public.nmre_gmail_avvisi_dubbi;
 SQL
 )"
 expect "rollback: i dati raccolti restano" 2 "$(psql_db -At -c "select count(*) from public.nmre_gmail_avvisi_dubbi")"
+
+echo "== Schede Subito con novità non dimostrata: nessuna notifica per scheda"
+psql -X -q -d postgres -c "drop database if exists $DB" >/dev/null
+base_schema
+psql_db -c "alter table public.annunci_candidati add column dati_estratti jsonb" >/dev/null
+if psql_db -f "$QUIET" >/dev/null 2>&1; then echo "FAIL la migrazione doveva fermarsi senza la protezione delle agenzie" >&2; exit 1; fi
+pass "senza la protezione delle agenzie la migrazione si ferma"
+psql_db -f "$GUARD" >/dev/null 2>&1
+guarded_def="$(psql_db -At -c "select pg_get_triggerdef(oid) from pg_trigger where tgname='nmre_notify_candidate_insert'")"
+notify_with() { # tipo_venditore(sql) dati_estratti(json) -> notifiche create
+  psql_db -At <<SQL | tail -1
+insert into public.annunci_candidati (owner_id, stato, tipo_venditore, dati_estratti)
+values ('00000000-0000-0000-0000-00000000000a', 'da_verificare', $1, '$2'::jsonb) returning id \gset
+select count(*) from public.nmre_notifications where candidate_id = :'id';
+SQL
+}
+UNPROVEN='{"subito":{"id":"669796300","novita_non_dimostrata":true}}'
+expect "prima della migrazione: una scheda con novità non dimostrata notifica" 1 "$(notify_with "'Da verificare'" "$UNPROVEN")"
+psql_db -f "$QUIET" >/dev/null
+expect "dopo: scheda con novità non dimostrata senza notifica" 0 "$(notify_with "'Da verificare'" "$UNPROVEN")"
+expect "dopo: scheda Subito con novità dimostrata notifica" 1 "$(notify_with "'Da verificare'" '{"subito":{"id":"669796301"}}')"
+expect "dopo: scheda riepilogativa dell'email notifica (una per email)" 1 "$(notify_with "'Da verificare'" '{"ricerca_subito":{"stato":"da_verificare"}}')"
+expect "dopo: privato da altri portali notifica" 1 "$(notify_with "'Privato'" '{}')"
+expect "dopo: dati_estratti nullo notifica" 1 "$(psql_db -At <<'SQL' | tail -1
+insert into public.annunci_candidati (owner_id, stato, tipo_venditore) values ('00000000-0000-0000-0000-00000000000a', 'da_verificare', 'Privato') returning id \gset
+select count(*) from public.nmre_notifications where candidate_id = :'id';
+SQL
+)"
+expect "dopo: le agenzie restano senza notifica" 0 "$(notify_with "'Agenzia'" '{}')"
+psql_db -f "$QUIET" >/dev/null
+expect "migrazione rieseguita: un solo trigger, nessuna modifica" 1 "$(psql_db -At -c "select count(*) from pg_trigger where tgname='nmre_notify_candidate_insert'")"
+expect "backup della definizione protetta salvato" 1 "$(psql_db -At -c "select count(*) from private.nmre_trigger_definition_backups where migration='20261126210000_quiet_unproven_subito_candidates'")"
+psql_db -f "$QUIET_RB" >/dev/null
+expect "rollback: definizione identica alla protezione delle agenzie" "$guarded_def" "$(psql_db -At -c "select pg_get_triggerdef(oid) from pg_trigger where tgname='nmre_notify_candidate_insert'")"
+expect "rollback: la scheda con novità non dimostrata torna a notificare" 1 "$(notify_with "'Da verificare'" "$UNPROVEN")"
+expect "rollback: le agenzie restano protette" 0 "$(notify_with "'Agenzia'" '{}')"
+psql_db -c "alter table public.annunci_candidati disable trigger nmre_notify_candidate_insert" >/dev/null
+psql_db -c "delete from private.nmre_trigger_definition_backups where migration='20261126210000_quiet_unproven_subito_candidates'" >/dev/null
+psql_db -f "$QUIET" >/dev/null
+expect "trigger disattivato: resta disattivato dopo la migrazione" D "$(psql_db -At -c "select tgenabled from pg_trigger where tgname='nmre_notify_candidate_insert'")"
+psql -X -q -d postgres -c "drop database $DB" >/dev/null
 
 echo "Tutti i test delle migrazioni superati."

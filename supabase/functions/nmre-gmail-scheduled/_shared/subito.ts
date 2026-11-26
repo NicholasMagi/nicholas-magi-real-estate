@@ -432,8 +432,10 @@ export type NewListingsDecision = {
     | "struttura_non_riconosciuta" | "possibili_ripubblicazioni";
   /** Annunci nuovi individuati con certezza (vuoto se certain è false). */
   newItems: SubitoItem[];
-  /** Annunci plausibili da far verificare al titolare (se certain è false). */
+  /** Annunci plausibili da far verificare al titolare (se certain è false), al massimo 15. */
   possibleItems: SubitoItem[];
+  /** Tutti gli annunci plausibili, senza limite (se certain è false): base delle schede singole. */
+  plausibleItems?: SubitoItem[];
   /** Annunci trovati nella finestra temporale (per il messaggio di verifica). */
   windowCount: number | null;
   /**
@@ -475,21 +477,21 @@ export function identifyNewSubitoListings(params: {
   const emailTime = params.emailDateIso ? Date.parse(params.emailDateIso) : NaN;
   const limit = Number.isFinite(emailTime) ? emailTime + SUBITO_CLOCK_TOLERANCE_MS : null;
   const previous = params.previousDigestIso ? Date.parse(params.previousDigestIso) : NaN;
-  const possible = () => pageItems
+  const plausible = () => pageItems
     .filter(item => {
       const time = item.publishedAt ? Date.parse(item.publishedAt) : NaN;
       if (!Number.isFinite(time)) return true;
       if (limit !== null && time > limit) return false;
       return !(Number.isFinite(previous) && time <= previous);
-    })
-    .slice(0, SUBITO_MAX_POSSIBLE_ITEMS);
+    });
+  const possible = () => plausible().slice(0, SUBITO_MAX_POSSIBLE_ITEMS);
   const breakdown = (list: SubitoItem[] | null) => ({
     windowCount: list ? list.length : null,
     windowPrivate: list ? list.filter(item => item.advertiserCompany === false).length : null,
     windowProfessional: list ? list.filter(item => item.advertiserCompany === true).length : null
   });
   const uncertain = (reason: NewListingsDecision["reason"], list: SubitoItem[] | null = null, reposted: string[] = []): NewListingsDecision =>
-    ({ certain: false, reason, newItems: [], possibleItems: possible(), ...breakdown(list), windowReposted: reposted });
+    ({ certain: false, reason, newItems: [], possibleItems: possible(), plausibleItems: plausible(), ...breakdown(list), windowReposted: reposted });
 
   if (params.declaredCount === null) return uncertain("numero_non_dichiarato");
   if (!pageItems.length) return uncertain("nessun_annuncio_nella_pagina");
@@ -510,7 +512,7 @@ export function identifyNewSubitoListings(params: {
   const reposted = inWindow.filter(item => Number(item.id) < newestOlderId).map(item => item.id);
   if (reposted.length) return uncertain("possibili_ripubblicazioni", inWindow, reposted);
   if (inWindow.length !== params.declaredCount) return uncertain("conteggio_diverso", inWindow);
-  return { certain: true, reason: "finestra_temporale", newItems: inWindow, possibleItems: [], ...breakdown(inWindow), windowReposted: [] };
+  return { certain: true, reason: "finestra_temporale", newItems: inWindow, possibleItems: [], plausibleItems: [], ...breakdown(inWindow), windowReposted: [] };
 }
 
 /** Testo per il titolare, per ogni motivo di incertezza o errore. */

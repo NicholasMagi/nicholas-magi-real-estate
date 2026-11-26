@@ -1491,7 +1491,10 @@ function nmreSubitoRecoveryHtml(c){
         +(search.annunci_in_finestra_privati!==null&&search.annunci_in_finestra_privati!==undefined?' ('+escape(search.annunci_in_finestra_privati)+' privati, '+escape(search.annunci_in_finestra_professionali)+' professionisti)':""):"")
       +(Array.isArray(search.annunci_ripubblicati)&&search.annunci_ripubblicati.length?' · ripubblicati: '+escape(search.annunci_ripubblicati.join(", ")):"")
       +escape(retry)
-      +(complete?links(search.recuperati,"Annunci recuperati"):links(search.possibili,"Possibili nuovi annunci (da controllare uno per uno):"))
+      +(complete?links(search.recuperati,"Annunci recuperati")
+        :Array.isArray(search.schede_proposte)&&search.schede_proposte.length
+          ?links(search.schede_proposte,"Ogni annuncio è in coda come scheda singola «Da verificare»:")
+          :links(search.possibili,"Possibili nuovi annunci (da controllare uno per uno):"))
       +links((Array.isArray(search.gia_in_archivio)?search.gia_in_archivio:[]).map(entry=>({...entry,titolo:(entry.titolo||("Annuncio "+entry.id))+(entry.eliminato_dall_archivio?" (eliminato dall’Archivio)":" (già nell’Archivio)")})),"Già presenti nell’Archivio, non duplicati:")
       +(searchUrl?'<p><a href="'+escape(searchUrl)+'" target="_blank" rel="noopener noreferrer" data-subito-search>Apri la pagina dei risultati su Subito</a></p>':"")
       +'</div>';
@@ -1500,7 +1503,12 @@ function nmreSubitoRecoveryHtml(c){
   if(item&&item.id){
     return '<div class="candidate-quality candidate-quality-review" data-subito-item="'+escape(item.id)+'"><strong>Annuncio Subito</strong> · ID '+escape(item.id)
       +(item.pubblicato_il?' · pubblicato il '+escape(date(item.pubblicato_il)):"")
-      +' · recuperato dalla ricerca salvata'+(item.dettagli_completi?"":" (dettagli parziali: verificare sull’annuncio)")+'</div>';
+      +' · recuperato dalla ricerca salvata'+(item.dettagli_completi?"":" (dettagli parziali: verificare sull’annuncio)")
+      +(item.novita_non_dimostrata?'<br><span data-subito-unproven>Novità non dimostrata: Subito non permette di stabilire se è nuovo. Verifichi l’annuncio prima di decidere.</span>':"")
+      +(item.inserzionista_professionale===true?'<br><span data-subito-seller="professionista">Subito indica un inserzionista professionale.</span>'
+        :item.inserzionista_professionale===false?'<br><span data-subito-seller="privato">Subito indica un inserzionista privato.</span>'
+        :'<br><span data-subito-seller="non-indicato">Tipo di inserzionista non indicato da Subito.</span>')
+      +'</div>';
   }
   return "";
 }
@@ -1532,7 +1540,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-subito-saved-search-2");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-subito-item-candidates-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1607,7 +1615,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-subito-saved-search-2");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-subito-item-candidates-1");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -4395,7 +4403,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-subito-saved-search-2");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-subito-item-candidates-1");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);
