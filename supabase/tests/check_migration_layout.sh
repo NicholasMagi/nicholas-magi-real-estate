@@ -18,6 +18,11 @@ if ls "$MIG" | grep -qi 'dubious'; then bad "un file della Fase 2 è in supabase
 if grep -lqi 'nmre_gmail_avvisi_dubbi' "$MIG"/*.sql 2>/dev/null; then bad "una migrazione applicabile crea o modifica nmre_gmail_avvisi_dubbi"; else ok "nessuna migrazione applicabile tocca nmre_gmail_avvisi_dubbi"; fi
 [[ -f "$ROOT/supabase/migrations_pending/20261125201000_gmail_dubious_alerts.sql" ]] && ok "Fase 2 conservata in supabase/migrations_pending/" || bad "migrazione della Fase 2 mancante in supabase/migrations_pending/"
 
+# 1-bis. Migrazione STABLE dei token Gmail: in attesa di approvazione, non applicabile
+if ls "$MIG" | grep -qi 'gmail_tokens_rpc_stable'; then bad "la migrazione STABLE dei token è in supabase/migrations/ senza approvazione"; else ok "migrazione STABLE dei token non applicabile automaticamente"; fi
+[[ -f "$ROOT/supabase/migrations_pending/20261127090000_gmail_tokens_rpc_stable.sql" ]] && ok "migrazione STABLE dei token conservata in supabase/migrations_pending/" || bad "migrazione STABLE dei token mancante in supabase/migrations_pending/"
+[[ -f "$ROOT/supabase/rollback/20261127090000_gmail_tokens_rpc_stable.rollback.sql" ]] && ok "rollback della migrazione STABLE dei token presente" || bad "rollback della migrazione STABLE dei token mancante"
+
 # 2. Versioni delle protezioni allineate alla produzione
 for f in 20261126004257_guard_agency_candidate_notifications.sql 20261126004310_guard_agency_price_drop_notifications.sql; do
   [[ -f "$MIG/$f" ]] && ok "presente $f" || bad "mancante $f"

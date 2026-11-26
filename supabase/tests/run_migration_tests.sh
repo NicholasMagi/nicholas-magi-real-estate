@@ -21,6 +21,8 @@ DUBIOUS="$ROOT/supabase/migrations_pending/20261125201000_gmail_dubious_alerts.s
 PRICE="$ROOT/supabase/migrations/20261126004310_guard_agency_price_drop_notifications.sql"
 PRICE_RB="$ROOT/supabase/rollback/20261126004310_guard_agency_price_drop_notifications.rollback.sql"
 DUBIOUS_RB="$ROOT/supabase/rollback/20261125201000_gmail_dubious_alerts.rollback.sql"
+TOKENS_STABLE="$ROOT/supabase/migrations_pending/20261127090000_gmail_tokens_rpc_stable.sql"
+TOKENS_STABLE_RB="$ROOT/supabase/rollback/20261127090000_gmail_tokens_rpc_stable.rollback.sql"
 DB="nmre_migration_test_$$"
 
 psql_db() { psql -X -q -v ON_ERROR_STOP=1 -d "$DB" "$@"; }
@@ -283,5 +285,60 @@ select count(*) from public.nmre_gmail_avvisi_dubbi;
 SQL
 )"
 expect "rollback: i dati raccolti restano" 2 "$(psql_db -At -c "select count(*) from public.nmre_gmail_avvisi_dubbi")"
+
+echo "== Lettura dei token Gmail in sola lettura (nmre_get_gmail_tokens STABLE)"
+psql -X -q -d postgres -c "drop database if exists $DB" >/dev/null
+base_schema
+tokens_function() { # corpo SQL della funzione
+  psql_db <<SQL >/dev/null
+create table if not exists private.gmail_oauth_tokens (email text primary key, token_ciphertext text, scope text, expires_at timestamptz);
+insert into private.gmail_oauth_tokens values ('nmre@example.test', 'v1.iv.cipher', 'gmail.readonly', now()) on conflict do nothing;
+drop function if exists public.nmre_get_gmail_tokens();
+create function public.nmre_get_gmail_tokens()
+returns table (email text, token_ciphertext text, scope text, expires_at timestamptz)
+language sql volatile security definer set search_path = '' as \$f\$ $1 \$f\$;
+SQL
+}
+volatility() { psql_db -At -c "select provolatile from pg_proc where proname='nmre_get_gmail_tokens'"; }
+tokens_function "select t.email, t.token_ciphertext, t.scope, t.expires_at from private.gmail_oauth_tokens t"
+expect "situazione attuale: funzione VOLATILE e SECURITY DEFINER" "v|true" "$(psql_db -At -c "select provolatile::text || '|' || prosecdef::text from pg_proc where proname='nmre_get_gmail_tokens'")"
+before_def="$(psql_db -At -c "select md5(prosrc) || coalesce(proconfig::text, '') || prosecdef::text from pg_proc where proname='nmre_get_gmail_tokens'")"
+psql_db -f "$TOKENS_STABLE" >/dev/null
+expect "dopo la migrazione la funzione è STABLE" s "$(volatility)"
+expect "corpo, search_path e SECURITY DEFINER invariati" "$before_def" "$(psql_db -At -c "select md5(prosrc) || coalesce(proconfig::text, '') || prosecdef::text from pg_proc where proname='nmre_get_gmail_tokens'")"
+expect "lettura riuscita in una transazione READ ONLY" 1 "$(psql_db -At <<'SQL' | tail -1
+begin transaction read only;
+select count(*) from public.nmre_get_gmail_tokens();
+rollback;
+SQL
+)"
+expect "nella stessa transazione READ ONLY una scrittura è rifiutata" 1 "$(psql_db <<'SQL' 2>&1 | grep -c 'read-only transaction' || true
+begin transaction read only;
+select count(*) from public.nmre_get_gmail_tokens();
+insert into private.gmail_oauth_tokens values ('x@example.test', 'c', 's', now());
+rollback;
+SQL
+)"
+expect "nessun dato modificato" 1 "$(psql_db -At -c "select count(*) from private.gmail_oauth_tokens")"
+psql_db -f "$TOKENS_STABLE" >/dev/null
+expect "migrazione rieseguita: già STABLE, nessuna modifica" s "$(volatility)"
+expect "una funzione STABLE in SQL non può scrivere (garanzia di Postgres)" 1 "$(psql_db <<'SQL' 2>&1 | grep -c 'not allowed in a non-volatile function' || true
+create function public.nmre_stable_write_probe() returns void language sql stable as $f$ insert into private.gmail_oauth_tokens values ('p@example.test','c','s',now()) $f$;
+select public.nmre_stable_write_probe();
+SQL
+)"
+psql_db -c "drop function if exists public.nmre_stable_write_probe()" >/dev/null
+psql_db -f "$TOKENS_STABLE_RB" >/dev/null
+expect "rollback: la funzione torna VOLATILE" v "$(volatility)"
+for unsafe in \
+  "insert into private.gmail_oauth_tokens values ('y@example.test','c','s',now()) returning email, token_ciphertext, scope, expires_at" \
+  "select email, token_ciphertext, scope, expires_at from private.gmail_oauth_tokens; select email, token_ciphertext, scope, expires_at from private.gmail_oauth_tokens" \
+  "select email, token_ciphertext, scope, set_config('x.y', 'z', false)::timestamptz from private.gmail_oauth_tokens"; do
+  tokens_function "$unsafe"
+  expect "funzione di prova creata con un corpo non sicuro" 1 "$(psql_db -At -c "select count(*) from pg_proc where proname='nmre_get_gmail_tokens' and provolatile='v'")"
+  if psql_db -f "$TOKENS_STABLE" >/dev/null 2>&1; then echo "FAIL la migrazione doveva fermarsi: $unsafe" >&2; exit 1; fi
+  expect "corpo non sicuro: migrazione interrotta, funzione ancora VOLATILE" v "$(volatility)"
+done
+psql -X -q -d postgres -c "drop database $DB" >/dev/null
 
 echo "Tutti i test delle migrazioni superati."
