@@ -75,14 +75,10 @@ export async function acquireSubitoDigest(
     status: "errore", reason, items: [], decision: null, pageSource: null, pageCount: 0, attempts,
     retry: retryable && attempts < SUBITO_MAX_ATTEMPTS, keepDigestRecord: true
   });
-  // Schede già presenti nell'email: non serve la pagina per sapere quali sono nuove.
-  const fromEmailOnly = digest.emailListingUrls.length > 0 && digest.declaredCount === digest.emailListingUrls.length;
-
   let page: SubitoPage | null = null;
   let pageError: string | null = null;
-  if (!digest.searchUrl) {
-    if (!fromEmailOnly) return fail("link_mancante", false);
-  } else {
+  if (!digest.searchUrl) return fail("link_mancante", false);
+  {
     try {
       const response = await deps.fetchPage(digest.searchUrl);
       const finalOk = !!normalizeSubitoSearchUrl(response.finalUrl) || response.finalUrl === digest.searchUrl;
@@ -98,7 +94,7 @@ export async function acquireSubitoDigest(
       pageError = "errore_rete";
     }
   }
-  if (pageError && !fromEmailOnly) return fail(pageError, true);
+  if (pageError) return fail(pageError, true);
 
   let previousDigestIso: string | null = null;
   if (digest.searchKey && receivedAt) {
@@ -261,6 +257,11 @@ export function subitoDigestRow(ctx: SubitoRowContext, result: SubitoAcquisition
         annunci_dichiarati: declared,
         annunci_nella_pagina: result.pageCount,
         annunci_in_finestra: result.decision?.windowCount ?? null,
+        annunci_in_finestra_privati: result.decision?.windowPrivate ?? null,
+        annunci_in_finestra_professionali: result.decision?.windowProfessional ?? null,
+        annunci_ripubblicati: result.decision?.windowReposted ?? [],
+        // Link a schede presenti nell'email: mai usati per decidere quali annunci sono nuovi.
+        link_schede_nell_email_ignorati: ctx.digest.emailListingUrls.length,
         fonte_pagina: result.pageSource,
         url_ricerca: ctx.digest.searchUrl,
         link_non_riconosciuto: ctx.digest.unresolvedLink,

@@ -49,7 +49,7 @@ Deno.test("12 · notifica da verificare: link a ogni annuncio plausibile e alla 
   const acquisition: SubitoAcquisition = {
     status: "da_verificare", reason: "nessuna_notifica_precedente", items: [], pageSource: "next_data", pageCount: 8, attempts: 1, retry: false,
     keepDigestRecord: true,
-    decision: { certain: false, reason: "nessuna_notifica_precedente", newItems: [], possibleItems: page.items.slice(0, 4), windowCount: null }
+    decision: { certain: false, reason: "nessuna_notifica_precedente", newItems: [], possibleItems: page.items.slice(0, 4), windowCount: null, windowPrivate: null, windowProfessional: null, windowReposted: [] }
   };
   const row = { id: "d1", ...subitoDigestRow(ctx, acquisition) };
   const markup = ui.nmreSubitoRecoveryHtml(row);
@@ -65,7 +65,7 @@ Deno.test("12 · notifica da verificare: link a ogni annuncio plausibile e alla 
 Deno.test("12 · nessun link non sicuro o esterno nella scheda", () => {
   const acquisition: SubitoAcquisition = {
     status: "da_verificare", reason: "date_non_disponibili", items: [], pageSource: "link", pageCount: 2, attempts: 1, retry: false, keepDigestRecord: true,
-    decision: { certain: false, reason: "date_non_disponibili", newItems: [], windowCount: null, possibleItems: [
+    decision: { certain: false, reason: "date_non_disponibili", newItems: [], windowCount: null, windowPrivate: null, windowProfessional: null, windowReposted: [], possibleItems: [
       { ...page.items[0], url: "javascript:alert(1)" }, { ...page.items[1], url: "https://evil.example.com/appartamenti/x-608812345.htm" }, page.items[2]] }
   };
   const markup = ui.nmreSubitoRecoveryHtml({ ...subitoDigestRow(ctx, acquisition), titolo: '<img src=x onerror=alert(1)>' });

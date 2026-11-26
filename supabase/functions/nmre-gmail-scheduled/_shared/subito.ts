@@ -395,41 +395,52 @@ export type NewListingsDecision = {
   certain: boolean;
   /** Motivo della decisione (per il titolare e per i test). */
   reason:
-    | "annunci_nell_email" | "finestra_temporale"
+    | "finestra_temporale"
     | "numero_non_dichiarato" | "nessun_annuncio_nella_pagina" | "date_non_disponibili" | "dati_parziali"
     | "data_email_mancante" | "nessuna_notifica_precedente" | "pagina_incompleta" | "conteggio_diverso"
-    | "struttura_non_riconosciuta";
+    | "struttura_non_riconosciuta" | "possibili_ripubblicazioni";
   /** Annunci nuovi individuati con certezza (vuoto se certain è false). */
   newItems: SubitoItem[];
   /** Annunci plausibili da far verificare al titolare (se certain è false). */
   possibleItems: SubitoItem[];
   /** Annunci trovati nella finestra temporale (per il messaggio di verifica). */
   windowCount: number | null;
+  /**
+   * Annunci della finestra per tipo di inserzionista. La ricerca advt=0,2 comprende
+   * privati e professionisti: il conteggio dichiarato viene confrontato con il totale,
+   * senza presumere che Subito conti solo i privati. Il dettaglio serve al titolare.
+   */
+  windowPrivate: number | null;
+  windowProfessional: number | null;
+  /** Annunci della finestra con ID più vecchio di annunci anteriori alla finestra (ripubblicati). */
+  windowReposted: string[];
 };
 
 export const SUBITO_CLOCK_TOLERANCE_MS = 5 * 60 * 1000;
 export const SUBITO_MAX_POSSIBLE_ITEMS = 15;
 
 /**
- * Nuovi annunci di un'email di ricerca salvata. Certezza solo se:
- *  - l'email elenca essa stessa le schede, nello stesso numero dichiarato; oppure
- *  - la pagina ha le date di tutti gli annunci, è nota l'email precedente della stessa
- *    ricerca (inizio della finestra), la pagina mostra almeno un annuncio anteriore a
- *    quella email (la finestra è completa) e nella finestra ci sono esattamente gli
- *    annunci dichiarati.
- * Negli altri casi nessuna corrispondenza viene inventata: certain=false e gli annunci
- * plausibili vengono proposti per la verifica.
+ * Nuovi annunci di un'email di ricerca salvata. Certezza solo se, insieme:
+ *  - l'elenco dei risultati è stato riconosciuto e ogni annuncio ha la data;
+ *  - è nota l'email precedente della stessa ricerca (inizio della finestra) e la pagina
+ *    mostra almeno un annuncio anteriore a quella email (finestra completa);
+ *  - nella finestra ci sono esattamente gli annunci dichiarati, contando privati e
+ *    professionisti (la ricerca li comprende entrambi);
+ *  - nessun annuncio della finestra risulta ripubblicato (ID più vecchio di un annuncio
+ *    anteriore alla finestra: la data di Subito è quella dell'ultima pubblicazione).
+ * I link a schede presenti nell'email (per esempio annunci consigliati) non danno mai
+ * certezza. Negli altri casi nessuna corrispondenza viene inventata: certain=false e gli
+ * annunci plausibili vengono proposti per la verifica.
  */
 export function identifyNewSubitoListings(params: {
   declaredCount: number | null;
   page: SubitoPage | null;
+  /** Link a schede presenti nell'email: ignorati per la decisione (possono essere suggerimenti). */
   emailListingUrls: string[];
   emailDateIso: string | null;
   previousDigestIso: string | null;
 }): NewListingsDecision {
   const pageItems = params.page?.items || [];
-  const byId = new Map(pageItems.map(item => [item.id, item]));
-  const emailIds = [...new Set(params.emailListingUrls.map(subitoAdId).filter((id): id is string => !!id))];
   const emailTime = params.emailDateIso ? Date.parse(params.emailDateIso) : NaN;
   const limit = Number.isFinite(emailTime) ? emailTime + SUBITO_CLOCK_TOLERANCE_MS : null;
   const previous = params.previousDigestIso ? Date.parse(params.previousDigestIso) : NaN;
@@ -441,16 +452,14 @@ export function identifyNewSubitoListings(params: {
       return !(Number.isFinite(previous) && time <= previous);
     })
     .slice(0, SUBITO_MAX_POSSIBLE_ITEMS);
-  const uncertain = (reason: NewListingsDecision["reason"], windowCount: number | null = null): NewListingsDecision =>
-    ({ certain: false, reason, newItems: [], possibleItems: possible(), windowCount });
+  const breakdown = (list: SubitoItem[] | null) => ({
+    windowCount: list ? list.length : null,
+    windowPrivate: list ? list.filter(item => item.advertiserCompany === false).length : null,
+    windowProfessional: list ? list.filter(item => item.advertiserCompany === true).length : null
+  });
+  const uncertain = (reason: NewListingsDecision["reason"], list: SubitoItem[] | null = null, reposted: string[] = []): NewListingsDecision =>
+    ({ certain: false, reason, newItems: [], possibleItems: possible(), ...breakdown(list), windowReposted: reposted });
 
-  if (emailIds.length && params.declaredCount !== null && emailIds.length === params.declaredCount) {
-    const newItems = emailIds.map(id => byId.get(id) || {
-      id, url: "https://www.subito.it" + new URL(params.emailListingUrls.find(url => subitoAdId(url) === id)!).pathname,
-      title: null, description: null, price: null, location: null, surfaceMq: null, rooms: null, images: [], publishedAt: null, advertiserCompany: null
-    });
-    return { certain: true, reason: "annunci_nell_email", newItems, possibleItems: [], windowCount: newItems.length };
-  }
   if (params.declaredCount === null) return uncertain("numero_non_dichiarato");
   if (!pageItems.length) return uncertain("nessun_annuncio_nella_pagina");
   if (params.page?.source === "next_data_generico") return uncertain("struttura_non_riconosciuta");
@@ -462,15 +471,19 @@ export function identifyNewSubitoListings(params: {
     const time = Date.parse(item.publishedAt!);
     return time > previous && time <= limit;
   });
-  const boundaryVisible = pageItems.some(item => Date.parse(item.publishedAt!) <= previous);
-  if (!boundaryVisible) return uncertain("pagina_incompleta", inWindow.length);
-  if (inWindow.length !== params.declaredCount) return uncertain("conteggio_diverso", inWindow.length);
-  return { certain: true, reason: "finestra_temporale", newItems: inWindow, possibleItems: [], windowCount: inWindow.length };
+  const before = pageItems.filter(item => Date.parse(item.publishedAt!) <= previous);
+  if (!before.length) return uncertain("pagina_incompleta", inWindow);
+  // Gli ID di Subito crescono con la creazione dell'annuncio: un annuncio della finestra
+  // con ID minore di uno anteriore alla finestra è stato ripubblicato, non è nuovo.
+  const newestOlderId = Math.max(...before.map(item => Number(item.id)));
+  const reposted = inWindow.filter(item => Number(item.id) < newestOlderId).map(item => item.id);
+  if (reposted.length) return uncertain("possibili_ripubblicazioni", inWindow, reposted);
+  if (inWindow.length !== params.declaredCount) return uncertain("conteggio_diverso", inWindow);
+  return { certain: true, reason: "finestra_temporale", newItems: inWindow, possibleItems: [], ...breakdown(inWindow), windowReposted: [] };
 }
 
 /** Testo per il titolare, per ogni motivo di incertezza o errore. */
 export const SUBITO_REASON_TEXT: Record<string, string> = {
-  annunci_nell_email: "Annunci indicati direttamente nell'email",
   finestra_temporale: "Annunci pubblicati tra l'email precedente della stessa ricerca e questa",
   numero_non_dichiarato: "L'email non indica quanti sono i nuovi annunci",
   nessun_annuncio_nella_pagina: "La pagina dei risultati non contiene annunci riconoscibili",
@@ -481,6 +494,7 @@ export const SUBITO_REASON_TEXT: Record<string, string> = {
   pagina_incompleta: "La pagina non mostra annunci anteriori all'email precedente: potrebbero esserci altri risultati",
   conteggio_diverso: "Il numero di annunci trovati non corrisponde a quello dichiarato dall'email",
   struttura_non_riconosciuta: "Elenco dei risultati non riconosciuto nella pagina: gli annunci trovati sono solo proposti",
+  possibili_ripubblicazioni: "Nella finestra ci sono annunci ripubblicati (ID più vecchi di annunci precedenti): non si può dimostrare quali sono i nuovi",
   link_mancante: "Link alla pagina dei risultati non trovato nell'email",
   pagina_bloccata: "Pagina dei risultati protetta (verifica anti-robot): non aggirata",
   pagina_vuota: "Pagina dei risultati vuota o con una struttura non riconosciuta",

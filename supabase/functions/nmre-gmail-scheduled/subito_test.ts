@@ -425,13 +425,34 @@ Deno.test("11 · limite di pagine per ciclo: le email in eccesso sono rinviate s
   eq(deferred.data_extraction_version, DATA_EXTRACTION_VERSION - 1, "riletta al ciclo successivo");
 });
 
-// ---------- Annunci già elencati nell'email ----------
-Deno.test("annunci elencati direttamente nell'email: certi anche senza la pagina", async () => {
-  const html = EMAIL_HTML.replace("</h1>", '</h1>' + NEW_IDS.map(id => '<a href="https://www.subito.it/appartamenti/annuncio-ancona-' + id + '.htm?utm_source=knocker">Annuncio</a>').join(""));
-  const withListings = email("19a1withlinks0001", "Thu, 26 Nov 2026 09:24:26 +0100", { html });
-  const db = fakeSupabase();
-  const result = await syncCycle(db, [withListings], pages({ error: true }).fetchPage);
-  eq(result.outcomes["completo:annunci_nell_email"], 1, "certi dall'email");
-  eq(result.counters.inserted, 3, "3 annunci inseriti con il link diretto");
-  eq(candidates(db).every(row => /^https:\/\/www\.subito\.it\/appartamenti\/annuncio-ancona-\d+\.htm$/.test(row.url)), true, "link diretti senza tracciamento");
+// ---------- Link a schede nell'email (per esempio annunci consigliati) ----------
+Deno.test("4 · link a schede nell'email (annunci suggeriti): mai considerati nuovi, nemmeno se il numero coincide", async () => {
+  const suggested = ["608100200", "608701234", "608655555"];
+  const html = EMAIL_HTML.replace("Ricevi questa email", suggested.map(id => '<a href="https://www.subito.it/appartamenti/consigliato-ancona-' + id + '.htm?utm_source=knocker">Potrebbe interessarti</a>').join("") + "Ricevi questa email");
+  const withSuggestions = email("19a1withlinks0001", "Thu, 26 Nov 2026 09:24:26 +0100", { html });
+  eq(subitoSavedSearchDigest(withSuggestions)!.emailListingUrls.length, 3, "3 link a schede nell'email, come i 3 annunci dichiarati");
+  // Pagina non raggiungibile: senza la pagina nessun annuncio può risultare nuovo.
+  let db = fakeSupabase();
+  let result = await syncCycle(db, [withSuggestions], pages({ error: true }).fetchPage);
+  eq(result.counters.inserted, 1, "solo la notifica da verificare");
+  eq(suggested.every(id => byAd(db, id).length === 0), true, "annunci suggeriti non inseriti");
+  eq(digestOf(db, withSuggestions.id)!.dati_estratti.ricerca_subito.stato, "errore", "recupero non riuscito, non completato");
+  // Pagina letta e finestra coerente: nuovi gli annunci della finestra, non i suggeriti.
+  db = await afterPreviousDigest();
+  result = await syncCycle(db, [withSuggestions], pages({ html: PAGE }).fetchPage);
+  eq(NEW_IDS.every(id => byAd(db, id).length === 1), true, "inseriti i 3 annunci della finestra");
+  eq(suggested.every(id => byAd(db, id).length === 0), true, "annunci suggeriti ignorati");
+  eq(digestOf(db, withSuggestions.id), undefined, "recupero completo senza riepilogo");
+});
+
+Deno.test("annunci ripubblicati nella finestra: nessuna certezza, proposti per la verifica", () => {
+  const page = parseSubitoResultsPage(PAGE);
+  // 608590002 (20/11) ripubblicato il 26/11: data nuova, ID più vecchio di annunci anteriori alla finestra.
+  const reposted = { ...page, items: page.items.map(item => item.id === "608590002" ? { ...item, publishedAt: "2026-11-26T07:00:00.000Z" } : item)
+    .filter(item => item.id !== "608799020") };
+  const decision = identifyNewSubitoListings({ declaredCount: 3, page: reposted, emailListingUrls: [], emailDateIso: "2026-11-26T08:24:26.000Z", previousDigestIso: "2026-11-25T08:22:00.000Z" });
+  eq(decision.certain, false, "conteggio coincidente ma un annuncio è ripubblicato: nessuna certezza");
+  eq(decision.reason, "possibili_ripubblicazioni", "motivo");
+  eq(decision.windowReposted.join(","), "608590002", "annuncio ripubblicato indicato");
+  eq(decision.possibleItems.some(item => item.id === "608590002"), true, "proposto per la verifica");
 });
