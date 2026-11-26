@@ -73,3 +73,17 @@ Deno.test("12 · nessun link non sicuro o esterno nella scheda", () => {
   eq(hrefs(markup).filter(link => subitoAdId(link)).length, 1, "resta solo il link Subito valido");
   eq(/<img/.test(markup), false, "nessun markup iniettato");
 });
+
+Deno.test("12 · notifica: dettaglio privati/professionisti, ripubblicati e annunci già nell'Archivio", () => {
+  const acquisition: SubitoAcquisition = {
+    status: "completo", reason: "finestra_temporale", items: [page.items[1]], pageSource: "next_data", pageCount: 8, attempts: 1, retry: false, keepDigestRecord: true,
+    archived: [{ id: "608807711", url: page.items[2].url, title: "Quadrilocale", annuncio_id: "a1", eliminato: false },
+      { id: "608799020", url: page.items[3].url, title: "Bilocale", annuncio_id: "a2", eliminato: true }],
+    decision: { certain: true, reason: "finestra_temporale", newItems: [page.items[1]], possibleItems: [], windowCount: 3, windowPrivate: 2, windowProfessional: 1, windowReposted: [] }
+  };
+  const markup = ui.nmreSubitoRecoveryHtml({ ...subitoDigestRow(ctx, acquisition, [{ id: page.items[1].id, url: page.items[1].url, title: page.items[1].title }]) });
+  eq(/individuati: 3 \(2 privati, 1 professionisti\)/.test(markup), true, "dettaglio per tipo di inserzionista");
+  eq(/Già presenti nell’Archivio, non duplicati/.test(markup), true, "sezione degli annunci già nell'Archivio");
+  eq(/già nell’Archivio/.test(markup) && /eliminato dall’Archivio/.test(markup), true, "stato nell'Archivio indicato");
+  eq(hrefs(markup).filter(link => subitoAdId(link)).length, 3, "link diretti: recuperato e annunci dell'Archivio");
+});
