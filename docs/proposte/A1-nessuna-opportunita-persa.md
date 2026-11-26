@@ -1160,3 +1160,130 @@ di regressione che **fallisce sul codice di d524e4a** e passa su quello corretto
 
 Nessuna migrazione, nessun deploy, nessuna operazione su Supabase. In produzione resta
 la versione 68 della funzione e il frontend precedente.
+
+## 19. Email Subito di ricerca salvata con più annunci (26/11/2026)
+
+Caso reale: email del 26/11/2026 alle 09:24 da `noreply@subito.it`, oggetto «Appartamenti
+a Ancona e provincia ha 3 nuovi annunci per te». L'email non contiene i tre immobili:
+contiene il pulsante «Vedi i nuovi annunci», che porta alla pagina dei risultati.
+
+### 19.1 Causa
+Riprodotta con la fixture dell'email (`fixtures/subito_saved_search_email.html`):
+1. **Email scartata dal filtro.** `listingUrls()` dà lo stesso punteggio a tutti i link
+   Subito e sceglie il primo, cioè quello del logo (homepage). Il filtro esclude quindi
+   l'email come `link_principale_generico`.
+2. **Nessun annuncio apribile, comunque.** Anche scegliendo il link del pulsante, la
+   pagina `/annunci-marche/vendita/...` non è una scheda: `resolveListingUrl()`
+   restituisce null. Ne risulterebbe un solo candidato per tre immobili, senza URL diretto
+   e senza chiave dell'immobile.
+3. **Venditore sbagliato.** L'etichetta «Inserzionista: Privato» descrive il filtro della
+   ricerca, ma veniva letta come prova («Privato», 99%). Questo avrebbe potuto far
+   archiviare automaticamente un riepilogo che non è un annuncio.
+
+### 19.2 Logica
+- **Riconoscimento** (`_shared/subito.ts`): mittente su `subito.it` e oggetto «… ha N
+  nuovi annunci» o testo «Ci sono N nuovi risultati per la ricerca che hai salvato». Gli
+  avvisi di un singolo annuncio seguono il percorso normale.
+- **Link**: si legge dall'HTML originale dell'email (nuovo campo `bodyHtml`). Si usa il
+  pulsante «Vedi i nuovi annunci», gestendo anche i redirect con l'URL annidato. Si
+  tolgono `utm_*` e `kxconfid`. Senza pulsante si usa un altro link alla ricerca;
+  altrimenti `link_mancante`.
+- **Pagina dei risultati**: richiesta GET normale con un timeout di 12 secondi. Pagine
+  protette (CAPTCHA, verifica anti-robot, 401, 403, 429) vengono registrate come
+  `pagina_bloccata` e **non vengono aggirate**. Fonti dei dati, in ordine: dati
+  strutturati `__NEXT_DATA__` (cercati in tutta la struttura, così uno spostamento non li
+  fa perdere), poi JSON-LD, poi i soli link alle schede.
+- **Dati per annuncio**: ID, URL diretto, titolo, prezzo, località, superficie, locali,
+  descrizione, immagini, data di pubblicazione (ora italiana convertita in UTC) e tipo di
+  inserzionista.
+- **Integrazione** (`index.ts`): le email riconosciute passano da `subitoRowsForEmails()`,
+  che produce una riga per annuncio. Il salvataggio usa `saveCandidateRow()`, cioè lo
+  stesso codice di prima spostato in `_shared/save_candidate.ts`, con deduplicazione,
+  scritture protette, storico notifiche e regole sugli scartati invariate.
+
+### 19.3 Come si riconoscono gli annunci nuovi
+Nessuna corrispondenza viene inventata. Un annuncio è **nuovo con certezza** solo in due
+casi:
+- **Annunci nell'email:** l'email elenca le schede, nello stesso numero dichiarato.
+- **Finestra temporale:** devono valere insieme queste condizioni:
+  - la pagina ha la data di **tutti** gli annunci;
+  - è nota l'email precedente della **stessa ricerca**, cioè la stessa chiave senza
+    tracciamento, ordinamento e pagina;
+  - la pagina mostra almeno un annuncio anteriore a quell'email, quindi la finestra è
+    completa;
+  - tra le due email ci sono **esattamente** gli annunci dichiarati.
+
+Negli altri casi l'email resta in Opportunità come notifica **da verificare**, con il
+motivo e l'elenco degli annunci plausibili, ognuno con il proprio link diretto. I casi
+sono: prima email di una ricerca, conteggio diverso, annuncio rimosso, pagina senza date,
+dati parziali, finestra incompleta.
+
+Con l'email reale del 26/11, se NMRE non ha ancora acquisito un'email precedente della
+stessa ricerca, il risultato atteso è «da verificare» con i link plausibili. Dalla email
+successiva della stessa ricerca la finestra è delimitata.
+
+### 19.4 Duplicati, sovrascritture, tracciabilità
+- **Chiave per annuncio:** `dedup_key = subito:<ID>` e `listing_key` canonica. Un
+  annuncio già acquisito viene ritrovato anche **per ID**, se il titolo nell'URL è
+  cambiato.
+- **Annunci già presenti** (in coda, archiviati o scartati): **nessun dato riscritto**
+  (`preserve_existing`). Si registra solo la nuova notifica. Per gli scartati valgono le
+  regole esistenti: nuova notifica evidenziata, o riapertura per un nuovo ribasso.
+- **Notifiche:** una per annuncio, con identificativo `<email>#subito-<ID>` (unico per
+  `owner_id`). Ogni annuncio conserva in `dati_fonte` l'email d'origine, l'oggetto, il
+  mittente e la ricerca.
+- **Rielaborazione:** gli identificativi `<email>#subito-<ID>` rimandano all'email
+  riepilogativa, che viene riletta.
+- **Riletture:** la stessa email o la stessa pagina non producono duplicati (`upsert`
+  delle notifiche, chiavi uniche).
+- **Venditore:** mai «Privato» per il filtro della ricerca. Per l'annuncio vale solo il
+  testo dell'annuncio, mentre il riepilogo resta sempre «Da verificare».
+
+### 19.5 Errori
+| Caso | Esito |
+|---|---|
+| Link mancante | Notifica da verificare, nessun nuovo tentativo |
+| Pagina bloccata, errore di rete o timeout, errore HTTP, pagina vuota o modificata | Notifica da verificare con il motivo, `stato: errore` (mai «completato»). Viene riletta al ciclo successivo, al massimo 6 tentativi |
+| Pagina con soli link o dati parziali | Da verificare, annunci plausibili proposti, nessun annuncio certo |
+| Più di 8 pagine in un ciclo | Le email in eccesso vengono rinviate senza consumare tentativi |
+| Errore di database su un annuncio o durante il recupero | L'errore resta su quella email e il **cursore Gmail non avanza**. Al ciclo successivo l'email viene completata senza duplicati |
+
+Un tentativo riuscito dopo un errore aggiorna la notifica come «completata», con l'elenco
+degli annunci recuperati.
+
+### 19.6 Frontend
+- «Apri annuncio» (`nmreCandidateListingUrl`) apre l'URL diretto dell'annuncio Subito.
+- La notifica da verificare mostra lo stato del recupero, il motivo, i link diretti agli
+  annunci plausibili e alla pagina dei risultati (`nmreSubitoRecoveryHtml`). Mostra solo
+  link `https://www.subito.it` e il testo viene sempre convertito in modo sicuro.
+- Versione del service worker: `20261126-subito-saved-search-1`.
+
+### 19.7 Test
+- `subito_test.ts` (19 test): riconoscimento, link del pulsante, pagina, link diretti,
+  inserimento, deduplicazione per ID, riletture, archivio, modifiche manuali, errori,
+  recupero parziale, mancato completamento. Usa le funzioni di produzione su un database
+  simulato con i vincoli di unicità (`fake_supabase.ts`).
+- `subito_frontend_test.ts` (3 test): navigazione dalla scheda all'annuncio.
+- Le fixture HTML si basano sull'email fornita e sulla struttura dei risultati Subito.
+- **Verifica per mutazione:** sette difetti reintrodotti, tutti rilevati. I difetti
+  sono: riconoscimento disattivato, tutti i risultati considerati nuovi, annunci
+  esistenti riscritti, nessuna deduplicazione per ID, errore di rete senza notifica,
+  finestra incompleta accettata, scheda che apre la ricerca.
+
+### 19.8 Limiti
+- **Pagina reale non verificata.** La rete di questo ambiente blocca `subito.it`. La
+  struttura della pagina è ricostruita sulla forma nota dei dati di Subito, non scaricata.
+  Il parser tollera spostamenti e strutture diverse, e una pagina non riconosciuta
+  produce una notifica da verificare, mai annunci inventati. Va comunque provata con la
+  funzione distribuita.
+- **Accesso alla pagina.** Se Subito protegge la pagina dalle richieste automatiche della
+  funzione, il recupero risulta sempre «pagina bloccata». Le notifiche restano da
+  verificare, con il link alla pagina dei risultati.
+- **Prima email di ogni ricerca.** Resta da verificare, per scelta: senza l'email
+  precedente non si sa da quando contare.
+- **Nessuna migrazione:** la chiave della ricerca è in `dati_fonte` e gli esiti in
+  `dati_estratti`.
+- **Notifica precedente obbligatoria.** La finestra si basa sui candidati salvati per
+  quella ricerca. Se tutti gli annunci di un'email erano già noti e non è rimasta una
+  riga riepilogativa, l'email successiva risulterà da verificare: degrada verso la
+  verifica, senza perdite.

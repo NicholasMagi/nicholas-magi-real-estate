@@ -42,6 +42,9 @@ jobs:
       - name: Test frontend and sync coherence, cursor and notification guarantees
         run: deno test --allow-read=. supabase/functions/nmre-gmail-scheduled/frontend_coherence_test.ts supabase/functions/nmre-gmail-scheduled/cursor_guard_test.ts
 
+      - name: Test Subito saved-search emails (recognition, results page, new listings, dedup, errors, card links)
+        run: deno test --allow-read=. supabase/functions/nmre-gmail-scheduled/subito_test.ts supabase/functions/nmre-gmail-scheduled/subito_frontend_test.ts
+
       - name: Test recovery panel functions in index.html
         run: node tests/frontend/recovery_test.mjs
 

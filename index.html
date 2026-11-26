@@ -157,6 +157,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .candidate-recovery-card h3{margin:8px 0 4px;font-size:16px;line-height:1.35}
 .candidate-recovery-card .candidate-quick-facts{margin:0 0 8px}
 .candidate-recovery-card .candidate-quality{margin:8px 0}
+.nmre-subito-list{margin:6px 0 4px 18px;padding:0}.nmre-subito-list li{margin:4px 0;overflow-wrap:anywhere}.nmre-subito-list a,[data-subito-search]{display:inline-block;min-height:44px;padding:12px 0;line-height:1.4;box-sizing:border-box}
 .candidate-recovery-card .candidate-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
 .candidate-recovery-card .candidate-actions a{display:inline-flex;align-items:center;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:8px;text-decoration:none;font-weight:600}
 .candidate-recovery-card .candidate-actions button{min-height:44px}
@@ -1462,6 +1463,49 @@ function safe(value){
   return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
+// Ricerca salvata Subito: esito del recupero degli annunci (riga riepilogativa) oppure
+// riferimento all'annuncio Subito recuperato (riga del singolo annuncio).
+function nmreSubitoRecoveryHtml(c){
+  const extracted=c&&c.dati_estratti&&typeof c.dati_estratti==="object"?c.dati_estratti:{};
+  const escape=value=>String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
+  const date=value=>{const time=Date.parse(String(value||""));return Number.isFinite(time)?new Date(time).toLocaleString("it-IT",{dateStyle:"short",timeStyle:"short"}):"";};
+  const search=extracted.ricerca_subito&&typeof extracted.ricerca_subito==="object"?extracted.ricerca_subito:null;
+  if(search){
+    const complete=search.stato==="completo";
+    const head=complete?"Recupero completato":search.stato==="errore"?"Recupero non riuscito":"Recupero da verificare";
+    const retry=search.nuovo_tentativo?" · nuovo tentativo automatico al prossimo ciclo":"";
+    const links=(list,label)=>{
+      const items=(Array.isArray(list)?list:[]).map(entry=>{
+        const url=validUrl(entry&&entry.url);
+        if(!url||!/^https:\/\/(?:www\.)?subito\.it\//i.test(url))return "";
+        const facts=[entry.titolo||entry.title||("Annuncio "+(entry.id||"")),Number(entry.prezzo)>0?Number(entry.prezzo).toLocaleString("it-IT")+" €":"",entry.localita||"",entry.pubblicato_il?"pubblicato il "+date(entry.pubblicato_il):""].filter(Boolean).join(" · ");
+        return '<li><a href="'+escape(url)+'" target="_blank" rel="noopener noreferrer" data-subito-listing="'+escape(entry.id||"")+'">'+escape(facts)+'</a></li>';
+      }).filter(Boolean);
+      return items.length?'<p><strong>'+escape(label)+'</strong></p><ul class="nmre-subito-list">'+items.join("")+'</ul>':"";
+    };
+    const searchUrl=validUrl(search.url_ricerca);
+    return '<div class="candidate-quality candidate-quality-'+(complete?"ok":"warning")+'" data-subito-recovery="'+escape(search.stato||"")+'">'
+      +'<strong>Ricerca salvata Subito · '+escape(head)+':</strong> '+escape(search.testo||search.motivo||"")
+      +(search.annunci_dichiarati?' · annunci dichiarati dall’email: '+escape(search.annunci_dichiarati):"")
+      +(search.annunci_in_finestra!==null&&search.annunci_in_finestra!==undefined?' · individuati: '+escape(search.annunci_in_finestra):"")
+      +escape(retry)
+      +(complete?links(search.recuperati,"Annunci recuperati"):links(search.possibili,"Possibili nuovi annunci (da controllare uno per uno):"))
+      +(searchUrl?'<p><a href="'+escape(searchUrl)+'" target="_blank" rel="noopener noreferrer" data-subito-search>Apri la pagina dei risultati su Subito</a></p>':"")
+      +'</div>';
+  }
+  const item=extracted.subito&&typeof extracted.subito==="object"?extracted.subito:null;
+  if(item&&item.id){
+    return '<div class="candidate-quality candidate-quality-review" data-subito-item="'+escape(item.id)+'"><strong>Annuncio Subito</strong> · ID '+escape(item.id)
+      +(item.pubblicato_il?' · pubblicato il '+escape(date(item.pubblicato_il)):"")
+      +' · recuperato dalla ricerca salvata'+(item.dettagli_completi?"":" (dettagli parziali: verificare sull’annuncio)")+'</div>';
+  }
+  return "";
+}
+// Link «Apri annuncio» della scheda: l'URL diretto dell'annuncio, altrimenti il link
+// originale dell'email (per una ricerca Subito, la pagina dei risultati).
+function nmreCandidateListingUrl(c){
+  return validUrl(c&&c.url)||validUrl(c&&c.url_originale);
+}
 function validUrl(value){
   if(!value)return null;
   try{
@@ -1482,7 +1526,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-4");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-subito-saved-search-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1557,7 +1601,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-4");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-subito-saved-search-1");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -4266,7 +4310,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-4");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-subito-saved-search-1");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);
@@ -4841,9 +4885,9 @@ function renderCandidates(){
     const isPrivate=c.tipo_venditore==="Privato";
     const notificationDate=quality.hasNotificationDate
       ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data email non indicata";
-    const url=validUrl(c.url||c.url_originale);
+    const url=nmreCandidateListingUrl(c);
     const linkHtml=url
-      ?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>'
+      ?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer" data-open-listing="'+safe(c.id)+'">Apri annuncio</a>'
       :'<span class="candidate-link-warning">Link annuncio non disponibile</span>';
     const ageText=quality.hasNotificationDate
       ?(quality.notificationDays===0?"Email ricevuta oggi":"Email ricevuta "+quality.notificationDays+" giorni fa")
@@ -4953,6 +4997,7 @@ function renderCandidates(){
       +'<p class="candidate-quick-facts">'+safe(quickFacts||"Caratteristiche dell’immobile da completare")+'</p>'
       +'<div class="candidate-email-status">'+safe(sellerStateLabel)+' '+reopenBadge+' '+duplicateBadge+' '+dismissedBadge+'</div>'
       +'</div>'
+      +nmreSubitoRecoveryHtml(c)
       +'<div class="candidate-actions candidate-actions-primary">'+reviewAction+linkHtml+'<button class="gold" type="button" data-confirm="'+safe(c.id)+'">Archivia</button><button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta email</button></div>'
       +'<details class="candidate-detail-panel" data-candidate-details>'
       +'<summary>Apri email e verifica del venditore</summary>'
