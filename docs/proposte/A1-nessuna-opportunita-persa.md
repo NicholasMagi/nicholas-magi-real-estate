@@ -1186,7 +1186,7 @@ Riprodotta con la fixture dell'email (`fixtures/subito_saved_search_email.html`)
   avvisi di un singolo annuncio seguono il percorso normale.
 - **Link**: si legge dall'HTML originale dell'email (nuovo campo `bodyHtml`). Si usa il
   pulsante «Vedi i nuovi annunci», gestendo anche i redirect con l'URL annidato. Si
-  tolgono i parametri di tracciamento `utm_*`, ma si conserva `kxconfid` nell’URL usato per aprire la ricerca; il token viene escluso soltanto dalla chiave stabile della ricerca, perché può variare tra email. Senza pulsante si usa un altro link alla ricerca;
+  tolgono i parametri di tracciamento `utm_*`, ma si conserva `kxconfid` nell’URL usato per aprire la ricerca; il token viene escluso soltanto dalla chiave stabile della ricerca, perché può variare tra email. Dopo il redirect si verifica che la ricerca finale conservi gli stessi filtri funzionali: se il portale li perde, la notifica resta da verificare e non vengono importati risultati di una ricerca diversa. Senza pulsante si usa un altro link alla ricerca;
   altrimenti `link_mancante`.
 - **Pagina dei risultati**: richiesta GET normale con un timeout di 12 secondi. Pagine
   protette (CAPTCHA, verifica anti-robot, 401, 403, 429) vengono registrate come
@@ -1259,7 +1259,7 @@ degli annunci recuperati.
 - Versione del service worker: `20261126-subito-saved-search-1`.
 
 ### 19.7 Test
-- `subito_test.ts` (19 test): riconoscimento, link del pulsante, pagina, link diretti,
+- `subito_test.ts` (21 test): riconoscimento, link del pulsante, pagina, link diretti,
   inserimento, deduplicazione per ID, riletture, archivio, modifiche manuali, errori,
   recupero parziale, mancato completamento. Usa le funzioni di produzione su un database
   simulato con i vincoli di unicità (`fake_supabase.ts`).
