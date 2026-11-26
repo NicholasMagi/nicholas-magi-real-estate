@@ -1,16 +1,14 @@
 import {
-  municipality,price,listingPrice,listingUrl,propertyEmailDecision,listingTitle,propertyType,
+  municipality,price,listingPrice,listingUrl,listingTitle,propertyType,
   surface,rooms,bedrooms,bathrooms,resolveListingUrl,sellerClassificationDetails,canonicalListingKey,
   priceReduction,extractAdditionalPropertyDetails,specificPortalListingUrl
 } from "./_shared/parser.ts";
-import type { PropertyEmailRule } from "./_shared/parser.ts";
 import { collectHistoryMessageIds } from "./_shared/history.ts";
 import { isRepairEligible, keepAgencyCandidates, keptForReviewPatch } from "./_shared/retention.ts";
 import { guardedCandidateUpdate } from "./_shared/guarded.ts";
 import { newSaveCounters, saveCandidateRow } from "./_shared/save_candidate.ts";
 import type { CandidateRow } from "./_shared/save_candidate.ts";
-import { subitoSavedSearchDigest } from "./_shared/subito.ts";
-import type { SubitoDigest } from "./_shared/subito.ts";
+import { classifyMailbox, emailFromGmailMessage, repairEmailId, sellerForEmail } from "./_shared/mailbox.ts";
 import { subitoRowsForEmails, supabaseSubitoDeps } from "./_shared/subito_acquisition.ts";
 import { assertAllRowsSaved, processRowsIsolated } from "./_shared/row_isolation.ts";
 import type { RowFailure } from "./_shared/row_isolation.ts";
@@ -234,24 +232,6 @@ async function listHistoryMessageIds(
   return { ids: [...ids], historyId: latestHistoryId, historyRecords };
 }
 
-function decode(value: string): string {
-  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
-  const binary = atob(padded);
-  return new TextDecoder("utf-8", { fatal: false }).decode(
-    Uint8Array.from(binary, character => character.charCodeAt(0))
-  );
-}
-
-// HTML originale dell'email (serve per leggere il link dei pulsanti, per esempio
-// "Vedi i nuovi annunci" delle ricerche salvate Subito).
-function htmlParts(part: any): string[] {
-  const output: string[] = [];
-  if (part?.body?.data && part.mimeType === "text/html") output.push(decode(part.body.data));
-  for (const child of part?.parts || []) output.push(...htmlParts(child));
-  return output;
-}
-
 // Pagina pubblica dei risultati Subito: normale richiesta GET, nessun tentativo di
 // aggirare CAPTCHA, verifiche anti-robot o autenticazioni (gestiti come errore).
 async function fetchSubitoPage(url: string): Promise<{ status: number; finalUrl: string; html: string }> {
@@ -263,27 +243,6 @@ async function fetchSubitoPage(url: string): Promise<{ status: number; finalUrl:
   });
   const html = (await response.text()).slice(0, 3_000_000);
   return { status: response.status, finalUrl: response.url || url, html };
-}
-
-function bodyParts(part: any): string[] {
-  const output: string[] = [];
-  if (part?.body?.data && part.mimeType === "text/plain") {
-    output.push(decode(part.body.data));
-  } else if (part?.body?.data && part.mimeType === "text/html") {
-    const html = decode(part.body.data)
-      .replace(/<\s*(script|style)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, " ")
-      .replace(/<\s*a\b[^>]*href=["']([^"']+)["'][^>]*>/gi, " $1 ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/gi, " ")
-      .replace(/&amp;/gi, "&")
-      .replace(/&quot;/gi, "\"")
-      .replace(/&#39;/gi, "'")
-      .replace(/&lt;/gi, "<")
-      .replace(/&gt;/gi, ">");
-    output.push(html);
-  }
-  for (const child of part?.parts || []) output.push(...bodyParts(child));
-  return output;
 }
 
 async function readEmail(messageId: string, token: string): Promise<any | null> {
@@ -298,22 +257,7 @@ async function readEmail(messageId: string, token: string): Promise<any | null> 
   if (response.status === 404) return null;
   if (!response.ok) throw new Error("Lettura del messaggio Gmail non riuscita (" + response.status + ")");
 
-  const email = await response.json();
-  const headers = email.payload?.headers || [];
-  const get = (name: string) =>
-    headers.find((header: any) => header.name?.toLowerCase() === name.toLowerCase())?.value || "";
-
-  return {
-    id: email.id,
-    labels: Array.isArray(email.labelIds) ? email.labelIds : [],
-    from: get("From"),
-    subject: get("Subject"),
-    date: get("Date"),
-    messageIdHeader: get("Message-ID").slice(0, 300),
-    snippet: (email.snippet || "").slice(0, 500),
-    bodyText: bodyParts(email.payload).join("\n").slice(0, 30000),
-    bodyHtml: htmlParts(email.payload).join("\n").slice(0, 300000)
-  };
+  return emailFromGmailMessage(await response.json());
 }
 
 
@@ -538,9 +482,8 @@ export default {
       // Le classificazioni manuali non vengono rielaborate.
       const repairIds = (candidatesToRepair || [])
         .filter((candidate: any) => isRepairEligible(candidate))
-        // Gli annunci recuperati da una ricerca salvata Subito hanno l'identificativo
-        // "<email>#subito-<annuncio>": si rilegge l'email riepilogativa.
-        .map((candidate: any) => String(candidate.source_email_id).split("#")[0]);
+        // Annunci di una ricerca salvata Subito: si rilegge l'email riepilogativa.
+        .map((candidate: any) => repairEmailId(candidate.source_email_id));
 
       // Avvisi dubbi (Fase 2): attivi solo con NMRE_CAPTURE_DUBIOUS_ALERTS=true e
       // DOPO l'applicazione della migrazione della tabella nmre_gmail_avvisi_dubbi.
@@ -577,23 +520,9 @@ export default {
         (email): email is any =>
           !!email && !email.labels.includes("SPAM") && !email.labels.includes("TRASH")
       );
-      // Diagnostica del filtro avvisi: solo conteggi per nome di regola, nessun testo.
-      const filterRuleById = new Map<string, PropertyEmailRule>();
-      const propertyFilterRules: Record<string, number> = {};
-      // Email Subito di ricerca salvata: riconosciute a parte (il link principale è una
-      // pagina di risultati, che il filtro generico esclude come link generico).
-      const subitoDigestById = new Map<string, SubitoDigest>();
-      for (const email of mailboxEmails) {
-        const digest = subitoSavedSearchDigest(email);
-        if (digest) subitoDigestById.set(String(email.id), digest);
-      }
-      for (const email of mailboxEmails) {
-        const decision = subitoDigestById.has(String(email.id))
-          ? { accepted: true, rule: "accettata" as PropertyEmailRule }
-          : propertyEmailDecision(email);
-        filterRuleById.set(String(email.id), decision.rule);
-        propertyFilterRules[decision.rule] = (propertyFilterRules[decision.rule] || 0) + 1;
-      }
+      // Regola del filtro avvisi (diagnostica: solo conteggi) ed email Subito di ricerca
+      // salvata, riconosciute a parte e accettate (_shared/mailbox.ts).
+      const { subitoDigestById, filterRuleById, propertyFilterRules } = classifyMailbox(mailboxEmails);
       const isForced = (email: any) => forcedIds.has(String(email.id));
       const propertyEmails = mailboxEmails.filter(email =>
         filterRuleById.get(String(email.id)) === "accettata" || isForced(email)
@@ -661,11 +590,8 @@ export default {
 
       const classifiedAll = propertyEmails.map(email => {
         const value = [email.subject, email.snippet, email.bodyText].filter(Boolean).join(" ");
-        // Il riepilogo di una ricerca salvata non è un annuncio: l'etichetta "Inserzionista:
-        // Privato" descrive il filtro della ricerca, non un venditore.
-        const seller = subitoDigestById.has(String(email.id))
-          ? { classification: "Da verificare" as const, confidence: 0, evidence: "Email riepilogativa di una ricerca salvata Subito" }
-          : classifySellerWithRegistry(value, sellerRegistry);
+        // Il riepilogo di una ricerca salvata non è un annuncio: mai "Privato".
+        const seller = sellerForEmail(String(email.id), subitoDigestById, () => classifySellerWithRegistry(value, sellerRegistry));
         // Un avviso promosso dal titolare resta sempre visibile in coda.
         return { email, text: value, seller: isForced(email) ? promotedSellerClassification(seller) : seller };
       });

@@ -77,3 +77,14 @@ Deno.test("le notifiche si registrano senza duplicati (owner_id + source_email_i
   assert(upsert > 0, "registrazione della notifica con upsert non trovata");
   assert(/onConflict: "owner_id,source_email_id"/.test(saveSource.slice(upsert, upsert + 1200)), "la notifica deve usare onConflict owner_id,source_email_id");
 });
+
+Deno.test("index.ts usa le funzioni condivise testate per leggere e smistare le email", () => {
+  // Il comportamento è verificato sull'email reale in subito_real_test.ts; qui si controlla
+  // che index.ts usi proprio quelle funzioni, senza copie locali.
+  assert(/return emailFromGmailMessage\(await response\.json\(\)\);/.test(source), "readEmail deve usare emailFromGmailMessage");
+  assert(/= classifyMailbox\(mailboxEmails\);/.test(handler), "lo smistamento deve usare classifyMailbox(mailboxEmails)");
+  assert(/sellerForEmail\(String\(email\.id\), subitoDigestById,/.test(handler), "il venditore deve passare da sellerForEmail");
+  assert(/repairEmailId\(candidate\.source_email_id\)/.test(handler), "la rielaborazione deve usare repairEmailId");
+  assert(!/function (bodyParts|htmlParts|decode)\(/.test(source), "nessuna copia locale della lettura del messaggio");
+  assert(!/propertyEmailDecision\(/.test(handler), "il filtro avvisi passa solo da classifyMailbox");
+});
