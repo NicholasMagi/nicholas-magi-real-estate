@@ -3909,6 +3909,7 @@ function nmreCrmRenderSalesCoach(contactId,box){
    («Altri numeri:», «Altre email:») lette anche dalla ricerca dei duplicati. */
 const NMRE_EXTRA_PHONES_LABEL="Altri numeri:";
 const NMRE_EXTRA_EMAILS_LABEL="Altre email:";
+const NMRE_NOTES_MAX=4000;
 function nmreDecodeQuotedPrintable(value,charset){
  const bytes=[];const text=String(value||"").replace(/=\r?\n/g,"");
  for(let i=0;i<text.length;i++){
@@ -3990,7 +3991,7 @@ function nmreImportedNotes(c,dateLabel){
  if(c.org||c.title)lines.push("Rubrica del telefono: "+[c.org,c.title].filter(Boolean).join(" · "));
  if(c.note)lines.push(c.note);
  lines.push("Importato dalla rubrica del telefono il "+dateLabel);
- return lines.join("\n").slice(0,4000);
+ return lines.join("\n");
 }
 /**
  * Piano di importazione (nessuna scrittura). Categorie:
@@ -4007,28 +4008,52 @@ function nmrePlanContactImport(imported,existing,dateLabel){
   const c={...original,phones:[...original.phones],emails:[...original.emails]};
   if(!c.full_name&&!c.phones.length){items.push({contact:c,category:"senza_recapiti",matches:[]});continue;}
   if(!c.full_name)c.full_name=c.phones[0]?.number||c.emails[0]||"Contatto senza nome";
-  const keys=new Set(c.phones.flatMap(p=>nmrePhoneKeys(p.number)));
-  const nameKey=nmreIdentityKey(c.full_name);
-  const twin=items.find(item=>item.category!=="senza_recapiti"&&nmreIdentityKey(item.contact.full_name)===nameKey&&
-   (item.contact.phones.some(p=>nmrePhoneKeys(p.number).some(k=>keys.has(k)))||item.contact.emails.some(e=>c.emails.includes(e))));
-  if(twin){
-   for(const p of c.phones)if(!twin.contact.phones.some(q=>nmrePhoneKeys(q.number).some(k=>nmrePhoneKeys(p.number).includes(k))))twin.contact.phones.push(p);
-   for(const e of c.emails)if(!twin.contact.emails.includes(e))twin.contact.emails.push(e);
-   items.push({contact:c,category:"doppione_nel_file",matches:[],mergedInto:twin});
+  items.push({contact:c,category:null,matches:[]});
+ }
+ // Schede del file che condividono un numero normalizzato o un'email (anche a catena).
+ const active=items.filter(item=>!item.category);
+ const parent=active.map((_,i)=>i);
+ const find=i=>parent[i]===i?i:(parent[i]=find(parent[i]));
+ const owners=new Map();
+ active.forEach((item,i)=>{
+  const keys=[...new Set([...item.contact.phones.flatMap(p=>nmrePhoneKeys(p.number)).map(k=>"tel:"+k),...item.contact.emails.map(e=>"email:"+e)])];
+  for(const key of keys){if(owners.has(key))parent[find(i)]=find(owners.get(key));else owners.set(key,i);}
+ });
+ const groups=new Map();
+ active.forEach((item,i)=>{const root=find(i);(groups.get(root)||groups.set(root,[]).get(root)).push(item);});
+ for(const group of groups.values()){
+  if(group.length<2)continue;
+  const names=new Set(group.map(item=>nmreIdentityKey(item.contact.full_name)));
+  if(names.size>1){
+   // Nomi diversi con un recapito in comune: persone forse diverse. Nessuna creazione.
+   for(const item of group){
+    item.category="da_verificare";item.reason="numero_condiviso_nel_file";
+    item.sharedWith=group.filter(other=>other!==item).map(other=>other.contact.full_name);
+   }
    continue;
   }
-  items.push({contact:c,category:null,matches:[]});
+  // Stesso nome e recapiti in comune: stessa persona, tutte le informazioni nella prima scheda.
+  const [first,...rest]=group;
+  for(const twin of rest){
+   for(const p of twin.contact.phones)if(!first.contact.phones.some(q=>nmrePhoneKeys(q.number).some(k=>nmrePhoneKeys(p.number).includes(k))))first.contact.phones.push(p);
+   for(const e of twin.contact.emails)if(!first.contact.emails.includes(e))first.contact.emails.push(e);
+   for(const field of ["org","title","address","municipality"])if(!first.contact[field]&&twin.contact[field])first.contact[field]=twin.contact[field];
+   if(twin.contact.note&&twin.contact.note!==first.contact.note)first.contact.note=[first.contact.note,twin.contact.note].filter(Boolean).join("\n");
+   twin.category="doppione_nel_file";twin.mergedInto=first;
+  }
  }
  for(const item of items){
   if(item.category)continue;
   const c=item.contact;
   const keys=new Set(c.phones.flatMap(p=>nmrePhoneKeys(p.number)));
   item.matches=index.filter(row=>[...row.phones].some(k=>keys.has(k))||c.emails.some(e=>row.emails.has(e))).map(row=>row.c);
-  if(item.matches.length>1){item.category="da_verificare";continue;}
+  if(item.matches.length>1){item.category="da_verificare";item.reason="piu_contatti";continue;}
   if(!item.matches.length){
+   const notes=nmreImportedNotes(c,dateLabel);
+   if(notes.length>NMRE_NOTES_MAX){item.category="da_verificare";item.reason="note_troppo_lunghe";continue;}
    item.category="nuovo";
    item.insert={full_name:c.full_name.slice(0,180),contact_type:"altro",phone:c.phones[0]?.number?.slice(0,60)||null,email:c.emails[0]||null,
-    municipality:c.municipality?.slice(0,100)||null,address:c.address?.slice(0,220)||null,status:"nuovo",notes:nmreImportedNotes(c,dateLabel)};
+    municipality:c.municipality?.slice(0,100)||null,address:c.address?.slice(0,220)||null,status:"nuovo",notes};
    continue;
   }
   const target=item.matches[0];
@@ -4036,7 +4061,8 @@ function nmrePlanContactImport(imported,existing,dateLabel){
   const newPhones=c.phones.filter(p=>!nmrePhoneKeys(p.number).some(k=>known.has(k)));
   const newEmails=c.emails.filter(e=>!knownEmails.has(e));
   if(!newPhones.length&&!newEmails.length){item.category="gia_presente";continue;}
-  // Aggiornamento solo additivo: campi vuoti riempiti, nuovi recapiti aggiunti alle note.
+  // Aggiornamento solo additivo: il numero e l'email principali non vengono mai sostituiti;
+  // i campi vuoti vengono riempiti, i nuovi recapiti aggiunti in coda alle note esistenti.
   const update={};
   const phonesForNotes=[...newPhones],emailsForNotes=[...newEmails];
   if(!String(target.phone||"").trim()&&phonesForNotes.length)update.phone=phonesForNotes.shift().number.slice(0,60);
@@ -4044,12 +4070,38 @@ function nmrePlanContactImport(imported,existing,dateLabel){
   const extra=[];
   if(phonesForNotes.length)extra.push(NMRE_EXTRA_PHONES_LABEL+" "+phonesForNotes.map(p=>p.number+" ("+p.label+")").join("; "));
   if(emailsForNotes.length)extra.push(NMRE_EXTRA_EMAILS_LABEL+" "+emailsForNotes.join("; "));
-  if(extra.length)update.notes=[String(target.notes||"").trim(),...extra,"Recapiti aggiunti dalla rubrica del telefono il "+dateLabel].filter(Boolean).join("\n").slice(0,4000);
+  if(extra.length){
+   const notes=[String(target.notes||"").replace(/\s+$/,""),...extra,"Recapiti aggiunti dalla rubrica del telefono il "+dateLabel].filter(Boolean).join("\n");
+   // Mai troncare le note: oltre il limite il contatto resta da verificare.
+   if(notes.length>NMRE_NOTES_MAX){item.category="da_verificare";item.reason="note_troppo_lunghe";item.matches=[target];continue;}
+   update.notes=notes;
+  }
   item.category="aggiorna";item.update=update;item.newPhones=newPhones;item.newEmails=newEmails;
  }
  const summary={};
  for(const item of items)summary[item.category]=(summary[item.category]||0)+1;
  return {items,summary};
+}
+/**
+ * Numeri di un contatto nella forma della futura tabella nmre_contact_phones: numero come
+ * scritto, chiave normalizzata, etichetta, principale o secondario, origine (colonna phone
+ * o riga «Altri numeri» delle note). È la base della migrazione dopo lo schema reale.
+ */
+function nmreContactPhoneEntries(contact){
+ const entries=[];const seen=new Set();
+ const add=(number,label,primary,source)=>{
+  const key=nmrePhoneKey(number);
+  if(!key||seen.has(key))return;seen.add(key);
+  entries.push({numero:String(number).trim(),chiave:key,etichetta:label,principale:primary,origine:source});
+ };
+ if(String(contact?.phone||"").trim())add(contact.phone,"principale",true,"phone");
+ for(const line of String(contact?.notes||"").split("\n").filter(l=>l.startsWith(NMRE_EXTRA_PHONES_LABEL))){
+  for(const part of line.slice(NMRE_EXTRA_PHONES_LABEL.length).split(";")){
+   const label=(part.match(/\(([^)]*)\)/)||[])[1]||"altro";
+   add(part.replace(/\(.*?\)/g,"").trim(),label.trim(),false,"note");
+  }
+ }
+ return entries;
 }
 /**
  * Gruppi di possibili duplicati: contatti che condividono almeno un numero (tutti i numeri,
@@ -4082,7 +4134,7 @@ function nmreFindContactDuplicates(contacts){
  });
 }
 const NMRE_IMPORT_LABELS={nuovo:"Nuovi contatti da creare",aggiorna:"Contatti esistenti a cui aggiungere numeri o email",gia_presente:"Già presenti, nessuna modifica",
- da_verificare:"Corrispondono a più contatti: nessuna modifica, da verificare",doppione_nel_file:"Ripetuti nel file: uniti alla scheda precedente con lo stesso nome",senza_recapiti:"Senza nome né recapiti: ignorati"};
+ da_verificare:"Da verificare: nessuna creazione né modifica",doppione_nel_file:"Ripetuti nel file con lo stesso nome: uniti, tutti i recapiti conservati",senza_recapiti:"Senza nome né recapiti: ignorati"};
 let nmreContactImportSource=null;
 function nmreContactImportDateLabel(){return new Intl.DateTimeFormat("it-IT",{dateStyle:"short"}).format(new Date());}
 function nmreRenderContactImportPreview(plan){
@@ -4093,7 +4145,10 @@ function nmreRenderContactImportPreview(plan){
   const phones=c.phones.map(p=>p.number+" ("+p.label+")").join(", ");
   const match=item.matches?.length?" → "+item.matches.map(m=>m.full_name).join(" / "):"";
   const extra=item.category==="aggiorna"?" · da aggiungere: "+[...(item.newPhones||[]).map(p=>p.number),...(item.newEmails||[])].join(", "):"";
-  return '<li><strong>'+safe(c.full_name||"(senza nome)")+'</strong>'+(phones?' · '+safe(phones):"")+(c.emails.length?' · '+safe(c.emails.join(", ")):"")+safe(match)+safe(extra)+'</li>';
+  const reason=item.reason==="numero_condiviso_nel_file"?" · stesso recapito di: "+(item.sharedWith||[]).join(", ")
+   :item.reason==="note_troppo_lunghe"?" · note oltre "+NMRE_NOTES_MAX+" caratteri: da completare a mano"
+   :item.reason==="piu_contatti"?" · corrisponde a più contatti":"";
+  return '<li><strong>'+safe(c.full_name||"(senza nome)")+'</strong>'+(phones?' · '+safe(phones):"")+(c.emails.length?' · '+safe(c.emails.join(", ")):"")+safe(match)+safe(extra)+safe(reason)+'</li>';
  };
  box.innerHTML=order.filter(cat=>plan.summary[cat]).map(cat=>{
   const items=plan.items.filter(item=>item.category===cat);
@@ -4173,11 +4228,19 @@ if("contacts" in navigator&&"select" in (navigator.contacts||{})){
 }
 $("nmreContactImportConfirm")?.addEventListener("click",nmreApplyContactImport);
 
+/** Ricerca per numero: confronto normalizzato con tutti i numeri del contatto (anche secondari). */
+function nmreContactMatchesPhoneQuery(contact,query){
+ const digits=String(query||"").replace(/\D/g,"");
+ if(digits.length<6||/[a-z]/i.test(String(query||"").replace(/[\s+().\/-]/g,"").replace(/\d/g,"")))return false;
+ const key=digits.startsWith("0039")?digits.slice(4):digits.startsWith("39")&&digits.length>=11?digits.slice(2):digits;
+ return nmreContactPhoneKeysAll(contact).some(k=>k.includes(key));
+}
 function nmreCrmRenderContacts(){
  const q=$("nmreCrmContactSearch").value.toLocaleLowerCase("it"),f=$("nmreCrmContactFilter").value;
  const rows=nmreCrmContacts.filter(x=>{
   const properties=nmreCrmPropertiesForContact(x.id);
-  return (!f||x.contact_type===f)&&(!q||[x.full_name,x.phone,x.email,x.municipality,x.address,x.notes,...properties.flatMap(p=>[p.title,p.municipality,p.address])].some(v=>String(v||"").toLocaleLowerCase("it").includes(q)));
+  return (!f||x.contact_type===f)&&(!q||[x.full_name,x.phone,x.email,x.municipality,x.address,x.notes,...properties.flatMap(p=>[p.title,p.municipality,p.address])].some(v=>String(v||"").toLocaleLowerCase("it").includes(q))
+   ||nmreContactMatchesPhoneQuery(x,q));
  });
  const roleLabels={proprietario:"Proprietario",comproprietario:"Comproprietario",referente:"Referente",familiare:"Familiare",altro:"Altro"};
  $("nmreCrmContactList").innerHTML=rows.length?rows.map(x=>{

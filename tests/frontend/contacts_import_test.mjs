@@ -21,14 +21,14 @@ function grab(name) {
 const constLine = name => { const m = html.match(new RegExp("const " + name + "=[^;]+;")); if (!m) throw new Error("Costante non trovata: " + name); return m[0]; };
 const names = ["nmreIdentityKey", "nmrePhoneKeys", "nmrePhoneKey", "nmreExtractListingPhones", "nmreMatchContactForListing", "nmreDecodeQuotedPrintable",
   "nmreVcardUnescape", "nmreParseVcard", "nmreContactFromPicker", "nmreNotesExtraValues", "nmreContactPhoneKeysAll", "nmreContactEmailsAll",
-  "nmreImportedNotes", "nmrePlanContactImport", "nmreFindContactDuplicates", "nmreContactImportDateLabel", "nmreApplyContactImport"];
+  "nmreImportedNotes", "nmrePlanContactImport", "nmreContactPhoneEntries", "nmreContactMatchesPhoneQuery", "nmreFindContactDuplicates", "nmreContactImportDateLabel", "nmreApplyContactImport"];
 const nodes = {};
 const el = id => nodes[id] ??= { textContent: "", innerHTML: "", hidden: true, disabled: false };
 const api = new Function("env",
   "let currentUser=null,supabase=null,nmreCrmContacts=[],nmreContactImportSource=null;const $=id=>env.el(id);" +
   "async function loadCrmWorkspace(){nmreCrmContacts=env.reload();}" +
-  constLine("NMRE_EXTRA_PHONES_LABEL") + constLine("NMRE_EXTRA_EMAILS_LABEL") + names.map(grab).join("\n") +
-  `;return {nmreParseVcard,nmreContactFromPicker,nmrePlanContactImport,nmreFindContactDuplicates,nmreContactPhoneKeysAll,nmreContactEmailsAll,
+  constLine("NMRE_EXTRA_PHONES_LABEL") + constLine("NMRE_EXTRA_EMAILS_LABEL") + constLine("NMRE_NOTES_MAX") + names.map(grab).join("\n") +
+  `;return {nmreContactPhoneEntries,nmreContactMatchesPhoneQuery,nmreParseVcard,nmreContactFromPicker,nmrePlanContactImport,nmreFindContactDuplicates,nmreContactPhoneKeysAll,nmreContactEmailsAll,
     match(item,contacts){nmreCrmContacts=contacts;return nmreMatchContactForListing(item);},
     async apply(input){currentUser=input.user;supabase=input.supabase;nmreContactImportSource=input.source;await nmreApplyContactImport();}};`
 )({ el, reload: () => env.contacts });
@@ -111,6 +111,45 @@ eq(fresh.items[0].insert, { full_name: "Niccolò Verdi", contact_type: "altro", 
 const again = api.nmrePlanContactImport(iphone, [{ ...existing[0], email: "mario.rossi@example.com", notes: "Altri numeri: 071 7123456 (casa)" }], "27/11/26");
 eq(again.items[0].category, "gia_presente", "importazione ripetuta: nessuna modifica se non c'è nulla di nuovo");
 
+// ---------- Schede del file con un recapito in comune ----------
+const card = (name, ...tels) => ["BEGIN:VCARD", "VERSION:3.0", ...(name ? ["FN:" + name] : []), ...tels.map(n => "TEL;type=CELL:" + n), "END:VCARD"].join("\n");
+const shared = api.nmrePlanContactImport(api.nmreParseVcard([card("Marco Bianchi", "+39 333 444 5555"), card("Elena Bianchi", "333 4445555"), card("Pietro Gialli", "+39 348 000 1111")].join("\n")), [], "26/11/26");
+eq(shared.items.map(item => item.category), ["da_verificare", "da_verificare", "nuovo"], "stesso numero, nomi diversi nel file: entrambe da verificare");
+eq(shared.items.slice(0, 2).every(item => !item.insert && !item.update && item.reason === "numero_condiviso_nel_file"), true, "nessuna delle due viene creata");
+eq(shared.items[0].sharedWith, ["Elena Bianchi"], "l'anteprima indica con chi è condiviso il numero");
+const chain = api.nmrePlanContactImport(api.nmreParseVcard([card("Anna Rosa", "+39 333 100 0001"), card("Anna Rosa", "+39 333 100 0001", "+39 333 100 0002"), card("Carlo Neri", "+39 333 100 0002")].join("\n")), [], "26/11/26");
+eq(chain.items.map(item => item.category), ["da_verificare", "da_verificare", "da_verificare"], "catena di recapiti con nomi diversi: tutte da verificare");
+const sameName = api.nmrePlanContactImport(api.nmreParseVcard([
+  ["BEGIN:VCARD", "VERSION:3.0", "FN:Sara Blu", "TEL;type=CELL:+39 333 200 0001", "EMAIL:sara@example.com", "END:VCARD"].join("\n"),
+  ["BEGIN:VCARD", "VERSION:3.0", "FN:Sara  Blu", "TEL;type=CELL:0039 333 2000001", "TEL;type=HOME:071 300 0001", "EMAIL:sara.blu@example.com", "NOTE:Proprietaria villa", "END:VCARD"].join("\n")
+].join("\n")), [], "26/11/26");
+eq(sameName.items.map(item => item.category), ["nuovo", "doppione_nel_file"], "stesso nome e numero in comune: una sola scheda");
+eq([sameName.items[0].insert.phone, /071 300 0001/.test(sameName.items[0].insert.notes), /sara\.blu@example\.com/.test(sameName.items[0].insert.notes), /Proprietaria villa/.test(sameName.items[0].insert.notes)],
+  ["+39 333 200 0001", true, true, true], "tutti i numeri, le email e le note conservati");
+
+// ---------- Note, numeri principali, struttura per nmre_contact_phones ----------
+const longNotes = "x".repeat(3990);
+const tooLong = api.nmrePlanContactImport(iphone, [{ ...existing[0], notes: longNotes }], "26/11/26");
+eq([tooLong.items[0].category, tooLong.items[0].reason, !!tooLong.items[0].update], ["da_verificare", "note_troppo_lunghe", false], "note oltre il limite: nessun troncamento, da verificare");
+const fits = api.nmrePlanContactImport(iphone, [{ ...existing[0], notes: "y".repeat(3000) }], "26/11/26");
+eq(fits.items[0].update.notes.startsWith("y".repeat(3000)) && /Altri numeri: 071 7123456/.test(fits.items[0].update.notes), true, "note esistenti integre, nuovi recapiti in coda");
+const primary = api.nmrePlanContactImport(iphone, [{ ...existing[0], phone: "+39 335 999 0000" }], "26/11/26");
+eq(primary.items[0].category, "nuovo", "numero principale diverso e nessun recapito in comune: nessun collegamento forzato");
+const keepPrimary = api.nmrePlanContactImport(iphone, [{ ...existing[0], phone: "071 7123456" }], "26/11/26");
+eq(["phone" in keepPrimary.items[0].update, /\+39 333 123 4567/.test(keepPrimary.items[0].update.notes)], [false, true], "numero principale esistente mai sostituito, il nuovo va tra gli altri numeri");
+eq(api.nmreContactPhoneEntries({ phone: "+39 333 123 4567", notes: "Nota\nAltri numeri: 071 7123456 (casa); 0039 333 1234567 (cellulare); +39 340 111 2233 (lavoro)" }),
+  [{ numero: "+39 333 123 4567", chiave: "3331234567", etichetta: "principale", principale: true, origine: "phone" },
+   { numero: "071 7123456", chiave: "0717123456", etichetta: "casa", principale: false, origine: "note" },
+   { numero: "+39 340 111 2233", chiave: "3401112233", etichetta: "lavoro", principale: false, origine: "note" }],
+  "struttura per nmre_contact_phones: tutti i numeri, senza ripetizioni, con origine");
+
+// ---------- Ricerca sui numeri secondari ----------
+eq(api.nmreContactMatchesPhoneQuery(existing[3], "3477654321"), true, "ricerca senza spazi trova un numero secondario scritto con gli spazi");
+eq(api.nmreContactMatchesPhoneQuery(existing[3], "+39 347 765 4321"), true, "ricerca con +39 trova il numero secondario");
+eq(api.nmreContactMatchesPhoneQuery(existing[3], "7654321"), true, "ricerca su una parte del numero");
+eq(api.nmreContactMatchesPhoneQuery(existing[3], "Giulia"), false, "testo non numerico ignorato dal confronto telefonico");
+eq(api.nmreContactMatchesPhoneQuery(existing[0], "12345"), false, "meno di 6 cifre: nessun confronto");
+
 // ---------- Possibili duplicati ----------
 const groups = api.nmreFindContactDuplicates([...existing, { id: "c5", full_name: "Giulia Neri", phone: "0039 347 7654321", email: null, notes: null }]);
 const verdi = groups.find(g => g.contacts.some(c => c.id === "c2"));
@@ -153,6 +192,9 @@ eq(log.filter(op => op === "insert:nmre_contacts").length, 1, "una sola scheda n
 eq(db.find(c => c.id === "c1").email, "mario.rossi@example.com", "contatto esistente aggiornato in modo additivo");
 eq(db.find(c => c.id === "c4").notes, "Altri numeri: 347 765 4321 (casa)", "contatto da verificare non modificato");
 eq(/creati/.test(nodes.nmreContactImportMsg.textContent), true, "messaggio con l'esito");
+const logAgain = [];
+await api.apply({ user: { id: "u1" }, supabase: fakeSupabase(db, logAgain), source: [...iphone, ...v4, api.nmreParseVcard(ANDROID)[2]] });
+eq(logAgain.filter(op => op.startsWith("insert")).length + logAgain.filter(op => op.startsWith("update")).length, 0, "importazione ripetuta: nessun nuovo contatto e nessuna modifica");
 const stale = structuredClone(existing);
 env.contacts = stale.map(c => c.id === "c1" ? { ...c, updated_at: "2026-11-02T00:00:00Z" } : c);
 const staleLog = [];
