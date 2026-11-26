@@ -66,6 +66,9 @@ jobs:
       - name: Test unified search across opportunities and archive
         run: node tests/frontend/listing_search_test.mjs
 
+      - name: Test Subito browser import preview and safe candidate mapping
+        run: node tests/frontend/subito_browser_import_test.mjs
+
       - name: Check service worker build version consistency
         run: node tests/frontend/service_worker_version_test.mjs
 
