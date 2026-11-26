@@ -1,9 +1,20 @@
 import {
-  municipality,price,listingPrice,listingUrl,propertyEmail,listingTitle,propertyType,
+  municipality,price,listingPrice,listingUrl,listingTitle,propertyType,
   surface,rooms,bedrooms,bathrooms,resolveListingUrl,sellerClassificationDetails,canonicalListingKey,
-  priceReduction,extractAdditionalPropertyDetails
+  priceReduction,extractAdditionalPropertyDetails,specificPortalListingUrl
 } from "./_shared/parser.ts";
 import { collectHistoryMessageIds } from "./_shared/history.ts";
+import { isRepairEligible, keepAgencyCandidates, keptForReviewPatch } from "./_shared/retention.ts";
+import { guardedCandidateUpdate } from "./_shared/guarded.ts";
+import { newSaveCounters, saveCandidateRow } from "./_shared/save_candidate.ts";
+import type { CandidateRow } from "./_shared/save_candidate.ts";
+import { classifyMailbox, emailFromGmailMessage, repairEmailId, sellerForEmail } from "./_shared/mailbox.ts";
+import { subitoRowsForEmails, supabaseSubitoDeps } from "./_shared/subito_acquisition.ts";
+import { assertAllRowsSaved, processRowsIsolated } from "./_shared/row_isolation.ts";
+import type { RowFailure } from "./_shared/row_isolation.ts";
+import {
+  captureDubiousAlertsEnabled, dubiousAlertEvidence, promotedSellerClassification
+} from "./_shared/dubious.ts";
 import { withSupabase } from "npm:@supabase/server@^1";
 
 const ACCOUNT = "nicholasmagirealestate@gmail.com";
@@ -221,34 +232,17 @@ async function listHistoryMessageIds(
   return { ids: [...ids], historyId: latestHistoryId, historyRecords };
 }
 
-function decode(value: string): string {
-  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
-  const binary = atob(padded);
-  return new TextDecoder("utf-8", { fatal: false }).decode(
-    Uint8Array.from(binary, character => character.charCodeAt(0))
-  );
-}
-
-function bodyParts(part: any): string[] {
-  const output: string[] = [];
-  if (part?.body?.data && part.mimeType === "text/plain") {
-    output.push(decode(part.body.data));
-  } else if (part?.body?.data && part.mimeType === "text/html") {
-    const html = decode(part.body.data)
-      .replace(/<\s*(script|style)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, " ")
-      .replace(/<\s*a\b[^>]*href=["']([^"']+)["'][^>]*>/gi, " $1 ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/gi, " ")
-      .replace(/&amp;/gi, "&")
-      .replace(/&quot;/gi, "\"")
-      .replace(/&#39;/gi, "'")
-      .replace(/&lt;/gi, "<")
-      .replace(/&gt;/gi, ">");
-    output.push(html);
-  }
-  for (const child of part?.parts || []) output.push(...bodyParts(child));
-  return output;
+// Pagina pubblica dei risultati Subito: normale richiesta GET, nessun tentativo di
+// aggirare CAPTCHA, verifiche anti-robot o autenticazioni (gestiti come errore).
+async function fetchSubitoPage(url: string): Promise<{ status: number; finalUrl: string; html: string }> {
+  const response = await fetch(url, {
+    method: "GET",
+    redirect: "follow",
+    headers: { Accept: "text/html,application/xhtml+xml", "Accept-Language": "it-IT,it;q=0.9" },
+    signal: AbortSignal.timeout(12000)
+  });
+  const html = (await response.text()).slice(0, 3_000_000);
+  return { status: response.status, finalUrl: response.url || url, html };
 }
 
 async function readEmail(messageId: string, token: string): Promise<any | null> {
@@ -263,20 +257,7 @@ async function readEmail(messageId: string, token: string): Promise<any | null> 
   if (response.status === 404) return null;
   if (!response.ok) throw new Error("Lettura del messaggio Gmail non riuscita (" + response.status + ")");
 
-  const email = await response.json();
-  const headers = email.payload?.headers || [];
-  const get = (name: string) =>
-    headers.find((header: any) => header.name?.toLowerCase() === name.toLowerCase())?.value || "";
-
-  return {
-    id: email.id,
-    labels: Array.isArray(email.labelIds) ? email.labelIds : [],
-    from: get("From"),
-    subject: get("Subject"),
-    date: get("Date"),
-    snippet: (email.snippet || "").slice(0, 500),
-    bodyText: bodyParts(email.payload).join("\n").slice(0, 30000)
-  };
+  return emailFromGmailMessage(await response.json());
 }
 
 
@@ -489,24 +470,42 @@ export default {
         .eq("owner_id", owner)
         .eq("stato", "da_verificare")
         .not("source_email_id", "is", null)
+        // I più vecchi per primi: se gli idonei superano il limite, nessuno resta
+        // escluso a tempo indeterminato.
+        .order("updated_at", { ascending: true })
         .limit(200);
 
       if (repairQueryError) throw new Error("Lettura dei link da correggere non riuscita");
+      // Ogni email legacy viene rielaborata una sola volta: dopo la lettura il
+      // candidato viene marcato con le versioni attuali (anche quando è una copia
+      // storica o non è più riconosciuto come avviso), così non torna a ogni ciclo.
+      // Le classificazioni manuali non vengono rielaborate.
       const repairIds = (candidatesToRepair || [])
-        .filter((candidate: any) => {
-          if (typeof candidate.source_email_id !== "string") return false;
-          // Non rielaborare classificazioni impostate manualmente dall'utente.
-          if (candidate.seller_manual_override === true) return false;
-          // Ogni email legacy viene rielaborata una sola volta per assegnare
-          // un'identità stabile alla scheda, anche se non contiene un link diretto.
-          if (Number(candidate.deduplication_version || 0) < 1) return true;
-          if (Number(candidate.seller_classification_version || 0) < 3) return true;
-          if (Number(candidate.data_extraction_version || 0) < 6) return true;
-          return false;
-        })
-        .map((candidate: any) => candidate.source_email_id as string);
+        .filter((candidate: any) => isRepairEligible(candidate))
+        // Annunci di una ricerca salvata Subito: si rilegge l'email riepilogativa.
+        .map((candidate: any) => repairEmailId(candidate.source_email_id));
 
-      messageIds = [...new Set([...messageIds, ...repairIds])];
+      // Avvisi dubbi (Fase 2): attivi solo con NMRE_CAPTURE_DUBIOUS_ALERTS=true e
+      // DOPO l'applicazione della migrazione della tabella nmre_gmail_avvisi_dubbi.
+      // Gli avvisi che il titolare ha chiesto di promuovere vengono riletti e
+      // trattati come avvisi accettati, senza cambiare le regole del filtro.
+      const captureDubious = captureDubiousAlertsEnabled(Deno.env.get("NMRE_CAPTURE_DUBIOUS_ALERTS"));
+      const forcedIds = new Set<string>();
+      if (captureDubious) {
+        const { data: toPromote, error: promoteQueryError } = await ctx.supabaseAdmin
+          .from("nmre_gmail_avvisi_dubbi")
+          .select("gmail_message_id")
+          .eq("owner_id", owner)
+          .eq("stato", "da_promuovere")
+          .order("updated_at", { ascending: true })
+          .limit(50);
+        if (promoteQueryError) throw new Error("Lettura degli avvisi dubbi da promuovere non riuscita");
+        for (const item of toPromote || []) {
+          if (typeof item.gmail_message_id === "string" && item.gmail_message_id) forcedIds.add(item.gmail_message_id);
+        }
+      }
+
+      messageIds = [...new Set([...messageIds, ...repairIds, ...forcedIds])];
 
       const emails: Array<any | null> = [];
       for (let index = 0; index < messageIds.length; index += 5) {
@@ -521,7 +520,65 @@ export default {
         (email): email is any =>
           !!email && !email.labels.includes("SPAM") && !email.labels.includes("TRASH")
       );
-      const propertyEmails = mailboxEmails.filter(email => propertyEmail(email));
+      // Regola del filtro avvisi (diagnostica: solo conteggi) ed email Subito di ricerca
+      // salvata, riconosciute a parte e accettate (_shared/mailbox.ts).
+      const { subitoDigestById, filterRuleById, propertyFilterRules } = classifyMailbox(mailboxEmails);
+      const isForced = (email: any) => forcedIds.has(String(email.id));
+      const propertyEmails = mailboxEmails.filter(email =>
+        filterRuleById.get(String(email.id)) === "accettata" || isForced(email)
+      );
+
+      // Rete di sicurezza: le email escluse dal filtro con una prova oggettiva di
+      // riferirsi a un annuncio vengono conservate come avvisi dubbi (riferimento
+      // all'email, regola, portale, link e oggetto; mai il testo del messaggio).
+      let dubiousAlertsSaved = 0;
+      if (captureDubious) {
+        const dubiousRows = [];
+        // Le email rilette per la rielaborazione hanno già un candidato: non sono
+        // avvisi dubbi nuovi (vengono gestite come "conservato_non_riconosciuto").
+        const repairIdSet = new Set(repairIds);
+        for (const email of mailboxEmails) {
+          if (isForced(email) || repairIdSet.has(String(email.id))) continue;
+          const rule = filterRuleById.get(String(email.id)) || "accettata";
+          const fullText = [email.subject, email.snippet, email.bodyText].filter(Boolean).join(" ");
+          const evidence = dubiousAlertEvidence(rule, email, specificPortalListingUrl(fullText), PORTALS);
+          if (!evidence) continue;
+          dubiousRows.push({
+            owner_id: owner,
+            gmail_message_id: String(email.id),
+            rfc822_message_id: email.messageIdHeader || null,
+            ricevuto_il: email.date && !Number.isNaN(Date.parse(email.date)) ? new Date(email.date).toISOString() : null,
+            regola_esclusione: rule,
+            prova: evidence.reason,
+            portale: evidence.portal,
+            link_annuncio: evidence.listingUrl,
+            oggetto: String(email.subject || "").slice(0, 300) || null
+          });
+        }
+        // Un'email che ha già un candidato (per esempio riletta per un cambio di
+        // etichetta) non è un avviso dubbio: resta gestita dal suo candidato.
+        if (dubiousRows.length) {
+          const { data: existingForDubious, error: existingForDubiousError } = await ctx.supabaseAdmin
+            .from("annunci_candidati")
+            .select("dedup_key")
+            .eq("owner_id", owner)
+            .in("dedup_key", dubiousRows.map(row => "gmail:" + row.gmail_message_id));
+          if (existingForDubiousError) throw new Error("Verifica dei candidati esistenti per gli avvisi dubbi non riuscita");
+          const existingKeys = new Set((existingForDubious || []).map((row: any) => String(row.dedup_key)));
+          for (let index = dubiousRows.length - 1; index >= 0; index--) {
+            if (existingKeys.has("gmail:" + dubiousRows[index].gmail_message_id)) dubiousRows.splice(index, 1);
+          }
+        }
+        if (dubiousRows.length) {
+          const { data: savedDubious, error: dubiousError } = await ctx.supabaseAdmin
+            .from("nmre_gmail_avvisi_dubbi")
+            .upsert(dubiousRows, { onConflict: "owner_id,gmail_message_id", ignoreDuplicates: true })
+            .select("id");
+          // Errore bloccante: il cursore non avanza e gli avvisi vengono ritentati.
+          if (dubiousError) throw new Error("Salvataggio degli avvisi dubbi non riuscito");
+          dubiousAlertsSaved = savedDubious?.length || 0;
+        }
+      }
 
       const { data: sellerRegistryRows, error: sellerRegistryError } = await ctx.supabaseAdmin
         .from("seller_identity_registry")
@@ -533,49 +590,59 @@ export default {
 
       const classifiedAll = propertyEmails.map(email => {
         const value = [email.subject, email.snippet, email.bodyText].filter(Boolean).join(" ");
-        return { email, text: value, seller: classifySellerWithRegistry(value, sellerRegistry) };
+        // Il riepilogo di una ricerca salvata non è un annuncio: mai "Privato".
+        const seller = sellerForEmail(String(email.id), subitoDigestById, () => classifySellerWithRegistry(value, sellerRegistry));
+        // Un avviso promosso dal titolare resta sempre visibile in coda.
+        return { email, text: value, seller: isForced(email) ? promotedSellerClassification(seller) : seller };
       });
-      const classified = classifiedAll.filter(item => item.seller.classification !== "Agenzia");
+      // Le email classificate come agenzia vengono conservate come candidati
+      // "Agenzia" (fuori dalla coda principale ma recuperabili dall'interfaccia).
+      // NMRE_KEEP_AGENCY_CANDIDATES=false ripristina il comportamento precedente.
+      const keepAgency = keepAgencyCandidates(Deno.env.get("NMRE_KEEP_AGENCY_CANDIDATES"));
+      const classified = keepAgency
+        ? classifiedAll
+        : classifiedAll.filter(item => item.seller.classification !== "Agenzia");
       const retainedIds = new Set(classified.map(item => String(item.email.id)));
-      const discardedKeys = mailboxEmails
-        .filter(email => !retainedIds.has(String(email.id)))
-        .map(email => "gmail:" + String(email.id));
+      const notRetainedEmails = mailboxEmails.filter(email => !retainedIds.has(String(email.id)));
+      const notRetainedKeys = notRetainedEmails.map(email => "gmail:" + String(email.id));
 
-      let discardedExisting = 0;
-      if (discardedKeys.length) {
-        const { data: discarded, error: discardError } = await ctx.supabaseAdmin
+      // Nessuno scarto automatico: un candidato già salvato la cui email non viene
+      // più riconosciuta come avviso resta nel suo stato. Si registra soltanto la
+      // regola che lo ha escluso e lo si marca come elaborato, per non rileggerlo
+      // a ogni sincronizzazione.
+      const discardedExisting = 0;
+      let keptForReview = 0;
+      // Errori di singole email: raccolti, non bloccano le altre; il cursore non avanza.
+      const rowFailures: RowFailure[] = [];
+      for (let index = 0; index < notRetainedKeys.length; index += 200) {
+        const { data: notRetainedRows, error: notRetainedError } = await ctx.supabaseAdmin
           .from("annunci_candidati")
-          .update({
-            stato: "scartato",
-            notification_sender: null,
-            email_subject: null,
-            deduplication_version: 1,
-            updated_at: new Date().toISOString()
-          })
+          .select("id,dedup_key,source_email_id,dati_estratti,deduplication_version,data_extraction_version,seller_classification_version")
           .eq("owner_id", owner)
-          .in("stato", ["da_verificare","scartato"])
-          .eq("seller_manual_override", false)
-          .in("dedup_key", discardedKeys)
-          .select("id");
+          .in("dedup_key", notRetainedKeys.slice(index, index + 200));
+        if (notRetainedError) throw new Error("Lettura delle notifiche non riconosciute non riuscita");
 
-        if (discardError) throw new Error("Pulizia delle notifiche non pertinenti non riuscita");
-        discardedExisting = discarded?.length || 0;
-
-        // Una verifica manuale prevale anche se, con la nuova classificazione,
-        // l'email originale non è più considerata un avviso immobiliare.
-        const { error: manualRepairError } = await ctx.supabaseAdmin
-          .from("annunci_candidati")
-          .update({
-            deduplication_version: 1,
-            updated_at: new Date().toISOString()
-          })
-          .eq("owner_id", owner)
-          .eq("seller_manual_override", true)
-          .in("dedup_key", discardedKeys);
-        if (manualRepairError) throw new Error("Aggiornamento dello stato di deduplicazione manuale non riuscito");
+        for (const candidate of notRetainedRows || []) {
+          const filterRule = filterRuleById.get(String(candidate.source_email_id || ""));
+          // Un'email che ha superato il filtro ma non è stata trattenuta è stata
+          // classificata come agenzia con NMRE_KEEP_AGENCY_CANDIDATES=false.
+          const rule = !filterRule || filterRule === "accettata" ? "classificata_agenzia" : filterRule;
+          // Aggiornamento protetto: la voce di storico si aggiunge al valore appena riletto.
+          try {
+            const kept = await guardedCandidateUpdate(ctx.supabaseAdmin, owner, String(candidate.id),
+              "id,source_email_id,dati_estratti,deduplication_version,data_extraction_version,seller_classification_version,updated_at",
+              (current: any) => keptForReviewPatch(current, rule, new Date().toISOString(), String(candidate.source_email_id || "") || null));
+            if (kept.status === "error") throw new Error("Aggiornamento delle notifiche non riconosciute non riuscito");
+            if (kept.status === "updated") keptForReview++;
+          } catch (error) {
+            rowFailures.push({ sourceEmailId: String(candidate.source_email_id || candidate.id), reason: error instanceof Error ? error.message.slice(0, 160) : "errore sconosciuto" });
+          }
+        }
       }
 
-      const rows = await Promise.all(classified.map(async ({ email, text, seller }) => {
+      const regularClassified = classified.filter(item => !subitoDigestById.has(String(item.email.id)));
+      const subitoClassified = classified.filter(item => subitoDigestById.has(String(item.email.id)));
+      const regularRows = await Promise.all(regularClassified.map(async ({ email, text, seller }) => {
         const originalUrl = listingUrl(text);
         const url = await resolveListingUrl(text);
         const title = listingTitle(email);
@@ -649,223 +716,56 @@ export default {
         };
       }));
 
-      let inserted = 0;
-      let updated = 0;
-      let notificationEventsLinked = 0;
-      let autoArchived = 0;
-      for (const row of rows) {
-        const { data: currentCandidate, error: currentError } = await ctx.supabaseAdmin
-          .from("annunci_candidati")
-          .select("id,seller_manual_override,stato,listing_key")
-          .eq("owner_id", owner)
-          .eq("dedup_key", row.dedup_key)
-          .maybeSingle();
-        if (currentError) throw new Error("Verifica della notifica Gmail già registrata non riuscita");
+      // Ricerche salvate Subito: un annuncio per riga, con il proprio URL e ID. In caso di
+      // incertezza o errore resta la notifica, da verificare (e ritentata se possibile).
+      const subitoCycle = await subitoRowsForEmails(
+        subitoClassified.map(({ email }) => ({ email, digest: subitoDigestById.get(String(email.id))! })),
+        supabaseSubitoDeps(ctx.supabaseAdmin, owner, fetchSubitoPage),
+        { owner, classifySeller: (text: string) => classifySellerWithRegistry(text, sellerRegistry) }
+      );
+      rowFailures.push(...subitoCycle.failures);
+      const subitoRows = subitoCycle.rows;
+      const subitoOutcomes = subitoCycle.outcomes;
+      const rows: any[] = [...regularRows, ...subitoRows];
 
-        let canonicalCandidate: any = null;
-        if (row.listing_key) {
-          const { data, error } = await ctx.supabaseAdmin
-            .from("annunci_candidati")
-            .select("id,seller_manual_override,stato,listing_key")
-            .eq("owner_id", owner)
-            .eq("listing_key", row.listing_key)
-            .maybeSingle();
-          if (error) throw new Error("Ricerca dell'immobile già acquisito non riuscita");
-          canonicalCandidate = data;
-        }
+      const counters = newSaveCounters();
+      const promotedCandidateByEmail = new Map<string, string>();
+      rowFailures.push(...await processRowsIsolated(rows, row => String(row.notification_source_id || row.source_email_id), async (row) => {
+        const candidateId = await saveCandidateRow(ctx.supabaseAdmin, owner, row as unknown as CandidateRow, counters);
+        if (forcedIds.has(row.source_email_id)) promotedCandidateByEmail.set(row.source_email_id, candidateId);
+      }));
+      const { inserted, updated, notificationEventsLinked, autoArchived, reopenedOnPriceDrop, notificationsAfterDiscard } = counters;
+      // Nessun avanzamento del cursore se anche una sola email non è stata salvata.
+      assertAllRowsSaved(rowFailures);
 
-        const existingCandidate = canonicalCandidate || currentCandidate;
-        let candidateId: string | null = null;
-
-        if (existingCandidate) {
-          candidateId = String(existingCandidate.id);
-          const candidateUpdate: Record<string, unknown> = {
-            deduplication_version: 1,
+      // Esito delle promozioni richieste dal titolare.
+      let promotedAlerts = 0;
+      for (const gmailId of forcedIds) {
+        const candidateId = promotedCandidateByEmail.get(gmailId);
+        const update = candidateId
+          ? { stato: "promosso", candidato_id: candidateId, updated_at: new Date().toISOString() }
+          : {
+            stato: "da_verificare",
+            decisione_motivo: "Promozione non completata: email non più disponibile in Gmail, in spam o nel cestino",
             updated_at: new Date().toISOString()
           };
-
-          // I record già scartati o già trasferiti nell'archivio non vengono
-          // riaperti. La notifica viene comunque conservata nello storico.
-          if (existingCandidate.stato === "da_verificare") {
-            Object.assign(candidateUpdate, {
-              titolo: row.titolo,
-              comune: row.comune,
-              prezzo: row.prezzo,
-              notification_sender: row.notification_sender,
-              email_subject: row.email_subject,
-              portale: row.portale,
-              url: row.url,
-              url_originale: row.url_originale,
-              data_pubblicazione: row.data_pubblicazione,
-              tipologia_immobile: row.tipologia_immobile,
-              superficie_mq: row.superficie_mq,
-              locali: row.locali,
-              camere: row.camere,
-              bagni: row.bagni,
-              dati_fonte: row.dati_fonte,
-              dati_estratti: row.dati_estratti,
-              data_extraction_version: row.data_extraction_version
-            });
-            if (existingCandidate.seller_manual_override !== true) {
-              Object.assign(candidateUpdate, {
-                tipo_venditore: row.tipo_venditore,
-                seller_confidence: row.seller_confidence,
-                seller_evidence: row.seller_evidence,
-                seller_classification_version: row.seller_classification_version
-              });
-            }
-          }
-
-          if (row.listing_key && !existingCandidate.listing_key) {
-            candidateUpdate.listing_key = row.listing_key;
-          }
-
-          const { data: updatedRows, error: updateError } = await ctx.supabaseAdmin
-            .from("annunci_candidati")
-            .update(candidateUpdate)
-            .eq("owner_id", owner)
-            .eq("id", candidateId)
-            .select("id");
-          if (updateError) {
-            // Un altro ciclo potrebbe aver associato la stessa scheda nello stesso istante.
-            if (updateError.code !== "23505") {
-              throw new Error("Aggiornamento dell'immobile candidato non riuscito");
-            }
-            if (row.listing_key) {
-              const { data: raced, error: raceError } = await ctx.supabaseAdmin
-                .from("annunci_candidati")
-                .select("id")
-                .eq("owner_id", owner)
-                .eq("listing_key", row.listing_key)
-                .maybeSingle();
-              if (raceError || !raced) throw new Error("Conflitto durante la deduplicazione dell'immobile");
-              candidateId = String(raced.id);
-            }
-          } else {
-            updated += updatedRows?.length || 0;
-          }
-
-          // La riga email legacy resta intatta, ma non viene rielaborata ad ogni cron.
-          if (currentCandidate && String(currentCandidate.id) !== candidateId) {
-            const { error: markError } = await ctx.supabaseAdmin
-              .from("annunci_candidati")
-              .update({ deduplication_version: 1 })
-              .eq("owner_id", owner)
-              .eq("id", currentCandidate.id);
-            if (markError) throw new Error("Aggiornamento dello stato di deduplicazione non riuscito");
-          }
-        } else {
-          // explicit_price_reduction is an internal parsing value, not a database column.
-          // Keep it on row for price-history processing, but omit it from the candidate INSERT.
-          const { explicit_price_reduction: _explicitPriceReduction, ...candidateInsert } = row;
-          const { data: saved, error: insertError } = await ctx.supabaseAdmin
-            .from("annunci_candidati")
-            .insert(candidateInsert)
-            .select("id")
-            .maybeSingle();
-
-          if (insertError) {
-            if (insertError.code !== "23505") {
-              throw new Error("Salvataggio dell'immobile candidato non riuscito");
-            }
-            let raced: any = null;
-            if (row.listing_key) {
-              const { data, error } = await ctx.supabaseAdmin
-                .from("annunci_candidati")
-                .select("id")
-                .eq("owner_id", owner)
-                .eq("listing_key", row.listing_key)
-                .maybeSingle();
-              if (error) throw new Error("Verifica del duplicato concorrente non riuscita");
-              raced = data;
-            }
-            if (!raced) {
-              const { data, error } = await ctx.supabaseAdmin
-                .from("annunci_candidati")
-                .select("id")
-                .eq("owner_id", owner)
-                .eq("dedup_key", row.dedup_key)
-                .maybeSingle();
-              if (error || !data) throw new Error("Impossibile recuperare l'immobile salvato durante la deduplicazione");
-              raced = data;
-            }
-            candidateId = String(raced.id);
-            updated++;
-          } else {
-            if (!saved?.id) throw new Error("Il database non ha restituito l'identificativo del candidato salvato");
-            candidateId = String(saved.id);
-            inserted++;
-          }
-        }
-
-        if (!candidateId) throw new Error("Impossibile associare la notifica all'immobile");
-
-        // Il vecchio prezzo viene memorizzato solo se dichiarato dal portale
-        // oppure se una notifica precedente dello stesso annuncio prova un importo maggiore.
-        let previousPrice: number | null = row.explicit_price_reduction?.previousPrice ?? null;
-        if (previousPrice === null && Number(row.prezzo) > 0) {
-          const { data: priorSnapshot, error: priorSnapshotError } = await ctx.supabaseAdmin
-            .from("annunci_candidati_notifiche")
-            .select("listing_price")
-            .eq("owner_id", owner)
-            .eq("candidate_id", candidateId)
-            .neq("source_email_id", row.source_email_id)
-            .not("listing_price", "is", null)
-            .order("notified_at", { ascending: false })
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (priorSnapshotError) throw new Error("Lettura dello storico prezzi non riuscita");
-          const lastPrice = Number(priorSnapshot?.listing_price);
-          if (Number.isFinite(lastPrice) && lastPrice > Number(row.prezzo)) {
-            const historicalDropPercent = ((lastPrice - Number(row.prezzo)) / lastPrice) * 100;
-            // Le vecchie notifiche possono contenere prezzi estratti male:
-            // un calo superiore al 50% non viene attribuito senza conferma esplicita del portale.
-            if (historicalDropPercent > 0 && historicalDropPercent <= 50) previousPrice = lastPrice;
-          }
-        }
-
-        const currentPrice = row.explicit_price_reduction?.currentPrice
-          ?? (Number(row.prezzo) > 0 ? Number(row.prezzo) : null);
-        const hasPriceDrop = currentPrice !== null && previousPrice !== null && previousPrice > currentPrice;
-        const priceDropAmount = hasPriceDrop ? Number(previousPrice) - currentPrice : null;
-        const priceDropPercent = hasPriceDrop
-          ? Math.round((priceDropAmount! / previousPrice!) * 10000) / 100
-          : null;
-
-        const { error: notificationError } = await ctx.supabaseAdmin
-          .from("annunci_candidati_notifiche")
-          .upsert({
-            owner_id: owner,
-            candidate_id: candidateId,
-            source_email_id: row.source_email_id,
-            notification_sender: row.notification_sender,
-            email_subject: row.email_subject,
-            notified_at: row.data_pubblicazione,
-            listing_url: row.url || row.url_originale,
-            listing_price: currentPrice,
-            previous_price: hasPriceDrop ? previousPrice : null,
-            price_drop_amount: priceDropAmount,
-            price_drop_percent: priceDropPercent,
-            listing_surface_mq: row.superficie_mq,
-            listing_title: row.titolo,
-            listing_municipality: row.comune
-          }, { onConflict: "owner_id,source_email_id" });
-        if (notificationError) throw new Error("Salvataggio dello storico notifiche non riuscito");
-        notificationEventsLinked++;
-
-        // Archivia solo i privati con prova esplicita ad alta affidabilita o verifica manuale gia salvata.
-        if (row.tipo_venditore === "Privato") {
-          const { data: archiveResult, error: archiveError } = await ctx.supabaseAdmin
-            .rpc("nmre_auto_archive_private_candidate", { p_candidate_id: candidateId });
-          if (archiveError) throw new Error("Archiviazione automatica del privato non riuscita");
-          if (archiveResult?.archived === true) autoArchived++;
-        }
+        const { error: promoteError } = await ctx.supabaseAdmin
+          .from("nmre_gmail_avvisi_dubbi")
+          .update(update)
+          .eq("owner_id", owner)
+          .eq("gmail_message_id", gmailId)
+          .eq("stato", "da_promuovere");
+        if (promoteError) throw new Error("Aggiornamento degli avvisi promossi non riuscito");
+        if (candidateId) promotedAlerts++;
       }
 
       await saveSyncCursor(ctx.supabaseAdmin, nextHistoryId);
 
-      const excludedAgencies = propertyEmails.length - classified.length;
+      // Con NMRE_KEEP_AGENCY_CANDIDATES attivo le agenzie restano salvate: il
+      // contatore indica le notifiche tenute fuori dalla coda principale.
+      const excludedAgencies = keepAgency
+        ? rows.filter(row => row.tipo_venditore === "Agenzia").length
+        : propertyEmails.length - classified.length;
       const completedAt = new Date();
       const syncRun = {
         owner_id: owner,
@@ -894,6 +794,12 @@ export default {
       if (syncLogError) {
         console.error("Gmail sync monitor write failed:", syncLogError.message);
       }
+      // Riepilogo diagnostico nei log della funzione: solo conteggi e nomi di regola.
+      console.log("nmre-gmail-scheduled summary", JSON.stringify({
+        syncMode, propertyFilterRules, keptForReview, reopenedOnPriceDrop, notificationsAfterDiscard, subitoOutcomes,
+        agencyCandidatesKept: keepAgency, excludedAgencies, dubiousAlertsCaptured: captureDubious,
+        dubiousAlertsSaved, promotedAlerts
+      }));
 
       return Response.json({
         success: true,
@@ -913,6 +819,15 @@ export default {
         autoArchived,
         notificationEventsLinked,
         reprocessedExistingListingLinks: repairIds.length,
+        agencyCandidatesKept: keepAgency,
+        keptForReview,
+        reopenedOnPriceDrop,
+        notificationsAfterDiscard,
+        dubiousAlertsCaptured: captureDubious,
+        dubiousAlertsSaved,
+        promotedAlerts,
+        propertyFilterRules,
+        subitoSavedSearches: subitoOutcomes,
         duplicatesOrExisting: Math.max(0, rows.length - inserted - updated),
         missingMessages: emails.filter(email => !email).length
       });

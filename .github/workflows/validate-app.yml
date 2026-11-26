@@ -28,10 +28,44 @@ jobs:
           deno-version: v2.x
 
       - name: Check Gmail Edge Function TypeScript
-        run: deno check supabase/functions/nmre-gmail-scheduled/index.ts supabase/functions/nmre-gmail-push/index.ts supabase/functions/nmre-search-engine/index.ts
+        run: deno check supabase/functions/nmre-gmail-scheduled/index.ts supabase/functions/nmre-gmail-push/index.ts supabase/functions/nmre-search-engine/index.ts supabase/functions/nmre-insights-sync/index.ts
 
       - name: Test Gmail parser and incremental history adapter
-        run: deno test supabase/functions/nmre-gmail-scheduled/parser_test.ts supabase/functions/nmre-gmail-scheduled/history_test.ts
+        run: deno test supabase/functions/nmre-gmail-scheduled/parser_test.ts supabase/functions/nmre-gmail-scheduled/history_test.ts supabase/functions/nmre-gmail-scheduled/_shared/parser.test.ts
+
+      - name: Test opportunity retention rules, property filter diagnostics and dubious alerts
+        run: deno test supabase/functions/nmre-gmail-scheduled/retention_test.ts supabase/functions/nmre-gmail-scheduled/property_filter_test.ts supabase/functions/nmre-gmail-scheduled/dubious_test.ts
+
+      - name: Test sync protections (repeated re-reads, seen marker, concurrent manual edits)
+        run: deno test supabase/functions/nmre-gmail-scheduled/sync_protection_test.ts supabase/functions/nmre-gmail-scheduled/regressions_test.ts supabase/functions/nmre-gmail-scheduled/resilience_test.ts
+
+      - name: Test frontend and sync coherence, cursor and notification guarantees
+        run: deno test --allow-read=. supabase/functions/nmre-gmail-scheduled/frontend_coherence_test.ts supabase/functions/nmre-gmail-scheduled/cursor_guard_test.ts
+
+      - name: Test Subito saved-search emails (recognition, results page, new listings, dedup, errors, card links)
+        run: deno test --allow-read=. supabase/functions/nmre-gmail-scheduled/subito_test.ts supabase/functions/nmre-gmail-scheduled/subito_frontend_test.ts supabase/functions/nmre-gmail-scheduled/subito_real_test.ts
+
+      - name: Test recovery panel functions in index.html
+        run: node tests/frontend/recovery_test.mjs
+
+      - name: Test recovery panel loading (loadCandidateRecovery) with simulated failures
+        run: node tests/frontend/recovery_load_test.mjs
+
+      - name: Test guarded archive preparation (prepareCandidateForArchive)
+        run: node tests/frontend/archive_persist_test.mjs
+
+      - name: Check migration layout (phase 2 not applicable, production versions)
+        run: |
+          bash supabase/tests/check_migration_layout.sh
+          # Auto-verifica: con la Fase 2 rimessa in supabase/migrations il controllo deve fallire.
+          copy="$(mktemp -d)"
+          cp -r supabase "$copy/"
+          cp "$copy/supabase/migrations_pending/20261125201000_gmail_dubious_alerts.sql" "$copy/supabase/migrations/"
+          if NMRE_LAYOUT_ROOT="$copy" bash supabase/tests/check_migration_layout.sh > /dev/null 2>&1; then
+            echo "Il controllo non ha rilevato la Fase 2 in supabase/migrations" >&2
+            exit 1
+          fi
+          echo "Auto-verifica superata: la Fase 2 in supabase/migrations viene rilevata."
 
       - name: Test Immobiliare Insights API adapter
         run: deno test supabase/functions/nmre-insights-sync/provider_test.ts
@@ -93,3 +127,28 @@ jobs:
               raise SystemExit("Duplicate HTML ids: " + ", ".join(duplicates))
           print(f"Checked {len(parser.ids)} unique element ids.")
           PY
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test migrations and rollbacks on a disposable database
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: supabase/tests/run_migration_tests.sh

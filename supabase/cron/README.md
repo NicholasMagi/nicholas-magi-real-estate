@@ -14,7 +14,7 @@ La prima sincronizzazione e le sincronizzazioni complete di recupero cercano i m
 
 - I venditori esplicitamente indicati come privati vengono classificati `Privato`.
 - Gli annunci per cui non è chiaro il tipo di venditore restano `Da verificare` e richiedono approvazione manuale.
-- Le notifiche chiaramente di agenzia, le email di verifica account, i messaggi di benvenuto, le ricerche salvate, le promozioni e gli annunci d'asta vengono escluse.
+- Le notifiche chiaramente di agenzia vengono salvate fuori dalla coda principale e restano recuperabili; le email di verifica account, i messaggi di benvenuto, le ricerche salvate, le promozioni e gli annunci d'asta non vengono salvate (conteggio per regola nei log). Nessun candidato viene scartato automaticamente.
 - La deduplicazione utilizza `owner_id,dedup_key` con la chiave derivata dall'ID Gmail.
 - Il processo non effettua scraping dei portali immobiliari.
 
