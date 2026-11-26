@@ -23,7 +23,8 @@ const fixture = (name: string) => Deno.readTextFileSync(new URL("./fixtures/" + 
 const EMAIL_HTML = fixture("subito_saved_search_email.html");
 const PAGE = fixture("subito_results_page.html");
 const OWNER = "00000000-0000-4000-8000-000000000001";
-const SEARCH_URL = "https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&order=datedesc";
+// URL richiesto: kxconfid conservato, solo utm_* rimossi.
+const SEARCH_URL = "https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&kxconfid=u2p484vrw&order=datedesc";
 const SUBJECT = "Appartamenti a Ancona e provincia ha 3 nuovi annunci per te";
 const NEW_IDS = ["608812345", "608807711", "608799020"];
 
@@ -110,16 +111,23 @@ Deno.test("1 · non riconosciute: altri mittenti, mittenti che imitano Subito, a
 });
 
 // ---------- 2 · Link del pulsante ----------
-Deno.test("2 · link del pulsante «Vedi i nuovi annunci», senza tracciamento, non il logo", () => {
+Deno.test("2 · link del pulsante «Vedi i nuovi annunci»: kxconfid conservato, solo utm_* rimossi, non il logo", () => {
   const link = extractSavedSearchLink(EMAIL_HTML);
   eq(link.source, "pulsante", "dal pulsante");
-  eq(link.url, SEARCH_URL, "URL della ricerca senza utm_* e kxconfid");
+  eq(link.url, SEARCH_URL, "URL della ricerca con kxconfid, senza utm_*");
   eq(subitoSavedSearchDigest(EMAIL_26)!.searchKey, "subito.it/annunci-marche/vendita/appartamenti/ancona?advt=0,2", "chiave stabile della ricerca");
+});
+Deno.test("2 · stessa ricerca con kxconfid e campagna diversi: stessa chiave, kxconfid sempre nella richiesta", () => {
+  const other = EMAIL_HTML.replace("kxconfid=u2p484vrw", "kxconfid=zz9other").replace("utm_content=20261126", "utm_content=20261127");
+  const a = subitoSavedSearchDigest(EMAIL_26)!, b = subitoSavedSearchDigest(email("x9", "Fri, 27 Nov 2026 09:24:26 +0100", { html: other }))!;
+  eq(a.searchKey, b.searchKey, "chiave della ricerca indipendente da kxconfid e campagna");
+  eq(/kxconfid=zz9other/.test(b.searchUrl!), true, "kxconfid dell'email nella richiesta");
+  eq(/utm_/.test(b.searchUrl!), false, "parametri di campagna rimossi dalla richiesta");
 });
 Deno.test("2 · pulsante con redirect di tracciamento, link alternativo, link mancante", () => {
   const tracked = EMAIL_HTML.replace(/href="https:\/\/www\.subito\.it\/annunci-marche[^"]+"/,
     'href="https://click.subito.it/track?url=' + encodeURIComponent("https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&order=datedesc&utm_source=knocker") + '"');
-  eq(extractSavedSearchLink(tracked).url, SEARCH_URL, "redirect con URL annidato");
+  eq(extractSavedSearchLink(tracked).url, "https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&order=datedesc", "redirect con URL annidato");
   const noButton = '<p>Ci sono 3 nuovi risultati</p><a href="https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&amp;utm_source=x">qui</a>';
   eq(extractSavedSearchLink(noButton).source, "altro_link", "senza pulsante: altro link alla ricerca");
   const missing = '<p>Ci sono 3 nuovi risultati</p><a href="https://t.example.com/abc">Vedi i nuovi annunci</a>';

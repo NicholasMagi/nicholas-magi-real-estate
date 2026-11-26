@@ -8,7 +8,7 @@ export type SubitoDigest = {
   declaredCount: number | null;
   /** Nome della ricerca salvata, dall'oggetto ("Appartamenti a Ancona e provincia"). */
   searchLabel: string | null;
-  /** URL della pagina dei risultati, senza parametri di tracciamento. */
+  /** URL della pagina dei risultati da richiedere: come nel pulsante, senza i soli utm_*. */
   searchUrl: string | null;
   /** Chiave stabile della ricerca (stessa ricerca salvata → stessa chiave). */
   searchKey: string | null;
@@ -43,7 +43,12 @@ export type SubitoPage = {
   items: SubitoItem[];
 };
 
-const TRACKING_PARAMS = /^(?:utm_[a-z_]+|kxconfid|xtor|from|fbclid|gclid|mc_[a-z]+)$/i;
+// Tolti dalla richiesta HTTP solo i parametri di campagna: kxconfid e ogni altro
+// parametro restano, perché possono servire a Subito per mostrare i risultati giusti.
+const REQUEST_DROPPED_PARAMS = /^(?:utm_[a-z_]+|fbclid|gclid)$/i;
+// Ignorati soltanto nella chiave stabile della ricerca: cambiano da un'email all'altra
+// (kxconfid, campagna) o non cambiano i risultati (ordinamento, pagina).
+const KEY_IGNORED_PARAMS = /^(?:utm_[a-z_]+|fbclid|gclid|kxconfid|xtor|from|order|o|page)$/i;
 const REDIRECT_PARAMS = ["url", "u", "q", "target", "dest", "destination", "redirect", "redirect_url", "to", "link"];
 
 function decodeEntities(value: string): string {
@@ -95,7 +100,7 @@ export function subitoAdIdFromListingKey(value: unknown): string | null {
   return subitoAdId("https://www." + key);
 }
 
-/** Pagina di risultati Subito (/annunci-<regione>/...), senza tracciamento; null se non lo è. */
+/** Pagina di risultati Subito (/annunci-<regione>/...), senza utm_*; null se non lo è. */
 export function normalizeSubitoSearchUrl(value: unknown, depth = 0): string | null {
   let url: URL;
   try {
@@ -106,7 +111,7 @@ export function normalizeSubitoSearchUrl(value: unknown, depth = 0): string | nu
   if (url.protocol !== "https:" && url.protocol !== "http:") return null;
   if (isSubitoHost(url) && host(url) === "subito.it" && /^\/annunci-[a-z-]+\//i.test(url.pathname)) {
     const clean = new URL("https://www.subito.it" + url.pathname);
-    for (const [key, val] of url.searchParams) if (!TRACKING_PARAMS.test(key)) clean.searchParams.append(key, val);
+    for (const [key, val] of url.searchParams) if (!REQUEST_DROPPED_PARAMS.test(key)) clean.searchParams.append(key, val);
     return clean.toString();
   }
   if (depth < 2) {
@@ -120,13 +125,13 @@ export function normalizeSubitoSearchUrl(value: unknown, depth = 0): string | nu
   }
   return null;
 }
-/** Stessa ricerca salvata → stessa chiave (senza tracciamento, ordinamento e pagina). */
+/** Stessa ricerca salvata → stessa chiave (senza kxconfid, campagna, ordinamento e pagina). */
 export function subitoSearchKey(searchUrl: string | null): string | null {
   if (!searchUrl) return null;
   try {
     const url = new URL(searchUrl);
     const params = [...url.searchParams.entries()]
-      .filter(([key]) => !TRACKING_PARAMS.test(key) && !/^(?:order|o|page)$/i.test(key))
+      .filter(([key]) => !KEY_IGNORED_PARAMS.test(key))
       .sort(([a, av], [b, bv]) => a === b ? av.localeCompare(bv) : a.localeCompare(b));
     const path = url.pathname.toLowerCase().replace(/\/+$/, "");
     return "subito.it" + path + (params.length ? "?" + params.map(([k, v]) => k + "=" + v).join("&") : "");
