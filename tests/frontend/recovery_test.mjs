@@ -21,7 +21,7 @@ function grab(name) {
 }
 const names = ["nmreTime", "nmreNormalizeRecoveryRow", "nmreFetchAllById", "nmreFetchAllPages", "validUrl", "isSpecificCandidateUrl", "canonicalCandidateUrl", "nmreAppendStatusHistory",
   "nmreLastStatusEntry", "nmreDiscardEntry", "nmreAgencyDecisionOrigin", "candidateRecoveryGroup",
-  "nmreLastSeenEntry", "nmreNotificationsAfterDiscard", "nmreAgencyReopenUpdates"];
+  "nmreLastSeenEntry", "nmreNotificationsAfterDiscard", "nmreAgencyReopenUpdates", "nmreTrimStatusHistory", "nmreAcknowledgeDiscardMarker"];
 const api = new Function(
   'const NMRE_PAGE_SIZE=1000;const NMRE_STATUS_HISTORY_LIMIT=50;const NMRE_DISCARD_ACTIONS=["scartato","classificato_agenzia_e_scartato"];' +
   names.map(grab).join("\n") + ";return {" + names.join(",") + "};"
@@ -39,8 +39,12 @@ const none = new Map();
 let history = api.nmreAppendStatusHistory({ piano: "2" }, { data: "t1", origine: "utente", azione: "scartato", motivo: "x".repeat(400) });
 eq(history.piano, "2", "lo storico conserva gli altri dati estratti");
 eq(history.storico_stato[0].motivo.length, 300, "motivo limitato a 300 caratteri");
-for (let index = 0; index < 60; index++) history = api.nmreAppendStatusHistory(history, { data: String(index), origine: "utente", azione: "p" });
-eq(history.storico_stato.length, 50, "storico limitato a 50 voci");
+for (let index = 0; index < 60; index++) history = api.nmreAppendStatusHistory(history, { data: String(index), origine: "sincronizzazione", azione: "p" });
+eq(history.storico_stato.length, 50, "storico limitato a 50 voci (voci automatiche)");
+let manualHistory = { storico_stato: [{ data: "t0", origine: "utente", azione: "scartato" }] };
+for (let index = 0; index < 60; index++) manualHistory = api.nmreAppendStatusHistory(manualHistory, { data: String(index), origine: "sincronizzazione", azione: "conservato_non_riconosciuto" });
+eq(manualHistory.storico_stato[0].azione, "scartato", "il limite non elimina mai una decisione dell'utente");
+eq(manualHistory.storico_stato.length, 50, "il limite elimina solo voci automatiche");
 
 // Provenienza delle agenzie
 eq(api.candidateRecoveryGroup({ id: "a1", tipo_venditore: "Agenzia", seller_manual_override: false }, none, "agency"),
@@ -103,8 +107,8 @@ const formats = api.nmreNotificationsAfterDiscard({ dati_estratti: { storico_sta
   notification_history: [{ created_at: "2026-11-20T10:00:00+00:00" }, { created_at: "2026-11-20T11:00:00+01:00" }] });
 eq(formats.count, 0, "notifiche precedenti allo scarto in formati diversi: nessun contrassegno (il confronto testuale sbagliava)");
 eq(api.nmreNotificationsAfterDiscard({ dati_estratti: { storico_stato: [{ azione: "scartato", data: "2026-11-20T10:00:00Z" }] },
-  notification_history: [{ notified_at: "2026-11-19T09:00:00Z", created_at: "2026-11-20T10:01:00Z" }] }).count, 0,
-  "conta la data di arrivo dell'email (notified_at), non quella di registrazione");
+  notification_history: [{ notified_at: "2026-11-19T09:00:00Z", created_at: "2026-11-20T10:01:00Z" }] }).count, 1,
+  "conta l'ora in cui NMRE ha registrato la notifica (created_at), non la data dell'email: nessuna notifica persa");
 
 // Secondo scarto (B2): il contrassegno di un ciclo precedente non torna "nuovo"
 const cycle = { dati_estratti: {
@@ -126,6 +130,23 @@ const markerSeen = api.nmreNotificationsAfterDiscard({ dati_estratti: { notifich
 eq(markerSeen.count, 1, "contrassegno: conta solo le notifiche dopo l'ultima presa visione");
 eq(api.nmreNotificationsAfterDiscard({ dati_estratti: { notifiche_dopo_scarto: { da_rivedere: true } }, notification_history: [] }).count, 1,
   "contrassegno senza elenco: resta visibile (nel dubbio un annuncio in più)");
+
+// Presa visione per identificativi (audit punto 2): un'email inviata prima della presa
+// visione ma registrata dopo resta da guardare.
+{
+  const base = { storico_stato: [{ azione: "scartato", data: "2026-11-20T10:00:00Z", origine: "utente" }],
+    notifiche_dopo_scarto: { da_rivedere: true, elenco: [{ source_email_id: "a", data: "2026-11-21T09:00:00Z" }, { source_email_id: "b", data: "2026-11-22T09:00:00Z" }] } };
+  const acknowledged = api.nmreAcknowledgeDiscardMarker(base, "2026-11-24T10:00:30Z");
+  eq(acknowledged.notifiche_dopo_scarto.visti.join(","), "a,b", "presa visione: identificativi delle notifiche viste registrati");
+  eq(api.nmreNotificationsAfterDiscard({ dati_estratti: acknowledged, notification_history: [] }).count, 0, "presa visione: nessuna notifica da guardare");
+  const late = { ...acknowledged, notifiche_dopo_scarto: { ...acknowledged.notifiche_dopo_scarto, da_rivedere: true,
+    elenco: [...acknowledged.notifiche_dopo_scarto.elenco, { source_email_id: "c", data: "2026-11-24T10:00:00Z", registrata_il: "2026-11-24T10:01:00Z" }] } };
+  eq(api.nmreNotificationsAfterDiscard({ dati_estratti: late, notification_history: [] }).count, 1, "email anteriore alla presa visione ma registrata dopo: segnalata");
+  const again = api.nmreAcknowledgeDiscardMarker(late, "2026-11-24T11:00:00Z");
+  eq(again.notifiche_dopo_scarto.visti.join(","), "a,b,c", "seconda presa visione: unione degli identificativi");
+  eq(again.storico_stato.length, 1, "presa visione: lo storico dell'utente non viene toccato");
+  eq(api.nmreAcknowledgeDiscardMarker({ storico_stato: [] }, "x").notifiche_dopo_scarto, undefined, "senza contrassegno: nessun contrassegno creato");
+}
 
 // Lettura parziale di dati_estratti (M4)
 const normalized = api.nmreNormalizeRecoveryRow({ id: "x", storico: [{ azione: "scartato" }], notifiche: { da_rivedere: true } });
@@ -197,7 +218,7 @@ function sellerHarness({ conflict = false, registryError = null } = {}) {
   const button = { disabled: false, closest: () => card };
   const fn = new Function("supabase", "msg", "confirm", "currentUser", "candidateCache", "loadSellerRegistry", "loadCandidates", "loadListings", "prepareCandidateForArchive",
     'const NMRE_STATUS_HISTORY_LIMIT=50;const NMRE_CONFLICT_MESSAGE="L’annuncio è stato modificato nel frattempo";' +
-    ["normalizeSellerIdentifier", "buildSellerRegistryRows", "nmreAppendStatusHistory", "nmreUpdateCandidateWithHistory", "saveCandidateSeller"].map(grab).join("\n") +
+    ["normalizeSellerIdentifier", "buildSellerRegistryRows", "nmreTrimStatusHistory", "nmreAcknowledgeDiscardMarker", "nmreAppendStatusHistory", "nmreUpdateCandidateWithHistory", "saveCandidateSeller"].map(grab).join("\n") +
     ";return saveCandidateSeller;")(
     supabase, (_id, text, type) => messages.push({ text, type }), () => true, { id: "u1" }, [{ id: "c1", tipo_venditore: "Da verificare" }],
     async () => calls.push({ table: "reload", op: "seller_registry" }), async () => calls.push({ table: "reload", op: "candidates" }), async () => {},

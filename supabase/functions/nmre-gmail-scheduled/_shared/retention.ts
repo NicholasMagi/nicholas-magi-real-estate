@@ -155,28 +155,57 @@ export function notificationReviewReference(datiEstratti: unknown): number | nul
 }
 
 /**
- * Numero di notifiche da evidenziare come "nuove dopo lo scarto": stessa logica del
- * frontend (storico notifiche confrontato con il riferimento, oppure il contrassegno
- * della sincronizzazione; nel dubbio una notifica in più).
+ * Notifiche del contrassegno ancora da guardare. Regola principale, senza orologi:
+ * sono nuove le voci la cui email non è nell'elenco "visti" (scritto dal frontend alla
+ * presa visione e allo scarto). Per i contrassegni precedenti, senza "visti", vale la
+ * regola temporale: la voce è nuova se registrata (registrata_il, ora del server; in
+ * mancanza la data dell'email) dopo il riferimento (ultimo scarto o presa visione).
+ * Stessa logica di nmreNotificationsAfterDiscard nel frontend, verificata dai test.
+ */
+export function pendingMarkerEntries(datiEstratti: unknown): Array<Record<string, unknown>> {
+  const marker = discardMarkerOf(datiEstratti);
+  if (!marker) return [];
+  const list = Array.isArray(marker.elenco) ? marker.elenco as Array<Record<string, unknown>> : [];
+  const reference = notificationReviewReference(datiEstratti);
+  const registeredAfterReference = (entry: Record<string, unknown>) => {
+    const time = toTime(entry?.registrata_il) ?? toTime(entry?.data);
+    return reference === null || time === null || time > reference;
+  };
+  if (Array.isArray(marker.visti)) {
+    // Per identificativo; le voci senza identificativo (dati precedenti) si confrontano
+    // con l'ora di registrazione, altrimenti resterebbero "nuove" per sempre.
+    const seen = new Set((marker.visti as unknown[]).map(String));
+    return list.filter(entry => {
+      const id = String(entry?.source_email_id ?? "");
+      return id ? !seen.has(id) : registeredAfterReference(entry);
+    });
+  }
+  if (marker.da_rivedere !== true) return [];
+  return list.filter(registeredAfterReference);
+}
+
+/**
+ * Numero di notifiche da evidenziare come "nuove dopo lo scarto". Con il contrassegno
+ * della sincronizzazione vale solo il contrassegno (identificativi delle email); lo
+ * storico notifiche, confrontato con l'ora di registrazione (created_at, del database),
+ * serve solo per gli scarti senza contrassegno.
  */
 export function pendingNotificationsAfterDiscard(
   datiEstratti: unknown,
   notificationHistory: Array<{ notified_at?: unknown; created_at?: unknown }>
 ): number {
+  const marker = discardMarkerOf(datiEstratti);
+  if (marker) {
+    const pending = pendingMarkerEntries(datiEstratti).length;
+    const list = Array.isArray(marker.elenco) ? marker.elenco : [];
+    return pending || (marker.da_rivedere === true && !list.length ? 1 : 0);
+  }
   const reference = notificationReviewReference(datiEstratti);
-  const timeOf = (entry: { notified_at?: unknown; created_at?: unknown }) => toTime(entry?.notified_at) ?? toTime(entry?.created_at);
-  const after = reference === null ? 0 : notificationHistory.filter(entry => {
-    const time = timeOf(entry);
+  if (reference === null) return 0;
+  return notificationHistory.filter(entry => {
+    const time = toTime(entry?.created_at) ?? toTime(entry?.notified_at);
     return time !== null && time > reference;
   }).length;
-  const marker = discardMarkerOf(datiEstratti);
-  const list = marker && Array.isArray(marker.elenco) ? marker.elenco as Array<Record<string, unknown>> : [];
-  const active = !!(marker && marker.da_rivedere === true);
-  const pending = active
-    ? list.filter(entry => { const time = toTime(entry?.data); return reference === null || time === null || time > reference; }).length
-    : 0;
-  const markerOnly = active && !list.length ? 1 : 0;
-  return Math.max(after, pending || markerOnly);
 }
 
 /** La notifica è già stata gestita su questo candidato (riapertura o contrassegno). */
@@ -190,25 +219,21 @@ export function notificationAlreadyHandled(datiEstratti: unknown, sourceEmailId:
 }
 
 /**
- * Che cosa fare di una notifica su un candidato scartato.
+ * Che cosa fare di una notifica su un candidato scartato. Nessun confronto tra orologi:
  * - "none": il candidato non è scartato, oppure la notifica è già stata gestita, oppure
- *   è una rilettura di un'email già acquisita prima dell'ultimo scarto (la decisione
- *   dell'utente prevale).
- * - "reopen": notifica nuova (mai acquisita, o acquisita dopo l'ultimo scarto ma non
- *   ancora gestita, per esempio dopo un'interruzione) con un ribasso NUOVO: il prezzo è
- *   inferiore all'ultimo prezzo già registrato.
- * - "mark": notifica nuova senza un nuovo ribasso: il candidato resta scartato ma viene
+ *   l'email era già registrata nello storico notifiche prima di questa elaborazione
+ *   (rilettura, comprese le email gestite dalle versioni precedenti della funzione):
+ *   la decisione dell'utente prevale. La funzione scrive la decisione PRIMA di
+ *   registrare la notifica, quindi una notifica registrata è sempre già stata valutata.
+ * - "reopen": notifica mai registrata con un ribasso NUOVO (prezzo inferiore all'ultimo
+ *   prezzo già registrato).
+ * - "mark": notifica mai registrata senza un nuovo ribasso: resta scartato ma viene
  *   evidenziato nel pannello di recupero.
  */
 export function discardedNotificationAction(input: DiscardedNotificationInput): DiscardedNotificationAction {
   if (input.stato !== "scartato") return "none";
   if (notificationAlreadyHandled(input.datiEstratti, input.sourceEmailId)) return "none";
-  const known = toTime(input.knownNotificationCreatedAt);
-  if (input.knownNotificationCreatedAt !== null && input.knownNotificationCreatedAt !== undefined) {
-    const discard = lastDiscardTime(input.datiEstratti);
-    // Già acquisita: è nuova solo se registrata dopo l'ultimo scarto (elaborazione interrotta).
-    if (known === null || discard === null || known <= discard) return "none";
-  }
+  if (input.knownNotificationCreatedAt !== null && input.knownNotificationCreatedAt !== undefined) return "none";
   const newPriceDrop = input.hasPriceDrop === true && input.currentPrice !== null &&
     (input.lastRecordedPrice === null || input.currentPrice < input.lastRecordedPrice);
   return newPriceDrop ? "reopen" : "mark";
@@ -248,8 +273,26 @@ export function appendStatusHistory(
     ...entry,
     motivo: entry.motivo ? String(entry.motivo).slice(0, 300) : entry.motivo ?? null
   };
-  base.storico_stato = [...previous, clean].slice(-STATUS_HISTORY_LIMIT);
+  base.storico_stato = trimStatusHistory([...previous, clean]);
   return base;
+}
+
+/**
+ * Applica il limite di STATUS_HISTORY_LIMIT voci eliminando per prime le voci
+ * automatiche più vecchie. Le decisioni dell'utente (origine "utente") non vengono mai
+ * eliminate, anche se da sole superano il limite.
+ */
+export function trimStatusHistory(history: unknown[]): unknown[] {
+  if (history.length <= STATUS_HISTORY_LIMIT) return history;
+  let excess = history.length - STATUS_HISTORY_LIMIT;
+  const keep = history.map(() => true);
+  for (let index = 0; index < history.length && excess > 0; index++) {
+    const entry = history[index] as Record<string, unknown> | null;
+    if (entry && entry.origine === "utente") continue;
+    keep[index] = false;
+    excess--;
+  }
+  return history.filter((_, index) => keep[index]);
 }
 
 /**
@@ -257,7 +300,18 @@ export function appendStatusHistory(
  * nuova estrazione non deve cancellare: lo storico delle decisioni, il contrassegno
  * delle notifiche dopo lo scarto e i dati della pagina pubblica salvati dal frontend.
  */
-export const PRESERVED_EXTRACTED_KEYS = ["storico_stato", "notifiche_dopo_scarto", "pagina_pubblica"];
+export const PRESERVED_EXTRACTED_KEYS = ["storico_stato", "notifiche_dopo_scarto", "pagina_pubblica", "campi_manuali"];
+
+/** Campi dell'annuncio che l'utente può correggere a mano e che la sincronizzazione aggiorna. */
+export const MANUALLY_EDITABLE_FIELDS = ["titolo", "comune", "prezzo", "tipologia_immobile", "superficie_mq", "locali", "camere", "bagni"];
+
+/** Campi modificati a mano dall'utente (dati_estratti.campi_manuali, scritto dal frontend). */
+export function manualFields(datiEstratti: unknown): Set<string> {
+  const base = datiEstratti && typeof datiEstratti === "object" && !Array.isArray(datiEstratti)
+    ? datiEstratti as Record<string, unknown>
+    : {};
+  return new Set(Array.isArray(base.campi_manuali) ? (base.campi_manuali as unknown[]).map(String) : []);
+}
 
 /**
  * Conserva i dati già presenti quando una nuova estrazione sostituisce dati_estratti:
@@ -277,7 +331,7 @@ export function preserveStatusHistory(
     if (value === undefined || value === null) continue;
     if (key === "storico_stato") {
       if (!Array.isArray(value) || !value.length) continue;
-      result = { ...result, storico_stato: value.slice(-STATUS_HISTORY_LIMIT) };
+      result = { ...result, storico_stato: trimStatusHistory(value) };
     } else {
       result = { ...result, [key]: value };
     }
@@ -294,6 +348,8 @@ export const DISCARDED_NOTIFICATION_LIMIT = 10;
 
 export type DiscardedNotificationInfo = {
   data: string;
+  /** Ora in cui NMRE ha registrato la notifica (server), indipendente dalla data dell'email. */
+  registrata_il?: string | null;
   source_email_id: string;
   prezzo: number | null;
   ribasso_percentuale: number | null;
@@ -368,7 +424,7 @@ export function reopenDiscardedPatch(current: { dati_estratti?: unknown }, info:
 /** Modifica per evidenziare una nuova notifica su un candidato che resta scartato. */
 export function markDiscardedPatch(current: { dati_estratti?: unknown }, info: DiscardedNotificationPatchInfo, nowIso: string) {
   const { priceDropPercent: _priceDropPercent, ...notice } = info;
-  const marked = recordNotificationAfterDiscard(current.dati_estratti, notice);
+  const marked = recordNotificationAfterDiscard(current.dati_estratti, { ...notice, registrata_il: nowIso });
   return {
     dati_estratti: appendStatusHistory(marked, {
       data: nowIso,
@@ -381,15 +437,33 @@ export function markDiscardedPatch(current: { dati_estratti?: unknown }, info: D
   };
 }
 
-/** Modifica per un candidato riletto la cui email non è più riconosciuta come avviso. */
-export function keptForReviewPatch(current: RepairCandidate & { dati_estratti?: unknown }, rule: string, nowIso: string) {
+/**
+ * Modifica per un candidato riletto la cui email non è più riconosciuta come avviso.
+ * Idempotente: la voce di storico viene registrata una sola volta per email; alle
+ * riletture successive si aggiornano solo i segni tecnici, se necessario (altrimenti
+ * null: nessuna scrittura).
+ */
+export function keptForReviewPatch(
+  current: RepairCandidate & { dati_estratti?: unknown },
+  rule: string,
+  nowIso: string,
+  sourceEmailId: string | null = typeof current.source_email_id === "string" ? current.source_email_id : null
+): Record<string, unknown> | null {
+  const marks = processedVersionMark(current);
+  const already = statusHistoryOf(current.dati_estratti).some(entry =>
+    entry && entry.azione === "conservato_non_riconosciuto" && (sourceEmailId === null || entry.source_email_id === sourceEmailId || entry.source_email_id === undefined));
+  if (already) {
+    const changed = (Object.keys(marks) as Array<keyof typeof marks>).some(key => Number((current as Record<string, unknown>)[key] || 0) !== marks[key]);
+    return changed ? marks : null;
+  }
   return {
-    ...processedVersionMark(current),
+    ...marks,
     dati_estratti: appendStatusHistory(current.dati_estratti, {
       data: nowIso,
       origine: "sincronizzazione",
       azione: "conservato_non_riconosciuto",
       regola: rule,
+      source_email_id: sourceEmailId,
       motivo: "Email riletta e non più riconosciuta come avviso: il candidato resta nel suo stato per la revisione manuale"
     }),
     updated_at: nowIso
@@ -419,6 +493,7 @@ export function existingCandidatePatch(
 ): Record<string, unknown> {
   const patch: Record<string, unknown> = { deduplication_version: 1, updated_at: nowIso };
   if (current.stato === "da_verificare") {
+    const manual = manualFields(current.dati_estratti);
     Object.assign(patch, {
       titolo: row.titolo, comune: row.comune, prezzo: row.prezzo,
       notification_sender: row.notification_sender, email_subject: row.email_subject,
@@ -429,6 +504,8 @@ export function existingCandidatePatch(
       dati_estratti: preserveStatusHistory(current.dati_estratti, row.dati_estratti),
       data_extraction_version: row.data_extraction_version
     });
+    // I campi corretti a mano dall'utente non vengono riscritti dalla nuova email.
+    for (const field of manual) if (MANUALLY_EDITABLE_FIELDS.includes(field)) delete patch[field];
     const sellerFields = sellerFieldsForExisting(current, {
       classification: row.tipo_venditore, confidence: row.seller_confidence, evidence: row.seller_evidence
     });

@@ -37,7 +37,7 @@ jobs:
         run: deno test supabase/functions/nmre-gmail-scheduled/retention_test.ts supabase/functions/nmre-gmail-scheduled/property_filter_test.ts supabase/functions/nmre-gmail-scheduled/dubious_test.ts
 
       - name: Test sync protections (repeated re-reads, seen marker, concurrent manual edits)
-        run: deno test supabase/functions/nmre-gmail-scheduled/sync_protection_test.ts
+        run: deno test supabase/functions/nmre-gmail-scheduled/sync_protection_test.ts supabase/functions/nmre-gmail-scheduled/regressions_test.ts supabase/functions/nmre-gmail-scheduled/resilience_test.ts
 
       - name: Test frontend and sync coherence, cursor and notification guarantees
         run: deno test --allow-read=. supabase/functions/nmre-gmail-scheduled/frontend_coherence_test.ts supabase/functions/nmre-gmail-scheduled/cursor_guard_test.ts

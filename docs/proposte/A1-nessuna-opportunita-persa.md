@@ -1096,3 +1096,67 @@ Sul codice di `858316e` falliscono 8 controlli.
 Totali in locale e in CI: Deno 82 test (12 sulle protezioni della sincronizzazione, 8 di
 coerenza, 4 strutturali); frontend 55 + 41 + 17; migrazioni e rollback 59; nessun file
 della Fase 2 in `supabase/migrations/`.
+
+## 18. Correzioni dopo l'audit di d524e4a (26/11/2026)
+
+Priorità: conservare le opportunità e le decisioni manuali. Ogni correzione ha un test
+di regressione che **fallisce sul codice di d524e4a** e passa su quello corretto
+(verifica eseguita copiando i nuovi test su una copia di d524e4a).
+
+### 18.1 Storico
+- `keptForReviewPatch` registra `conservato_non_riconosciuto` **una sola volta per
+  email** (`source_email_id`): le riletture successive non scrivono nulla. Su d524e4a,
+  60 riletture producevano 50 voci e cancellavano lo scarto dell'utente.
+- Il limite dello storico (`trimStatusHistory`, nel frontend `nmreTrimStatusHistory`)
+  elimina solo le voci automatiche più vecchie: **le voci dell'utente non vengono mai
+  eliminate**. Vale anche per `preserveStatusHistory` (nuova estrazione dei dati).
+
+### 18.2 Notifiche dopo lo scarto o la presa visione
+- Ogni voce del contrassegno registra `registrata_il`, l'ora in cui NMRE l'ha registrata.
+- La presa visione (e lo scarto) registra in `visti` gli identificativi delle email
+  viste (`nmreAcknowledgeDiscardMarker`). Una notifica è nuova se la sua email non è tra
+  quelle viste, **qualunque sia la data dell'email**.
+- Contrassegni precedenti senza `visti` e voci senza identificativo: vale
+  `registrata_il` (o, se manca, la data dell'email), non solo la data dell'email.
+- Senza contrassegno, lo storico notifiche si confronta con `created_at` (ora del
+  database) invece di `notified_at`.
+
+### 18.3 Riapertura e orologi
+- `discardedNotificationAction` non confronta più date: una notifica **già registrata**
+  in NMRE non riapre mai l'annuncio; solo un'email mai registrata con un nuovo ribasso
+  lo riapre. Così una riapertura fatta dalla versione 68, seguita da uno scarto con il
+  vecchio frontend, non viene annullata dalla rilettura della stessa email, e un
+  orologio del dispositivo in ritardo non conta.
+- Nella funzione la decisione sullo scartato si scrive **prima** di registrare la
+  notifica: se il ciclo si interrompe in mezzo, l'email viene rielaborata e la decisione
+  è idempotente (nessuna doppia riapertura).
+
+### 18.4 Campi corretti a mano
+- Quando l'utente corregge titolo, comune, prezzo, tipologia, superficie, locali, camere
+  o bagni, il campo viene registrato in `dati_estratti.campi_manuali`.
+- `existingCandidatePatch` non riscrive i campi elencati; gli altri si aggiornano.
+  `campi_manuali` è conservato dalle nuove estrazioni.
+- **Limite:** le correzioni fatte prima di questa versione non sono riconoscibili.
+
+### 18.5 Resilienza del ciclo
+- Ogni email si elabora isolata (`processRowsIsolated`): un errore, compreso un
+  conflitto persistente, riguarda solo quell'email; le altre vengono salvate.
+- Se anche una sola email non è salvata, `assertAllRowsSaved` interrompe il ciclo prima
+  del cursore (`IncompleteSyncError`): **il cursore Gmail non avanza** e l'email viene
+  rielaborata al ciclo successivo, senza duplicati.
+- Un errore dell'archiviazione automatica non interrompe il ciclo (viene conteggiato):
+  il candidato resta in coda.
+- **Limite:** il cursore è unico. Finché un'email continua a fallire, ogni ciclo
+  rielabora lo stesso intervallo (le email nuove vengono comunque salvate).
+
+### 18.6 Test
+- `regressions_test.ts` (8), `resilience_test.ts` (2), `cursor_guard_test.ts` (7, sul
+  sorgente reale), `frontend_coherence_test.ts` (16 casi), più i test del frontend.
+- Su d524e4a falliscono: 8/8 di `regressions_test.ts`, `resilience_test.ts` (modulo
+  assente), 3 di `cursor_guard_test.ts`, 5 di `frontend_coherence_test.ts`, il test dei
+  campi manuali in `archive_persist_test.mjs`, e `recovery_test.mjs`.
+- Totali: Deno 94; frontend 63 + 41 + 20; migrazioni e rollback 59; controlli nel
+  browser 37 + 8. Versione del service worker: `20261126-recovery-panel-4`.
+
+Nessuna migrazione, nessun deploy, nessuna operazione su Supabase. In produzione resta
+la versione 68 della funzione e il frontend precedente.

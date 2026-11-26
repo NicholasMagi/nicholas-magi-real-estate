@@ -1482,7 +1482,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-3");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-4");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1557,7 +1557,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-3");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-4");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -4266,7 +4266,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-3");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-4");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);
@@ -5259,7 +5259,30 @@ function nmreAppendStatusHistory(datiEstratti,entry){
   const base=datiEstratti&&typeof datiEstratti==="object"&&!Array.isArray(datiEstratti)?{...datiEstratti}:{};
   const previous=Array.isArray(base.storico_stato)?base.storico_stato:[];
   const clean={...entry,motivo:entry.motivo?String(entry.motivo).slice(0,300):null};
-  base.storico_stato=[...previous,clean].slice(-NMRE_STATUS_HISTORY_LIMIT);
+  base.storico_stato=nmreTrimStatusHistory([...previous,clean]);
+  return base;
+}
+// Limite dello storico: si eliminano per prime le voci automatiche più vecchie; le
+// decisioni dell'utente non vengono mai eliminate (stessa regola di trimStatusHistory
+// in _shared/retention.ts).
+function nmreTrimStatusHistory(history){
+  if(history.length<=NMRE_STATUS_HISTORY_LIMIT)return history;
+  let excess=history.length-NMRE_STATUS_HISTORY_LIMIT;
+  const keep=history.map(()=>true);
+  for(let index=0;index<history.length&&excess>0;index++){
+    if(history[index]&&history[index].origine==="utente")continue;
+    keep[index]=false;excess--;
+  }
+  return history.filter((_,index)=>keep[index]);
+}
+// Presa visione o scarto dell'utente: tutte le notifiche presenti nel contrassegno sono
+// considerate viste (per identificativo dell'email, senza confrontare orologi diversi).
+function nmreAcknowledgeDiscardMarker(datiEstratti,nowIso){
+  const base=datiEstratti&&typeof datiEstratti==="object"&&!Array.isArray(datiEstratti)?{...datiEstratti}:{};
+  const marker=base.notifiche_dopo_scarto&&typeof base.notifiche_dopo_scarto==="object"&&!Array.isArray(base.notifiche_dopo_scarto)?{...base.notifiche_dopo_scarto}:null;
+  if(!marker)return base;
+  const ids=new Set([...(Array.isArray(marker.visti)?marker.visti:[]),...(Array.isArray(marker.elenco)?marker.elenco:[]).map(entry=>entry?.source_email_id).filter(Boolean)].map(String));
+  base.notifiche_dopo_scarto={...marker,da_rivedere:false,visto_il:nowIso,visti:[...ids]};
   return base;
 }
 function nmreLastStatusEntry(item){
@@ -5352,29 +5375,38 @@ function nmreNotificationsAfterDiscard(item){
   const extracted=item&&item.dati_estratti&&typeof item.dati_estratti==="object"?item.dati_estratti:{};
   const marker=extracted.notifiche_dopo_scarto&&typeof extracted.notifiche_dopo_scarto==="object"?extracted.notifiche_dopo_scarto:null;
   const discard=nmreDiscardEntry(item);
-  // Riferimento: il più recente tra ultimo scarto, presa visione nel contrassegno
-  // (visto_il) e ultima voce di storico "notifica_dopo_scarto_vista" (copre i
-  // contrassegni in cui visto_il è andato perso). Stessa regola di
-  // notificationReviewReference in _shared/retention.ts, verificata dai test.
+  // Riferimento temporale, usato solo per i dati precedenti all'elenco "visti": il più
+  // recente tra ultimo scarto, presa visione (visto_il) e ultima voce di storico
+  // "notifica_dopo_scarto_vista". Stessa regola di _shared/retention.ts.
   const references=[nmreTime(discard?.data),nmreTime(marker?.visto_il),nmreTime(nmreLastSeenEntry(item)?.data)].filter(time=>time!==null);
   const reference=references.length?Math.max(...references):null;
-  const notificationTime=entry=>nmreTime(entry?.notified_at)??nmreTime(entry?.created_at);
+  // Ora di registrazione in NMRE (created_at, del database) prima della data dell'email.
+  const registeredTime=entry=>nmreTime(entry?.created_at)??nmreTime(entry?.notified_at);
   const history=(Array.isArray(item?.notification_history)?item.notification_history:[])
-    .slice().sort((a,b)=>(notificationTime(b)??0)-(notificationTime(a)??0));
-  const after=reference===null?[]:history.filter(entry=>{const time=notificationTime(entry);return time!==null&&time>reference;});
-  const markerList=marker&&Array.isArray(marker.elenco)?marker.elenco:[];
-  const markerActive=!!(marker&&marker.da_rivedere===true);
-  // Voci senza data valida restano visibili: nel dubbio un annuncio in più da guardare.
-  const markerPending=markerActive
-    ?markerList.filter(entry=>{const time=nmreTime(entry?.data);return reference===null||time===null||time>reference;})
-    :[];
-  const markerOnly=markerActive&&!markerList.length?1:0;
-  const count=Math.max(after.length,markerPending.length||markerOnly);
-  const fromMarker=markerPending.length?markerPending[markerPending.length-1]:null;
-  const latest=after[0]||(fromMarker?{
-    notified_at:fromMarker.data,listing_price:fromMarker.prezzo,price_drop_percent:fromMarker.ribasso_percentuale,
-    listing_title:fromMarker.titolo,listing_municipality:fromMarker.comune
-  }:null);
+    .slice().sort((a,b)=>(registeredTime(b)??0)-(registeredTime(a)??0));
+  let count=0,latest=null;
+  if(marker){
+    // Contrassegno della sincronizzazione: sono nuove le notifiche la cui email non è
+    // tra quelle già viste; per i contrassegni precedenti vale l'ora di registrazione.
+    const markerList=Array.isArray(marker.elenco)?marker.elenco:[];
+    const registeredAfterReference=entry=>{const time=nmreTime(entry?.registrata_il)??nmreTime(entry?.data);return reference===null||time===null||time>reference;};
+    let pending;
+    if(Array.isArray(marker.visti)){
+      // Voci senza identificativo (dati precedenti): vale l'ora di registrazione.
+      const seen=new Set(marker.visti.map(String));
+      pending=markerList.filter(entry=>{const id=String(entry?.source_email_id??"");return id?!seen.has(id):registeredAfterReference(entry);});
+    }else if(marker.da_rivedere===true){
+      pending=markerList.filter(registeredAfterReference);
+    }else pending=[];
+    count=pending.length||(marker.da_rivedere===true&&!markerList.length?1:0);
+    const fromMarker=pending.length?pending[pending.length-1]:null;
+    latest=fromMarker?{notified_at:fromMarker.data,listing_price:fromMarker.prezzo,price_drop_percent:fromMarker.ribasso_percentuale,
+      listing_title:fromMarker.titolo,listing_municipality:fromMarker.comune}:null;
+  }else if(reference!==null){
+    // Scarti senza contrassegno: storico notifiche confrontato con l'ora di registrazione.
+    const after=history.filter(entry=>{const time=registeredTime(entry);return time!==null&&time>reference;});
+    count=after.length;latest=after[0]||null;
+  }
   return {count,latest,reference:reference===null?null:new Date(reference).toISOString(),discardKnown:!!discard,
     totalNotifications:history.length,lastNotification:history[0]||null};
 }
@@ -5515,12 +5547,7 @@ async function markDiscardedNotificationsSeen(id,button){
   const result=await nmreUpdateCandidateWithHistory(id,
     {data:now,origine:"utente",azione:"notifica_dopo_scarto_vista",motivo:"Presa visione: l’annuncio resta scartato"},
     {},{stato:"scartato"},
-    datiEstratti=>{
-      const base=datiEstratti&&typeof datiEstratti==="object"&&!Array.isArray(datiEstratti)?{...datiEstratti}:{};
-      const marker=base.notifiche_dopo_scarto&&typeof base.notifiche_dopo_scarto==="object"?{...base.notifiche_dopo_scarto}:{conteggio:0};
-      base.notifiche_dopo_scarto={...marker,da_rivedere:false,visto_il:now};
-      return base;
-    });
+    datiEstratti=>nmreAcknowledgeDiscardMarker(datiEstratti,now));
   if(result.error||result.updated!==1){
     msg("candidateMsg",result.error?"Impossibile registrare la presa visione: "+result.error.message:NMRE_CONFLICT_MESSAGE,"error");
     if(button)button.disabled=false;
@@ -5710,8 +5737,20 @@ async function prepareCandidateForArchive(candidate,fields={}){
   const sameAsCached=(field,value)=>NUMERIC_FIELDS.includes(field)
     ?!blank(candidate?.[field])&&Number(value)===Number(candidate?.[field])
     :String(value??"").trim()===String(candidate?.[field]??"").trim();
+  // Campi corretti dall'utente nella scheda (diversi dalla copia in memoria): vengono
+  // registrati in dati_estratti.campi_manuali e la sincronizzazione non li riscrive.
+  const MANUAL_FIELDS=["titolo","comune","prezzo","tipologia_immobile","superficie_mq","locali","camere","bagni"];
+  const userEditedFields=MANUAL_FIELDS.filter(field=>!blank(fields?.[field])&&!sameAsCached(field,fields[field]));
+  const withManualFields=datiEstratti=>{
+    const base=datiEstratti&&typeof datiEstratti==="object"&&!Array.isArray(datiEstratti)?{...datiEstratti}:{};
+    if(!userEditedFields.length)return base;
+    const previous=Array.isArray(base.campi_manuali)?base.campi_manuali.map(String):[];
+    base.campi_manuali=[...new Set([...previous,...userEditedFields])];
+    return base;
+  };
   const manualUpdates=current=>{
     const updates={updated_at:new Date().toISOString()};
+    if(userEditedFields.length)updates.dati_estratti=withManualFields(current?.dati_estratti);
     ["titolo","comune","tipologia_immobile","contatto"].forEach(field=>{
       const value=blank(merged[field])||sameAsCached(field,merged[field])?current?.[field]:merged[field];
       if(value!==undefined)updates[field]=value||null;
@@ -5775,7 +5814,7 @@ async function prepareCandidateForArchive(candidate,fields={}){
         url:data.final_url||current.url||sourceUrl,
         url_originale:current.url_originale||current.url||sourceUrl,
         dati_estratti:{
-          ...base,
+          ...withManualFields(base),
           pagina_pubblica:{
             ...(base.pagina_pubblica&&typeof base.pagina_pubblica==="object"?base.pagina_pubblica:{}),
             url_originale:sourceUrl,
@@ -5839,7 +5878,7 @@ async function saveCandidateSeller(id,button){
     seller_manual_override:true,
     seller_classification_version:100,
     stato:isAgency?"scartato":"da_verificare"
-  });
+  },{},isAgency?datiEstratti=>nmreAcknowledgeDiscardMarker(datiEstratti,new Date().toISOString()):null);
 
   if(error||sellerUpdated!==1){
     msg("candidateMsg",error?error.message:NMRE_CONFLICT_MESSAGE,"error");
@@ -5992,10 +6031,11 @@ async function discardCandidate(id,button){
   if(button)button.disabled=true;
   let discardedCount=0,conflicts=0;
   for(const candidateId of ids){
+    const discardedAt=new Date().toISOString();
     const result=await nmreUpdateCandidateWithHistory(candidateId,{
-      data:new Date().toISOString(),origine:"utente",azione:"scartato",
+      data:discardedAt,origine:"utente",azione:"scartato",
       da:"da_verificare",a:"scartato",motivo:reason.trim()||"Scarto manuale senza motivo indicato"
-    },{stato:"scartato"},{stato:"da_verificare"});
+    },{stato:"scartato"},{stato:"da_verificare"},datiEstratti=>nmreAcknowledgeDiscardMarker(datiEstratti,discardedAt));
     if(result.error){
       msg("candidateMsg","Impossibile scartare l'annuncio: "+result.error.message,"error");
       if(button)button.disabled=false;

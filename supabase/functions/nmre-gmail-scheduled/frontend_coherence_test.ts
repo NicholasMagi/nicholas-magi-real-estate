@@ -47,7 +47,22 @@ const fixtures: Fixture[] = [
   { name: "secondo scarto dopo le notifiche", dati: { ...three, storico_stato: [...(three.storico_stato as unknown[]), { data: "2026-11-16T00:00:00Z", origine: "utente", azione: "riportato_in_revisione" }, discard("2026-11-18T00:00:00Z")] }, history: threeHistory, expected: 0 },
   { name: "scarto senza storico, contrassegno con due voci", dati: { notifiche_dopo_scarto: { da_rivedere: true, elenco: [notice("x", "2026-11-01T00:00:00Z"), notice("y", "2026-11-02T00:00:00Z")] } }, history: [], expected: 2 },
   { name: "contrassegno attivo senza elenco", dati: { notifiche_dopo_scarto: { da_rivedere: true } }, history: [], expected: 1 },
-  { name: "nessun contrassegno e nessuno scarto registrato", dati: {}, history: [at("2026-11-24T00:00:00Z")], expected: 0 }
+  { name: "nessun contrassegno e nessuno scarto registrato", dati: {}, history: [at("2026-11-24T00:00:00Z")], expected: 0 },
+  { name: "presa visione per identificativi, nuova email anteriore ma registrata dopo", dati: { ...threeSeen, notifiche_dopo_scarto: {
+      ...(threeSeen.notifiche_dopo_scarto as Record<string, unknown>), visti: ["a", "b", "c"], da_rivedere: true,
+      elenco: [...((three.notifiche_dopo_scarto as Record<string, unknown>).elenco as unknown[]), { ...notice("d", "2026-11-15T09:00:00Z"), registrata_il: "2026-11-15T10:05:00Z" }] } },
+    history: threeHistory, expected: 1 },
+  { name: "contrassegno precedente: vale registrata_il, non la data dell'email", dati: { storico_stato: [discard("2026-11-26T10:00:30Z")],
+      notifiche_dopo_scarto: { da_rivedere: true, elenco: [{ ...notice("late", "2026-11-26T10:00:00Z"), registrata_il: "2026-11-26T10:01:00Z" }] } },
+    history: [], expected: 1 },
+  { name: "presa visione per identificativi di voci precedenti senza identificativo", dati: { storico_stato: [discard("2026-11-20T10:00:00Z")],
+      notifiche_dopo_scarto: { da_rivedere: false, visto_il: "2026-11-23T10:00:00Z", visti: [], elenco: [{ data: "2026-11-22T08:00:00Z", prezzo: 1 }] } },
+    history: [], expected: 0 },
+  { name: "voce senza identificativo registrata dopo la presa visione", dati: { storico_stato: [discard("2026-11-20T10:00:00Z")],
+      notifiche_dopo_scarto: { da_rivedere: true, visto_il: "2026-11-23T10:00:00Z", visti: [], elenco: [{ data: "2026-11-22T08:00:00Z", registrata_il: "2026-11-23T11:00:00Z", prezzo: 1 }] } },
+    history: [], expected: 1 },
+  { name: "senza contrassegno: vale l'ora di registrazione (created_at)", dati: { storico_stato: [discard("2026-11-26T10:00:30Z")] },
+    history: [{ notified_at: "2026-11-26T10:00:00Z", created_at: "2026-11-26T10:01:00Z" } as { notified_at: string }], expected: 1 }
 ];
 
 for (const fixture of fixtures) {

@@ -80,18 +80,21 @@ function userSeen(row: Row, at: string) {
 // da un'altra notifica → ribasso (dichiarato o storico, max 50%) → registrazione della
 // notifica (l'upsert conserva created_at) → decisione e scrittura protetta (codice reale).
 type Notice = { created_at: string; price: number };
-async function syncEmail(world: ReturnType<typeof fakeDb>, notices: Map<string, Notice>, email: { id: string; price: number; declaredPrevious?: number }) {
+async function syncEmail(world: ReturnType<typeof fakeDb>, notices: Map<string, Notice>, email: { id: string; price: number; declaredPrevious?: number; date?: string; failBeforeRegistration?: boolean }) {
   const known = notices.get(email.id)?.created_at ?? null;
   const others = [...notices.entries()].filter(([id]) => id !== email.id).sort((a, b) => b[1].created_at.localeCompare(a[1].created_at));
   const lastRecordedPrice = others.length ? others[0][1].price : null;
   let previousPrice: number | null = email.declaredPrevious ?? null;
   if (previousPrice === null && lastRecordedPrice !== null && lastRecordedPrice > email.price && (lastRecordedPrice - email.price) / lastRecordedPrice <= 0.5) previousPrice = lastRecordedPrice;
   const hasPriceDrop = previousPrice !== null && previousPrice > email.price;
-  if (!known) notices.set(email.id, { created_at: world.stamp(), price: email.price });
-  return await applyNotificationToExistingCandidate(world.client, "u1", {
+  // Come index.ts: prima la decisione (scrittura protetta), poi la registrazione della notifica.
+  const outcome = await applyNotificationToExistingCandidate(world.client, "u1", {
     candidateId: "c1", knownNotificationCreatedAt: known, hasPriceDrop, currentPrice: email.price, lastRecordedPrice,
-    info: { data: world.stamp(), source_email_id: email.id, prezzo: email.price, ribasso_percentuale: null, titolo: "Trilocale", comune: "Ancona", portale: "immobiliare.it", priceDropPercent: null }
+    info: { data: email.date ?? world.stamp(), source_email_id: email.id, prezzo: email.price, ribasso_percentuale: null, titolo: "Trilocale", comune: "Ancona", portale: "immobiliare.it", priceDropPercent: null }
   }, world.stamp);
+  if (email.failBeforeRegistration) throw new Error("interruzione simulata prima della registrazione della notifica");
+  if (!known) notices.set(email.id, { created_at: world.stamp(), price: email.price });
+  return outcome;
 }
 const row = () => ({ id: "c1", owner_id: "u1", stato: "scartato", tipo_venditore: "Da verificare", seller_manual_override: false,
   updated_at: "2026-11-20T10:00:00.000Z", dati_estratti: { pagina_pubblica: { evidenza: "pagina" },
@@ -138,11 +141,15 @@ Deno.test("B1 · riaperture registrate prima della correzione (senza email nello
   assertEquals(world.state.rows[0].stato, "scartato", "resta scartato");
 });
 
-Deno.test("B1 · elaborazione interrotta tra notifica e riapertura: la riapertura avviene alla ripetizione", async () => {
+Deno.test("B1 · interruzione tra decisione e registrazione: nessuna doppia riapertura alla ripetizione", async () => {
   const world = fakeDb([row()]);
-  // La notifica è stata registrata DOPO l'ultimo scarto ma la riapertura non è avvenuta.
-  const notices = new Map<string, Notice>([["m0", { created_at: "2026-11-15T00:00:00.000Z", price: 200000 }], ["m1", { created_at: "2026-11-25T08:00:00.000Z", price: 180000 }]]);
-  assertEquals((await syncEmail(world, notices, { id: "m1", price: 180000, declaredPrevious: 200000 })).action, "reopen", "notifica acquisita dopo lo scarto e non gestita: riapertura");
+  const notices = new Map<string, Notice>([["m0", { created_at: "2026-11-15T00:00:00.000Z", price: 200000 }]]);
+  let thrown = false;
+  try { await syncEmail(world, notices, { id: "m1", price: 180000, declaredPrevious: 200000, failBeforeRegistration: true }); } catch { thrown = true; }
+  assertEquals(thrown && world.state.rows[0].stato === "da_verificare", true, "la riapertura è stata scritta prima dell'interruzione");
+  userDiscard(world.state.rows[0], world.stamp());
+  assertEquals((await syncEmail(world, notices, { id: "m1", price: 180000, declaredPrevious: 200000 })).action, "none", "ripetizione: la notifica risulta già gestita, lo scarto dell'utente prevale");
+  assertEquals(notices.size, 2, "notifica registrata una sola volta");
 });
 
 // ---------- B2 · presa visione ----------

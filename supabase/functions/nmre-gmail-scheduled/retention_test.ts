@@ -83,14 +83,19 @@ Deno.test("lo storico delle decisioni si aggiunge senza perdere gli altri dati e
   assertEquals((start as Record<string,unknown>).storico_stato,undefined,"l'oggetto originale non viene modificato");
 });
 
-Deno.test("lo storico è limitato alle voci più recenti",()=>{
+Deno.test("lo storico è limitato eliminando solo le voci automatiche più vecchie",()=>{
   let value:Record<string,unknown>={};
   for(let index=0;index<STATUS_HISTORY_LIMIT+5;index++){
-    value=appendStatusHistory(value,{data:String(index),origine:"utente",azione:"prova"});
+    value=appendStatusHistory(value,{data:String(index),origine:"sincronizzazione",azione:"prova"});
   }
   const history=value.storico_stato as Array<{data:string}>;
-  assertEquals(history.length,STATUS_HISTORY_LIMIT,"limite rispettato");
+  assertEquals(history.length,STATUS_HISTORY_LIMIT,"limite rispettato con voci automatiche");
   assertEquals(history[history.length-1].data,String(STATUS_HISTORY_LIMIT+4),"l'ultima voce è la più recente");
+  let manual:Record<string,unknown>={};
+  for(let index=0;index<STATUS_HISTORY_LIMIT+5;index++){
+    manual=appendStatusHistory(manual,{data:String(index),origine:"utente",azione:"prova"});
+  }
+  assertEquals((manual.storico_stato as unknown[]).length,STATUS_HISTORY_LIMIT+5,"le decisioni dell'utente non vengono mai eliminate");
 });
 
 Deno.test("una nuova estrazione conserva lo storico delle decisioni",()=>{

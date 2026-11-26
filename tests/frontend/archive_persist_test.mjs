@@ -130,5 +130,18 @@ const enrichment = { success: true, final_url: "https://www.immobiliare.it/annun
   eq(h.state.row.dati_estratti.storico_stato.length, 2, "senza link: dati_estratti non toccato");
 }
 
+// 5) Campi corretti a mano (audit punto 5): registrati in campi_manuali, senza perdere
+// quelli registrati in precedenza né lo storico.
+{
+  const prior = { ...syncedDb, dati_estratti: { ...syncedDb.dati_estratti, campi_manuali: ["titolo"] } };
+  const h = harness(prior, { enrichment });
+  await h.run({ ...cached, dati_estratti: prior.dati_estratti }, { ...cardFields, superficie_mq: "95" });
+  eq((h.state.row.dati_estratti.campi_manuali || []).join(","), "titolo,comune,superficie_mq", "campi corretti a mano registrati, anche quelli precedenti");
+  eq(h.state.row.dati_estratti.storico_stato.length, 2, "campi manuali: storico conservato");
+  const untouched = harness(syncedDb, {});
+  await untouched.run({ ...cached, url: null }, { ...cardFields, comune: "Ancona" });
+  eq(untouched.state.row.dati_estratti.campi_manuali, undefined, "nessun campo modificato: nessun campo manuale registrato");
+}
+
 if (failures) { console.error(failures + " test non superati"); process.exit(1); }
 console.log("Tutti i test della preparazione all'archiviazione superati.");

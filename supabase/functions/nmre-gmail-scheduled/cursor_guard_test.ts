@@ -5,21 +5,50 @@ const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
 function assert(condition: boolean, message: string) {
   if (!condition) throw new Error(message);
 }
-const handlerStart = source.indexOf("export default");
-const handler = source.slice(handlerStart);
-const loopStart = handler.indexOf("for (const row of rows)");
+const handler = source.slice(source.indexOf("export default"));
+const failuresStart = handler.indexOf("const rowFailures: RowFailure[] = [];");
+const loopStart = handler.indexOf("processRowsIsolated(rows,");
+const completionCheck = handler.indexOf("assertAllRowsSaved(rowFailures);");
 const cursorCalls = [...handler.matchAll(/await saveSyncCursor\(/g)].map(match => match.index!);
 
-Deno.test("il cursore Gmail viene salvato una sola volta, dopo il ciclo dei candidati", () => {
-  assert(loopStart > 0, "ciclo dei candidati non trovato");
+Deno.test("le email vengono elaborate in isolamento e gli errori raccolti", () => {
+  assert(failuresStart > 0, "raccolta degli errori delle email non trovata");
+  assert(loopStart > failuresStart, "il ciclo dei candidati deve usare processRowsIsolated");
+  assert(completionCheck > loopStart, "dopo il ciclo deve esserci assertAllRowsSaved(rowFailures)");
+});
+
+Deno.test("il cursore Gmail viene salvato una sola volta, dopo la verifica che tutte le email siano salvate", () => {
   assert(cursorCalls.length === 1, "atteso un solo salvataggio del cursore, trovati " + cursorCalls.length);
+  assert(cursorCalls[0] > completionCheck, "il cursore deve essere salvato dopo assertAllRowsSaved");
   const lastWrite = Math.max(handler.lastIndexOf("applyNotificationToExistingCandidate("), handler.lastIndexOf("guardedCandidateUpdate("));
   assert(cursorCalls[0] > lastWrite, "il cursore deve essere salvato dopo tutte le scritture protette");
 });
 
-Deno.test("nessun errore del ciclo dei candidati viene ignorato prima del salvataggio del cursore", () => {
-  const between = handler.slice(loopStart, cursorCalls[0]);
-  assert(!/\bcatch\b/.test(between), "un catch tra il ciclo e il salvataggio del cursore potrebbe ignorare un conflitto e far avanzare il cursore");
+Deno.test("nessun errore viene ignorato tra la raccolta degli errori e il salvataggio del cursore", () => {
+  const region = handler.slice(failuresStart, cursorCalls[0]);
+  for (const match of region.matchAll(/\bcatch\b/g)) {
+    const after = region.slice(match.index!, match.index! + 260);
+    const before = region.slice(Math.max(0, match.index! - 400), match.index!);
+    const recorded = /rowFailures\.push\(/.test(after);
+    // Unica eccezione ammessa: il catch della lettura di un URL (portale non riconoscibile).
+    const urlParsing = /new URL\(/.test(before) && after.startsWith("catch {");
+    assert(recorded || urlParsing, "catch che non registra l'errore in rowFailures: " + after.slice(0, 80).replace(/\s+/g, " "));
+  }
+});
+
+Deno.test("un errore dell'archiviazione automatica non interrompe il ciclo", () => {
+  const archive = handler.indexOf('rpc("nmre_auto_archive_private_candidate"');
+  assert(archive > 0, "archiviazione automatica non trovata");
+  const after = handler.slice(archive, archive + 500);
+  assert(!/if \(archiveError\) throw/.test(after), "l'errore di archiviazione non deve interrompere il ciclo");
+  assert(/autoArchiveErrors\+\+/.test(after), "l'errore di archiviazione deve essere conteggiato");
+});
+
+Deno.test("la decisione sugli scartati precede la registrazione della notifica", () => {
+  const decision = handler.indexOf("applyNotificationToExistingCandidate(ctx.supabaseAdmin");
+  const upsert = handler.indexOf('.from("annunci_candidati_notifiche")\n          .upsert(');
+  assert(decision > 0 && upsert > 0, "decisione o registrazione della notifica non trovate");
+  assert(decision < upsert, "la decisione deve essere scritta prima della registrazione della notifica");
 });
 
 Deno.test("il ramo di errore non salva il cursore", () => {
@@ -33,6 +62,5 @@ Deno.test("il ramo di errore non salva il cursore", () => {
 Deno.test("le notifiche si registrano senza duplicati (owner_id + source_email_id)", () => {
   const upsert = handler.indexOf('.from("annunci_candidati_notifiche")\n          .upsert(');
   assert(upsert > 0, "registrazione della notifica con upsert non trovata");
-  const options = handler.slice(upsert, upsert + 1200);
-  assert(/onConflict: "owner_id,source_email_id"/.test(options), "la notifica deve usare onConflict owner_id,source_email_id");
+  assert(/onConflict: "owner_id,source_email_id"/.test(handler.slice(upsert, upsert + 1200)), "la notifica deve usare onConflict owner_id,source_email_id");
 });

@@ -11,6 +11,8 @@ import {
 import type { DiscardedNotificationPatchInfo, ExistingCandidateRow } from "./_shared/retention.ts";
 import { guardedCandidateUpdate } from "./_shared/guarded.ts";
 import { applyNotificationToExistingCandidate } from "./_shared/discard_flow.ts";
+import { assertAllRowsSaved, processRowsIsolated } from "./_shared/row_isolation.ts";
+import type { RowFailure } from "./_shared/row_isolation.ts";
 import {
   captureDubiousAlertsEnabled, dubiousAlertEvidence, promotedSellerClassification
 } from "./_shared/dubious.ts";
@@ -645,6 +647,8 @@ export default {
       // a ogni sincronizzazione.
       const discardedExisting = 0;
       let keptForReview = 0;
+      // Errori di singole email: raccolti, non bloccano le altre; il cursore non avanza.
+      const rowFailures: RowFailure[] = [];
       for (let index = 0; index < notRetainedKeys.length; index += 200) {
         const { data: notRetainedRows, error: notRetainedError } = await ctx.supabaseAdmin
           .from("annunci_candidati")
@@ -659,11 +663,15 @@ export default {
           // classificata come agenzia con NMRE_KEEP_AGENCY_CANDIDATES=false.
           const rule = !filterRule || filterRule === "accettata" ? "classificata_agenzia" : filterRule;
           // Aggiornamento protetto: la voce di storico si aggiunge al valore appena riletto.
-          const kept = await guardedCandidateUpdate(ctx.supabaseAdmin, owner, String(candidate.id),
-            "id,dati_estratti,deduplication_version,data_extraction_version,seller_classification_version,updated_at",
-            (current: any) => keptForReviewPatch(current, rule, new Date().toISOString()));
-          if (kept.status === "error") throw new Error("Aggiornamento delle notifiche non riconosciute non riuscito");
-          if (kept.status === "updated") keptForReview++;
+          try {
+            const kept = await guardedCandidateUpdate(ctx.supabaseAdmin, owner, String(candidate.id),
+              "id,source_email_id,dati_estratti,deduplication_version,data_extraction_version,seller_classification_version,updated_at",
+              (current: any) => keptForReviewPatch(current, rule, new Date().toISOString(), String(candidate.source_email_id || "") || null));
+            if (kept.status === "error") throw new Error("Aggiornamento delle notifiche non riconosciute non riuscito");
+            if (kept.status === "updated") keptForReview++;
+          } catch (error) {
+            rowFailures.push({ sourceEmailId: String(candidate.source_email_id || candidate.id), reason: error instanceof Error ? error.message.slice(0, 160) : "errore sconosciuto" });
+          }
         }
       }
 
@@ -746,9 +754,10 @@ export default {
       let notificationEventsLinked = 0;
       let autoArchived = 0;
       let reopenedOnPriceDrop = 0;
+      let autoArchiveErrors = 0;
       let notificationsAfterDiscard = 0;
       const promotedCandidateByEmail = new Map<string, string>();
-      for (const row of rows) {
+      rowFailures.push(...await processRowsIsolated(rows, row => String(row.source_email_id), async (row) => {
         const { data: currentCandidate, error: currentError } = await ctx.supabaseAdmin
           .from("annunci_candidati")
           .select("id,seller_manual_override,stato,listing_key,tipo_venditore,dati_estratti,deduplication_version,data_extraction_version,seller_classification_version")
@@ -912,28 +921,9 @@ export default {
           knownNotificationCreatedAt = knownNotification ? String(knownNotification.created_at || "1970-01-01T00:00:00Z") : null;
         }
 
-        const { error: notificationError } = await ctx.supabaseAdmin
-          .from("annunci_candidati_notifiche")
-          .upsert({
-            owner_id: owner,
-            candidate_id: candidateId,
-            source_email_id: row.source_email_id,
-            notification_sender: row.notification_sender,
-            email_subject: row.email_subject,
-            notified_at: row.data_pubblicazione,
-            listing_url: row.url || row.url_originale,
-            listing_price: currentPrice,
-            previous_price: hasPriceDrop ? previousPrice : null,
-            price_drop_amount: priceDropAmount,
-            price_drop_percent: priceDropPercent,
-            listing_surface_mq: row.superficie_mq,
-            listing_title: row.titolo,
-            listing_municipality: row.comune
-          }, { onConflict: "owner_id,source_email_id" });
-        if (notificationError) throw new Error("Salvataggio dello storico notifiche non riuscito");
-        notificationEventsLinked++;
-        if (forcedIds.has(row.source_email_id)) promotedCandidateByEmail.set(row.source_email_id, candidateId);
-
+        // La decisione viene scritta PRIMA di registrare la notifica: una notifica già
+        // registrata è sempre già stata valutata, quindi una rilettura (anche dopo
+        // un'interruzione) non può ripetere una riapertura o un contrassegno.
         // Notifiche su un candidato scartato. La decisione è presa sul valore appena
         // riletto (aggiornamento protetto) e non si ripete per la stessa email:
         // - nuova notifica con un NUOVO ribasso → il candidato torna "da verificare";
@@ -958,14 +948,39 @@ export default {
           if (outcome.written && outcome.action === "mark") notificationsAfterDiscard++;
         }
 
+        const { error: notificationError } = await ctx.supabaseAdmin
+          .from("annunci_candidati_notifiche")
+          .upsert({
+            owner_id: owner,
+            candidate_id: candidateId,
+            source_email_id: row.source_email_id,
+            notification_sender: row.notification_sender,
+            email_subject: row.email_subject,
+            notified_at: row.data_pubblicazione,
+            listing_url: row.url || row.url_originale,
+            listing_price: currentPrice,
+            previous_price: hasPriceDrop ? previousPrice : null,
+            price_drop_amount: priceDropAmount,
+            price_drop_percent: priceDropPercent,
+            listing_surface_mq: row.superficie_mq,
+            listing_title: row.titolo,
+            listing_municipality: row.comune
+          }, { onConflict: "owner_id,source_email_id" });
+        if (notificationError) throw new Error("Salvataggio dello storico notifiche non riuscito");
+        notificationEventsLinked++;
+        if (forcedIds.has(row.source_email_id)) promotedCandidateByEmail.set(row.source_email_id, candidateId);
+
         // Archivia solo i privati con prova esplicita ad alta affidabilita o verifica manuale gia salvata.
         if (row.tipo_venditore === "Privato") {
           const { data: archiveResult, error: archiveError } = await ctx.supabaseAdmin
             .rpc("nmre_auto_archive_private_candidate", { p_candidate_id: candidateId });
-          if (archiveError) throw new Error("Archiviazione automatica del privato non riuscita");
-          if (archiveResult?.archived === true) autoArchived++;
+          // Non bloccante: il candidato è già salvato e resta in coda per l'archiviazione manuale.
+          if (archiveError) autoArchiveErrors++;
+          else if (archiveResult?.archived === true) autoArchived++;
         }
-      }
+      }));
+      // Nessun avanzamento del cursore se anche una sola email non è stata salvata.
+      assertAllRowsSaved(rowFailures);
 
       // Esito delle promozioni richieste dal titolare.
       let promotedAlerts = 0;
