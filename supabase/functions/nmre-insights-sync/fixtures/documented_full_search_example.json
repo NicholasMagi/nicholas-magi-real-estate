@@ -1,0 +1,211 @@
+{
+ "_fonte": "Esempio di risposta della documentazione ufficiale Immobiliare.it Insights (Comps API), copiato senza i commenti. Non è una risposta reale del provider. Pagina: /webdocs/service/comps/full-search-by-attribute",
+ "risposta": {
+  "_metadata": {
+   "limit": 10,
+   "page": 1,
+   "pages": {
+    "first": 1,
+    "last": 15,
+    "next": 2,
+    "previous": null,
+    "self": 1
+   },
+   "query": {
+    "comparableType": "Offerta",
+    "contractType": "Vendita",
+    "marketZoneID": "10242",
+    "pubblicationStatus": [
+     "Nuovo",
+     "Pubblicato"
+    ],
+    "sorting": {
+     "by": "date",
+     "direction": "desc"
+    }
+   },
+   "total_count": 147,
+   "request_id": "8d9711b9-3f55-4e4e-8dd6-a15342b59cc1",
+   "map": "http://sandbox-comparables.realitycs.it/comparables/map/v2/8d9711b9-3f55-4e4e-8dd6-a15342b59cc1"
+  },
+  "items": [
+   {
+    "_metadata": [
+     "comparabili_centralitybelt_1",
+     "comparabili_heatingsystem_2",
+     "comparabili_maintenancestatus_2",
+     "comparabili_occupancystatus_1",
+     "comparabili_propertyquality_4",
+     "comparabili_pubblicationstatus_1",
+     "comparabili_comparabletype_1",
+     "comparabili_propertytype_1",
+     "comparabili_box_?",
+     "comparabili_gardentype_?",
+     "comparabili_energyclass_4",
+     "comparabili_cadastralregistry_?"
+    ],
+    "agencyID": null,
+    "attachments": {
+     "coverImage": "https://images.realitycs.it/img/122812060/1773189866",
+     "energyClass": null,
+     "image": [
+      "https://images.realitycs.it/img/122812060/1773189866",
+      "https://images.realitycs.it/img/122812060/1773189742",
+      "https://images.realitycs.it/img/122812060/1773189772",
+      "https://images.realitycs.it/img/122812060/1773189802",
+      "https://images.realitycs.it/img/122812060/1773189828",
+      "https://images.realitycs.it/img/122812060/1773189842",
+      "https://images.realitycs.it/img/122812060/1773189852",
+      "https://images.realitycs.it/img/122812060/1773189942",
+      "https://images.realitycs.it/img/122812060/1773189874",
+      "https://images.realitycs.it/img/122812060/1773189884",
+      "https://images.realitycs.it/img/122812060/1773189892",
+      "https://images.realitycs.it/img/122812060/1773189916",
+      "https://images.realitycs.it/img/122812060/1773189928",
+      "https://images.realitycs.it/img/122812060/1773189954"
+     ],
+     "layout": null
+    },
+    "cadastralData": [
+     {
+      "cadastralClass": null,
+      "cadastralCompartments": null,
+      "cadastralIncome": null,
+      "cadastralMapSheetNumber": null,
+      "cadastralMunicipality": null,
+      "cadastralParceSubParcelNumber": null,
+      "cadastralParcelNumber": null,
+      "cadastralPmCode": null,
+      "cadastralPropertyType": null,
+      "cadastralRegistry": null,
+      "cadastralSectionCode": null
+     }
+    ],
+    "clientType": "Professionista",
+    "collectionDate": "2025-09-01T00:00:00Z",
+    "comparableType": "Offerta",
+    "contractTypeID": null,
+    "dataOwnership": "realitycs",
+    "distanceFromPoi": null,
+    "duplicates": false,
+    "duplicatesParent": false,
+    "extra": {
+     "condoFees": 1200,
+     "lastCommercialUse": null,
+     "showCases": null,
+     "showCasesSize": null,
+     "title": "Nel cuore di Brera",
+     "broadbandInternet": null,
+     "chimneyFlue": null,
+     "fumeAspiration": null,
+     "reception": null,
+     "shedHeight": null,
+     "disabledPeopleAccess": null,
+     "securityAlarm": null,
+     "garageDoorWidth": null
+    },
+    "features": {
+     "box": null,
+     "brightness": null,
+     "centralityBelt": "Centrale",
+     "constructionYear": 1700,
+     "contructionYearNote": null,
+     "description": "Nel cuore di Brera, in via Cusani, cuore pulsante della capitale meneghina, troviamo Palazzo Cagnola, uno degli stabili più prestigiosi della città, contesto di altissimo standing, stabile vincolato alle belle arti, risalente all’epoca neoclassica. \nSi accede dall’androne con volta a botte nel porticato a colonne e capitelli di granito; da qui attraverso una sontuosa scalinata che rimanda a tempi antichi ed aristocratici, oppure utilizzando gli ascensori di ultima generazione perfettamente inseriti nel contesto, veniamo condotti al secondo piano dove Centrvm Real Estate propone in vendita esclusivo appartamento di 370 mq con triplo ingresso e suggestivo patio centrale. La location, attualmente destinata ad ufficio, può essere facilmente ri-convertita in residenziale, ricavandone una meravigliosa dimora di grande sapore. \nAttualmente l’appartamento è così sviluppato: al piano di ingresso troviamo la  reception con saletta d’attesa, grande sala riunioni con soffitti affrescati, 6 grandi uffici, due bagni, il patio interno piantumato dona un grande respiro alla location; al piano superiore troviamo un ulteriore grande ufficio pluri-postazioni, un salottino, un area break/cucina, uno spazio multi-funzionale, due bagni.\nLa magistrale ristrutturazione ha privilegiato la scelta di materiale top quality, la cura spasmodica del dettaglio, la ricerca di materiali pregiati e di arredi e rivestimenti di rara ricercatezza.  \nLo stabile è dotato di palestra condominiale e di servizio di reception per l’intera giornata. Oggetto unico ed introvabile.Le immagini sono fornite al solo scopo illustrativo e non costituiscono elemento contrattuale.",
+     "elevator": true,
+     "energyClass": "C",
+     "exposure": null,
+     "facilityList": [
+      "Impianto di allarme",
+      "Fibra ottica",
+      "Porta blindata",
+      "cancello elettrico",
+      "videoCitofono"
+     ],
+     "fitnessForPurpose": null,
+     "gardenType": null,
+     "heatingSystem": "Condominiale",
+     "maintenanceStatus": "Ottimo / Ristrutturato",
+     "numberOfBalconies": null,
+     "numberOfBathrooms": 4,
+     "numberOfBuildingFloor": 3,
+     "numberOfGarages": 0,
+     "occupancyStatus": "Libero",
+     "propertyQuality": "Lusso",
+     "qualityOfFinishes": null,
+     "unitFloor": null,
+     "viewQuality": null
+    },
+    "grossSquareFootage": 370,
+    "lastUpdateDate": "2025-09-01T00:00:00Z",
+    "listingID": null,
+    "listingUrl": "https://www.immobiliare.it/annunci/122812060/",
+    "location": {
+     "address": "Via Cusani",
+     "district": null,
+     "latitude": 45.4685,
+     "longitude": 9.1845,
+     "marketZone": "Duomo",
+     "municipality": "Milano",
+     "municipalityID": 15146,
+     "province": "Milano",
+     "region": "Lombardia",
+     "streetNumber": "5",
+     "zipCode": "20121"
+    },
+    "marketData": {
+     "askingReductionRate": null,
+     "askingReductionSteps": null,
+     "municipalityVisibilityIndex": 5,
+     "quarterMacroareaTrend": null,
+     "quarterMicroareaTrend": null,
+     "quarterMunicipalityTrend": null,
+     "semesterMacroareaTrend": null,
+     "semesterMicroareaTrend": null,
+     "semesterMunicipalityTrend": null,
+     "timeOnTheMarket": null,
+     "zonalVisibilityIndex": 5
+    },
+    "propertyType": "Appartamento",
+    "pubblicationStatus": "Nuovo",
+    "realEstateRegisters": {
+     "deedDate": null,
+     "deedType": null,
+     "folder": null,
+     "generalNumber": null,
+     "inventory": null,
+     "notary": null,
+     "particularNumber": null,
+     "pdfFileUrl": null,
+     "propertyRegistryId": null
+    },
+    "rooms": 6,
+    "sourceName": "immobiliare.it",
+    "subTypologyID": null,
+    "typologyID": null,
+    "unitGrossSquareFootage": [
+     {
+      "_metadata": [
+       "comparabili_unitgrosssquarefootagetype_1",
+       "comparabili_unitgrosssquarefootagefloor_?"
+      ],
+      "floor": "2",
+      "main_surface": true,
+      "surface_percentage": 100,
+      "total_surface": 370,
+      "type": "Abitazione"
+     }
+    ],
+    "uuid": "17a0ed6e-afa4-4f82-adca-deddd3f22dda",
+    "value": {
+     "askingPrice": 8200000,
+     "askingPricePsm": 22162,
+     "discount": null,
+     "price": null,
+     "pricePsm": null,
+     "value": null,
+     "valuePsm": null
+    }
+   }
+  ]
+ }
+}

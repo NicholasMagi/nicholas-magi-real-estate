@@ -68,7 +68,7 @@ jobs:
           echo "Auto-verifica superata: la Fase 2 in supabase/migrations viene rilevata."
 
       - name: Test Immobiliare Insights API adapter
-        run: deno test supabase/functions/nmre-insights-sync/provider_test.ts
+        run: deno test --allow-read=. supabase/functions/nmre-insights-sync/provider_test.ts supabase/functions/nmre-insights-sync/sync_test.ts supabase/functions/nmre-insights-sync/index_guard_test.ts
 
       - name: Check embedded frontend JavaScript
         run: |

@@ -1,0 +1,165 @@
+{
+ "_fonte": "Esempio di risposta della documentazione ufficiale Immobiliare.it Insights (Comps API), copiato senza i commenti. Non è una risposta reale del provider. Pagina: /webdocs/service/comps/comparable-detail",
+ "risposta": {
+  "_metadata": [
+   "comparabili_centralitybelt_1",
+   "comparabili_heatingsystem_?",
+   "comparabili_maintenancestatus_2",
+   "comparabili_occupancystatus_1",
+   "comparabili_propertyquality_4",
+   "comparabili_pubblicationstatus_3",
+   "comparabili_comparabletype_1",
+   "comparabili_propertytype_1",
+   "comparabili_energyclass_4",
+   "comparabili_cadastralregistry_?"
+  ],
+  "agencyID": null,
+  "attachments": {
+   "coverImage": "https://images.realitycs.it/img/119290871/1671256689",
+   "energyClass": null,
+   "image": [
+    "https://images.realitycs.it/img/119290871/1671256689"
+   ],
+   "layout": null
+  },
+  "clientType": null,
+  "cadastralData": [
+   {
+    "cadastralClass": null,
+    "cadastralCompartments": null,
+    "cadastralIncome": null,
+    "cadastralMapSheetNumber": null,
+    "cadastralMunicipality": null,
+    "cadastralParceSubParcelNumber": null,
+    "cadastralParcelNumber": null,
+    "cadastralPmCode": null,
+    "cadastralPropertyType": null,
+    "cadastralRegistry": null,
+    "cadastralSectionCode": null
+   }
+  ],
+  "collectionDate": "2025-03-20T00:00:00Z",
+  "comparableType": "Offerta",
+  "contractTypeID": 1,
+  "dataOwnership": "realitycs",
+  "duplicates": 10,
+  "duplicatesParent": false,
+  "extra": {
+   "condoFees": 100,
+   "lastCommercialUse": null,
+   "showCases": null,
+   "showCasesSize": null,
+   "title": "BILOCALE DI LUSSO",
+   "broadbandInternet": null,
+   "chimneyFlue": null,
+   "fumeAspiration": null,
+   "reception": null,
+   "shedHeight": null,
+   "disabledPeopleAccess": null,
+   "securityAlarm": null,
+   "garageDoorWidth": null
+  },
+  "features": {
+   "box": null,
+   "brightness": null,
+   "centralityBelt": "Centrale",
+   "constructionYear": null,
+   "contructionYearNote": null,
+   "description": "Situato a 100 metri da Piazza del Duomo, in uno degli stabili più esclusivi del centro di Milano, proponiamo un raffinato appartamento di 64 mq con un ampio terrazzo privato, completamente ristrutturato e arredato. L’immobile si sviluppa su spazi ben distribuiti e si compone di: \n• Zona living spaziosa e luminosa, con accesso diretto al terrazzo, arredata con divano, zona pranzo e arredi moderni; \n• Cucina a vista, dotata di elettrodomestici nuovi e di alta qualità; \n• Camera da letto matrimoniale, elegante e completa di ampio armadio su misura; \n• Bagno moderno, con finiture di pregio, box doccia e accessori di design. \n• Terrazzo privato, un angolo verde esclusivo ideale per momenti di relax o per cene all’aperto. \nLa posizione strategica a pochi passi dalla Piazza del Duomo permette di vivere Milano nella sua forma più autentica, con accesso immediato a boutique di lusso, ristoranti, servizi e alla fermata della metro Duomo. \n\nContattaci per maggiori informazioni. \n\nTutte le informazioni relative a immobili in vendita o in locazione provengono da fonti ritenute affidabili, ma non viene fornita alcuna garanzia relativamente alla loro esattezza e la stessa è soggetta a errori, omissioni, cambi di prezzo e di canone o di ritiro dal mercato senza alcun preavviso prima della compravendita. Le planimetrie sono da ritenersi indicative. I contenuti di questo documento non costituiscono in ogni caso elementi validi ai fini contrattuali.",
+   "elevator": true,
+   "energyClass": "C",
+   "exposure": null,
+   "facilityList": [
+    "Impianto di allarme",
+    "Porta blindata",
+    "videoCitofono"
+   ],
+   "fitnessForPurpose": null,
+   "gardenType": null,
+   "heatingSystem": "",
+   "maintenanceStatus": "Ottimo / Ristrutturato",
+   "numberOfBalconies": null,
+   "numberOfBathrooms": 1,
+   "numberOfBuildingFloor": 4,
+   "numberOfGarages": 0,
+   "occupancyStatus": "Libero",
+   "propertyQuality": "Lusso",
+   "qualityOfFinishes": null,
+   "unitFloor": 3,
+   "viewQuality": null
+  },
+  "grossSquareFootage": 64,
+  "lastUpdateDate": "2025-03-28T00:00:00Z",
+  "lastUpdateDateV2": null,
+  "listingID": null,
+  "listingUrl": "https://www.immobiliare.it/annunci/119290871/",
+  "location": {
+   "address": "Piazza del Duomo",
+   "district": null,
+   "latitude": 45.464,
+   "longitude": 9.1905,
+   "marketZone": "Duomo",
+   "municipality": "Milano",
+   "municipalityID": 15146,
+   "province": "Milano",
+   "region": "Lombardia",
+   "streetNumber": null,
+   "zipCode": null
+  },
+  "marketData": {
+   "askingReductionRate": null,
+   "askingReductionSteps": null,
+   "municipalityVisibilityIndex": 5,
+   "quarterMacroareaTrend": null,
+   "quarterMicroareaTrend": null,
+   "quarterMunicipalityTrend": null,
+   "semesterMacroareaTrend": null,
+   "semesterMicroareaTrend": null,
+   "semesterMunicipalityTrend": null,
+   "timeOnTheMarket": null,
+   "zonalVisibilityIndex": 5
+  },
+  "projUuid": null,
+  "propertyType": "Appartamento",
+  "pubblicationStatus": "Rimosso",
+  "realEstateRegisters": {
+   "deedDate": null,
+   "deedType": null,
+   "folder": null,
+   "generalNumber": null,
+   "inventory": null,
+   "notary": null,
+   "particularNumber": null,
+   "pdfFileUrl": null,
+   "propertyRegistryId": null
+  },
+  "rooms": 2,
+  "sourceName": "immobiliare.it",
+  "subTypologyID": null,
+  "typologyID": 4,
+  "unitGrossSquareFootage": [
+   {
+    "_metadata": [
+     "comparabili_unitgrosssquarefootagetype_1",
+     "comparabili_unitgrosssquarefootagefloor_?"
+    ],
+    "floor": "3",
+    "main_surface": true,
+    "surface_percentage": 100,
+    "total_surface": 64,
+    "type": "Abitazione"
+   }
+  ],
+  "uuid": "bce151d6-2368-4cd0-a99f-ef46eb85901e",
+  "value": {
+   "askingPrice": 890000,
+   "askingPricePsm": 13906,
+   "discount": null,
+   "price": null,
+   "pricePsm": null,
+   "value": null,
+   "valuePsm": null
+  },
+  "request_id": "9d16e3d7-1a86-4804-a525-a7c5f4220992"
+ }
+}
