@@ -145,6 +145,28 @@ button:disabled{opacity:.55;cursor:not-allowed}
 
 .candidate-enrichment-result{margin-top:8px}.candidate-enrichment-result .candidate-quality{margin:8px 0}.candidate-enrichment-result .crm-entry{display:flex;justify-content:space-between;gap:12px}.candidate-enrichment-result .crm-entry strong{flex:0 0 115px}.candidate-enrichment-result .crm-entry span{text-align:right;overflow-wrap:anywhere}.candidate-enrichment-result .hint{margin:8px 0}
 .candidate-recovery-panel{margin:14px 0;padding:14px;border:1px solid #e2e7ee;border-radius:12px;background:#fbfcfe}
+.subito-browser-import{margin:14px 0;padding:13px;border:1px solid var(--line);border-radius:11px;background:#fafbfc}
+.subito-browser-import>summary{cursor:pointer;font-weight:800;color:#35435a}
+.subito-browser-import label{display:block;font-size:11px;font-weight:700;margin:10px 0 5px}
+.subito-browser-import textarea{width:100%;min-height:120px;resize:vertical;border:1px solid #d9dfe8;border-radius:9px;padding:10px;font:inherit;font-size:12px;line-height:1.45}
+.subito-browser-import-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.subito-browser-import-actions button{min-height:40px}
+.subito-browser-preview{margin-top:12px}
+.subito-browser-summary{font-size:12px;color:var(--muted);margin:8px 0;line-height:1.5}
+.subito-browser-table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:9px;background:#fff}
+.subito-browser-table{width:100%;min-width:760px;border-collapse:collapse;font-size:11px}
+.subito-browser-table th,.subito-browser-table td{padding:9px 10px;border-bottom:1px solid #edf0f4;text-align:left;vertical-align:top}
+.subito-browser-table th{background:#f7f8fa;color:#526075}
+.subito-browser-table tr:last-child td{border-bottom:0}
+.subito-browser-table .subito-browser-title{font-weight:700;color:#35435a;max-width:330px}
+.subito-browser-table .subito-browser-meta{display:block;margin-top:3px;color:var(--muted);font-size:10px;line-height:1.4}
+.subito-browser-duplicate{color:#8b4e14;font-weight:700}
+.subito-browser-already{color:#6b7280;font-weight:700}
+.subito-browser-import-row{white-space:nowrap}
+.subito-browser-import-row input{width:16px;height:16px}
+.subito-browser-preview-note{font-size:11px;line-height:1.5;color:var(--muted);margin:8px 0}
+@media(max-width:600px){.subito-browser-import-actions button{flex:1 1 100%}}
+
 .candidate-recovery-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
 .candidate-recovery-head h3{margin:0;font-size:15px;color:var(--ink)}
 .candidate-recovery-head p{margin:4px 0 0;font-size:11px;color:var(--muted);line-height:1.5;max-width:650px}
@@ -1235,6 +1257,20 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
     </div>
   </div>
   <p class="candidate-inbox-intro">Qui trova soltanto le email immobiliari ancora da verificare. Quando conferma che il venditore è un privato, NMRE trasferisce l’immobile nell’Archivio; i privati riconosciuti automaticamente con prove affidabili vengono archiviati senza passare da questa coda. Le agenzie e le email scartate vengono escluse.</p>
+  <details class="crm candidate-recovery subito-browser-import" id="subitoBrowserImportPanel">
+    <summary>Importa annunci da una pagina Subito aperta nel browser</summary>
+    <p class="hint">Dalla pagina dei risultati Subito copi i dati con lo script di acquisizione e li incolli qui. NMRE prepara un'anteprima, confronta ogni ID con Opportunità e Archivio e non modifica i record già presenti. Le schede importate restano «Da verificare»: la novità e il venditore non sono considerati dimostrati.</p>
+    <p class="hint">L'importazione crea una normale opportunità e la relativa notifica. Selezioni soltanto gli annunci che desidera acquisire; i possibili duplicati vengono evidenziati e non selezionati automaticamente.</p>
+    <label for="subitoBrowserPayload">Dati copiati dalla Console di Subito</label>
+    <textarea id="subitoBrowserPayload" rows="7" placeholder="Incolli qui il JSON copiato dalla pagina dei risultati Subito"></textarea>
+    <div class="candidate-actions subito-browser-import-actions">
+      <button class="secondary" id="subitoBrowserAnalyze" type="button">Analizza e mostra anteprima</button>
+      <button class="secondary" id="subitoBrowserSelectSafe" type="button" disabled>Seleziona tutti quelli senza duplicati</button>
+      <button id="subitoBrowserImportSelected" type="button" disabled>Importa selezionati</button>
+    </div>
+    <div id="subitoBrowserPreview" class="subito-browser-preview"></div>
+    <div id="subitoBrowserMsg" class="status" role="status" aria-live="polite"></div>
+  </details>
   <div class="candidate-inbox-toolbar">
     <div class="candidate-inbox-search">
       <label for="candidateSearch">Cerca nelle email</label>
@@ -5276,6 +5312,255 @@ function renderSourceDetails(item){
   return '<details class="candidate-quality candidate-source-details"><summary>Dettagli estratti automaticamente · '+rows.length+' campi · '+safe(source.provider||"Fonte registrata")+'</summary>'+rowsHtml+excerpt+'</details>';
 }
 
+
+function nmreSubitoBrowserAdId(value){
+  try{
+    const url=new URL(String(value||""));
+    const host=url.hostname.toLowerCase().replace(/^www\\./,"");
+    if(host!=="subito.it"&&!host.endsWith(".subito.it"))return null;
+    const match=url.pathname.match(/^\\/[a-z0-9-]+\\/[a-z0-9-]*?-?(\\d{6,})\\.htm$/i);
+    return match?match[1]:null;
+  }catch{return null;}
+}
+
+function nmreParseSubitoBrowserPayload(value){
+  let payload;
+  try{payload=typeof value==="string"?JSON.parse(value):value;}catch{return {ok:false,error:"Il contenuto non è un JSON valido."};}
+  if(!payload||payload.source!=="nmre-subito-browser-v1"||!Array.isArray(payload.items)){
+    return {ok:false,error:"Formato non riconosciuto. Copi i dati con lo script NMRE dalla pagina dei risultati Subito."};
+  }
+  if(payload.items.length<1||payload.items.length>200)return {ok:false,error:"Il numero di annunci deve essere compreso tra 1 e 200."};
+  const searchUrl=validUrl(payload.search_url);
+  let search;
+  try{search=new URL(searchUrl||"");}catch{return {ok:false,error:"Link della ricerca Subito mancante o non valido."};}
+  const searchHost=search.hostname.toLowerCase().replace(/^www\\./,"");
+  if(search.protocol!=="https:"||(searchHost!=="subito.it"&&!searchHost.endsWith(".subito.it"))){
+    return {ok:false,error:"Il link della pagina deve appartenere a Subito ed essere HTTPS."};
+  }
+  const captured=Date.parse(String(payload.captured_at||""));
+  const capturedAt=Number.isFinite(captured)?new Date(captured).toISOString():new Date().toISOString();
+  const items=[];
+  const seen=new Set();
+  let skipped=0;
+  for(const raw of payload.items){
+    const url=validUrl(raw&&raw.url);
+    const id=nmreSubitoBrowserAdId(url);
+    if(!id||(raw.id&&String(raw.id)!==id)||seen.has(id)){skipped++;continue;}
+    seen.add(id);
+    const number=(input,min,max,integer=false)=>{
+      if(input===null||input===undefined||input==="")return null;
+      const n=Number(input);
+      return Number.isFinite(n)&&n>=min&&n<=max&&(!integer||Number.isInteger(n))?n:null;
+    };
+    const text=(input,max)=>String(input??"").replace(/\\s+/g," ").trim().slice(0,max)||null;
+    const images=Array.isArray(raw.images)?raw.images.map(validUrl).filter(src=>{
+      try{return !!src&&new URL(src).protocol==="https:";}catch{return false;}
+    }).slice(0,10):[];
+    const date=Date.parse(String(raw.published_at||""));
+    items.push({
+      id,url,title:text(raw.title,250)||("Annuncio Subito "+id),
+      description:text(raw.description,2000),
+      price:number(raw.price,0,1000000000),
+      location:text(raw.location,120),
+      surface_mq:number(raw.surface_mq,1,100000,true),
+      rooms:number(raw.rooms,0.5,100),
+      images,
+      published_at:Number.isFinite(date)?new Date(date).toISOString():null,
+      advertiser_company:typeof raw.advertiser_company==="boolean"?raw.advertiser_company:null
+    });
+  }
+  if(!items.length)return {ok:false,error:"Non è stato trovato nessun link valido a una scheda Subito con ID numerico."};
+  return {ok:true,meta:{searchUrl,capturedAt,totalReported:Number(payload.total)||payload.items.length,skipped},items};
+}
+
+function nmreBuildSubitoBrowserCandidate(item,meta,ownerId,batchId){
+  const listingUrl=new URL(item.url);
+  const listingKey="subito.it"+listingUrl.pathname;
+  const sourceId="subito-browser:"+batchId+"#subito-"+item.id;
+  const propertyFields={
+    titolo:item.title,comune:item.location,prezzo:item.price,tipologia_immobile:null,
+    superficie_mq:item.surface_mq,locali:item.rooms,camere:null,bagni:null
+  };
+  return {
+    owner_id:ownerId,
+    titolo:item.title,
+    comune:item.location,
+    prezzo:item.price,
+    tipologia_immobile:null,
+    superficie_mq:item.surface_mq,
+    locali:item.rooms,
+    camere:null,
+    bagni:null,
+    tipo_venditore:"Da verificare",
+    seller_confidence:0,
+    seller_evidence:"Acquisizione dalla pagina Subito aperta nel browser. Novità non dimostrata; verificare la scheda e l'identità del venditore prima di confermare.",
+    portale:"Subito",
+    url:item.url,
+    url_originale:meta.searchUrl,
+    data_pubblicazione:null,
+    notification_sender:"Subito · importazione da browser",
+    email_subject:"Importazione manuale dalla pagina Subito",
+    source_email_id:sourceId,
+    dedup_key:"subito:"+item.id,
+    stato:"da_verificare",
+    data_extraction_version:1,
+    deduplication_version:1,
+    listing_key:listingKey,
+    dati_fonte:{
+      provider:"Subito · importazione manuale da browser",
+      source_email_id:sourceId,
+      sender:"Subito",
+      subject:"Importazione manuale dalla pagina risultati",
+      received_at:null,
+      ricerca_subito:meta.searchUrl,
+      url_ricerca:meta.searchUrl,
+      captured_at:meta.capturedAt,
+      annunci_letti:meta.totalReported,
+      browser_import:true
+    },
+    dati_estratti:{
+      riduzione_prezzo:null,
+      campi_immobile:propertyFields,
+      subito:{
+        id:item.id,url:item.url,descrizione:item.description,
+        immagini:item.images,pubblicato_il:item.published_at,
+        inserzionista_professionale:item.advertiser_company,
+        fonte_dati:"browser_next_data",
+        dettagli_completi:!!(item.title&&item.location&&item.price!==null&&item.surface_mq!==null),
+        novita_non_dimostrata:true,
+        motivo_novita:"acquisizione_browser_non_dimostrabile"
+      }
+    }
+  };
+}
+
+let nmreSubitoBrowserPreviewState=null;
+
+function nmreSubitoBrowserRowAdId(row){
+  const dedup=String(row&&row.dedup_key||"").match(/^subito:(\\d{6,})$/);
+  if(dedup)return dedup[1];
+  for(const value of [row&&row.url,row&&row.listing_key]){
+    if(!value)continue;
+    const candidate=String(value).startsWith("subito.it/")
+      ?"https://www."+String(value):value;
+    const id=nmreSubitoBrowserAdId(candidate);
+    if(id)return id;
+  }
+  return null;
+}
+
+function nmreRenderSubitoBrowserPreview(){
+  const target=$("subitoBrowserPreview");
+  const state=nmreSubitoBrowserPreviewState;
+  if(!state||!target)return;
+  const exactOp=state.items.filter(entry=>entry.exact==="opportunita").length;
+  const exactArchive=state.items.filter(entry=>entry.exact==="archivio").length;
+  const possible=state.items.filter(entry=>entry.possible).length;
+  const available=state.items.filter(entry=>!entry.exact&&!entry.imported).length;
+  target.innerHTML=
+    '<div class="subito-browser-summary"><strong>'+state.items.length+' annunci riconosciuti</strong> · '+exactOp+' già nelle Opportunità · '+exactArchive+' già in Archivio · '+possible+' possibili duplicati · '+available+' da valutare. '
+      +'I record esistenti non vengono aggiornati.</div>'
+    +'<div class="subito-browser-table-wrap"><table class="subito-browser-table"><thead><tr><th>Importa</th><th>Annuncio</th><th>Comune</th><th>Prezzo</th><th>Pubblicato</th><th>Esito controllo</th></tr></thead><tbody>'
+    +state.items.map(entry=>{
+      const item=entry.item;
+      const status=entry.imported?'<span class="subito-browser-already">Importato ora</span>'
+        :entry.exact?'<span class="subito-browser-already">Già '+(entry.exact==="opportunita"?"nelle Opportunità":"in Archivio")+'</span>'
+        :entry.possible?'<span class="subito-browser-duplicate">Possibile duplicato: '+safe(entry.possible.item&&entry.possible.item.titolo||entry.possible.item&&entry.possible.item.id||"verificare")+'</span>'
+        :'<span>Disponibile</span>';
+      const disabled=entry.exact||entry.imported?" disabled":"";
+      const price=item.price===null?"n/d":new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(item.price);
+      const published=item.published_at?new Date(item.published_at).toLocaleString("it-IT",{dateStyle:"short",timeStyle:"short"}):"n/d";
+      return '<tr><td class="subito-browser-import-row"><input type="checkbox" data-subito-browser-id="'+safe(item.id)+'"'+disabled+' aria-label="Seleziona '+safe(item.title)+'"></td>'
+        +'<td><div class="subito-browser-title">'+safe(item.title)+'</div><span class="subito-browser-meta">ID '+safe(item.id)+' · <a href="'+safe(item.url)+'" target="_blank" rel="noopener noreferrer">Apri su Subito</a></span></td>'
+        +'<td>'+safe(item.location||"n/d")+(item.surface_mq?' <span class="subito-browser-meta">'+safe(item.surface_mq)+' m²</span>':"")+'</td>'
+        +'<td>'+safe(price)+(item.rooms?' <span class="subito-browser-meta">'+safe(item.rooms)+' locali</span>':"")+'</td>'
+        +'<td>'+safe(published)+'</td><td>'+status+'</td></tr>';
+    }).join("")
+    +'</tbody></table></div>'
+    +'<p class="subito-browser-preview-note">Le schede selezionate saranno create come «Da verificare». Nessuna viene considerata nuova con certezza, nessun venditore viene riconosciuto automaticamente e nessun immobile passa direttamente nell’Archivio.</p>';
+  $("subitoBrowserSelectSafe").disabled=!state.items.some(entry=>!entry.exact&&!entry.possible&&!entry.imported);
+  $("subitoBrowserImportSelected").disabled=!state.items.some(entry=>!entry.exact&&!entry.imported&&target.querySelector('[data-subito-browser-id="'+entry.item.id+'"]')?.checked);
+}
+
+async function nmreAnalyzeSubitoBrowserPayload(){
+  if(!currentUser||!supabase){$("subitoBrowserMsg").textContent="Sessione non disponibile. Effettui nuovamente l'accesso.";return;}
+  const parsed=nmreParseSubitoBrowserPayload($("subitoBrowserPayload").value);
+  if(!parsed.ok){nmreSubitoBrowserPreviewState=null;$("subitoBrowserPreview").innerHTML="";$("subitoBrowserMsg").textContent=parsed.error;return;}
+  $("subitoBrowserMsg").textContent="Controllo dei duplicati in corso…";
+  $("subitoBrowserAnalyze").disabled=true;
+  try{
+    const [candidateResult,archiveResult]=await Promise.all([
+      nmreFetchAllById(()=>supabase.from("annunci_candidati").select("id,dedup_key,listing_key,url,titolo,comune,prezzo,tipologia_immobile,superficie_mq,stato,seller_manual_override").eq("owner_id",currentUser.id)),
+      nmreFetchAllById(()=>supabase.from("annunci").select("id,listing_key,url,url_originale,titolo,comune,prezzo,tipologia_immobile,superficie_mq,deleted_at").eq("owner_id",currentUser.id))
+    ]);
+    if(candidateResult.error||archiveResult.error)throw new Error("Non è stato possibile confrontare tutti i record con Opportunità e Archivio.");
+    const candidates=candidateResult.data||[];
+    const archive=archiveResult.data||[];
+    const knownCandidateIds=new Set(candidates.map(nmreSubitoBrowserRowAdId).filter(Boolean));
+    const knownArchiveIds=new Set(archive.map(nmreSubitoBrowserRowAdId).filter(Boolean));
+    const enriched=parsed.items.map(item=>{
+      const exact=knownCandidateIds.has(item.id)?"opportunita":knownArchiveIds.has(item.id)?"archivio":null;
+      const possible=exact?null:findCandidateDuplicate(item,candidates,archive);
+      return {item,exact,possible,imported:false};
+    });
+    nmreSubitoBrowserPreviewState={meta:parsed.meta,items:enriched};
+    $("subitoBrowserMsg").textContent=(parsed.meta.skipped?parsed.meta.skipped+" voci non valide o ripetute escluse. ":"")
+      +"Anteprima pronta. Selezioni manualmente gli annunci da importare.";
+    nmreRenderSubitoBrowserPreview();
+  }catch(error){
+    nmreSubitoBrowserPreviewState=null;
+    $("subitoBrowserPreview").innerHTML="";
+    $("subitoBrowserMsg").textContent=error.message||"Errore durante il controllo dei duplicati.";
+  }finally{$("subitoBrowserAnalyze").disabled=false;}
+}
+
+function nmreUpdateSubitoBrowserSelection(){
+  if(!nmreSubitoBrowserPreviewState)return;
+  const target=$("subitoBrowserPreview");
+  const selected=target.querySelectorAll("[data-subito-browser-id]:checked").length;
+  $("subitoBrowserImportSelected").disabled=selected===0;
+  $("subitoBrowserImportSelected").textContent=selected?"Importa "+selected+" selezionati":"Importa selezionati";
+}
+
+async function nmreImportSelectedSubitoBrowserItems(){
+  const state=nmreSubitoBrowserPreviewState;
+  if(!state||!currentUser||!supabase)return;
+  const target=$("subitoBrowserPreview");
+  const selectedIds=new Set([...target.querySelectorAll("[data-subito-browser-id]:checked")].map(input=>input.dataset.subitoBrowserId));
+  const selected=state.items.filter(entry=>selectedIds.has(entry.item.id)&&!entry.exact&&!entry.imported);
+  if(!selected.length)return;
+  const confirmed=confirm("Conferma l'importazione di "+selected.length+" annunci come «Da verificare»?\n\nI record esistenti non verranno modificati. La normale notifica di nuova opportunità verrà generata per ogni scheda creata.");
+  if(!confirmed)return;
+  const button=$("subitoBrowserImportSelected");
+  button.disabled=true;
+  $("subitoBrowserMsg").textContent="Importazione in corso…";
+  const batchId=Date.now().toString(36);
+  let inserted=0,duplicates=0;
+  let failure="";
+  for(const entry of selected){
+    try{
+      const row=nmreBuildSubitoBrowserCandidate(entry.item,state.meta,currentUser.id,batchId);
+      const {error}=await supabase.from("annunci_candidati").insert(row);
+      if(error){
+        if(error.code==="23505"){duplicates++;entry.exact="opportunita";continue;}
+        failure=error.message||"Errore durante il salvataggio.";
+        break;
+      }
+      entry.imported=true;
+      inserted++;
+    }catch(error){
+      failure=error.message||"Errore durante la preparazione della scheda.";
+      break;
+    }
+  }
+  nmreRenderSubitoBrowserPreview();
+  await loadCandidates({force:true});
+  $("subitoBrowserMsg").textContent=inserted+" annunci importati come «Da verificare»"
+    +(duplicates?" · "+duplicates+" duplicati ignorati":"")
+    +(failure?" · Interruzione: "+failure:"")
+    +". Nessun record preesistente è stato sovrascritto.";
+}
+
 function candidateSourceTheme(portal){
   const value=String(portal||"").toLocaleLowerCase("it");
   if(value.includes("idealista"))return "idealista";
@@ -7592,6 +7877,19 @@ $("candidateRecoveryPanel").addEventListener("toggle",async()=>{
 });
 $("candidateDubiousFilter").addEventListener("change",renderDubiousAlerts);
 $("refreshCandidates").addEventListener("click",()=>loadCandidates({force:true}));
+$("subitoBrowserAnalyze").addEventListener("click",nmreAnalyzeSubitoBrowserPayload);
+$("subitoBrowserSelectSafe").addEventListener("click",()=>{
+  const target=$("subitoBrowserPreview");
+  target.querySelectorAll("[data-subito-browser-id]").forEach(input=>{
+    const row=nmreSubitoBrowserPreviewState?.items.find(entry=>entry.item.id===input.dataset.subitoBrowserId);
+    input.checked=!!row&&!row.exact&&!row.possible&&!row.imported;
+  });
+  nmreUpdateSubitoBrowserSelection();
+});
+$("subitoBrowserPreview").addEventListener("change",event=>{
+  if(event.target.matches("[data-subito-browser-id]"))nmreUpdateSubitoBrowserSelection();
+});
+$("subitoBrowserImportSelected").addEventListener("click",nmreImportSelectedSubitoBrowserItems);
 $("archiveManualToggle").addEventListener("click",()=>{
   const panel=$("archiveManualPanel");
   panel.hidden=!panel.hidden;
