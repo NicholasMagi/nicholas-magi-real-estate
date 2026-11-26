@@ -1186,7 +1186,7 @@ Riprodotta con la fixture dell'email (`fixtures/subito_saved_search_email.html`)
   avvisi di un singolo annuncio seguono il percorso normale.
 - **Link**: si legge dall'HTML originale dell'email (nuovo campo `bodyHtml`). Si usa il
   pulsante «Vedi i nuovi annunci», gestendo anche i redirect con l'URL annidato. Si
-  tolgono `utm_*` e `kxconfid`. Senza pulsante si usa un altro link alla ricerca;
+  tolgono i parametri di tracciamento `utm_*`, ma si conserva `kxconfid` nell’URL usato per aprire la ricerca; il token viene escluso soltanto dalla chiave stabile della ricerca, perché può variare tra email. Senza pulsante si usa un altro link alla ricerca;
   altrimenti `link_mancante`.
 - **Pagina dei risultati**: richiesta GET normale con un timeout di 12 secondi. Pagine
   protette (CAPTCHA, verifica anti-robot, 401, 403, 429) vengono registrate come

@@ -43,7 +43,10 @@ export type SubitoPage = {
   items: SubitoItem[];
 };
 
-const TRACKING_PARAMS = /^(?:utm_[a-z_]+|kxconfid|xtor|from|fbclid|gclid|mc_[a-z]+)$/i;
+const TRACKING_PARAMS = /^(?:utm_[a-z_]+|xtor|from|fbclid|gclid|mc_[a-z]+)$/i;
+// kxconfid viene mantenuto nell’URL usato per la richiesta a Subito, ma non identifica
+// una ricerca distinta: può cambiare tra email della stessa ricerca salvata.
+const SEARCH_KEY_IGNORED_PARAMS = /^(?:utm_[a-z_]+|kxconfid|xtor|from|fbclid|gclid|mc_[a-z]+|order|o|page)$/i;
 const REDIRECT_PARAMS = ["url", "u", "q", "target", "dest", "destination", "redirect", "redirect_url", "to", "link"];
 
 function decodeEntities(value: string): string {
@@ -126,7 +129,7 @@ export function subitoSearchKey(searchUrl: string | null): string | null {
   try {
     const url = new URL(searchUrl);
     const params = [...url.searchParams.entries()]
-      .filter(([key]) => !TRACKING_PARAMS.test(key) && !/^(?:order|o|page)$/i.test(key))
+      .filter(([key]) => !SEARCH_KEY_IGNORED_PARAMS.test(key))
       .sort(([a, av], [b, bv]) => a === b ? av.localeCompare(bv) : a.localeCompare(b));
     const path = url.pathname.toLowerCase().replace(/\/+$/, "");
     return "subito.it" + path + (params.length ? "?" + params.map(([k, v]) => k + "=" + v).join("&") : "");

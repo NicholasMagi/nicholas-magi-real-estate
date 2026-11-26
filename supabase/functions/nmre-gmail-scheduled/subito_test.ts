@@ -23,7 +23,7 @@ const fixture = (name: string) => Deno.readTextFileSync(new URL("./fixtures/" + 
 const EMAIL_HTML = fixture("subito_saved_search_email.html");
 const PAGE = fixture("subito_results_page.html");
 const OWNER = "00000000-0000-4000-8000-000000000001";
-const SEARCH_URL = "https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&order=datedesc";
+const SEARCH_URL = "https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&kxconfid=u2p484vrw&order=datedesc";
 const SUBJECT = "Appartamenti a Ancona e provincia ha 3 nuovi annunci per te";
 const NEW_IDS = ["608812345", "608807711", "608799020"];
 
@@ -113,7 +113,7 @@ Deno.test("1 · non riconosciute: altri mittenti, mittenti che imitano Subito, a
 Deno.test("2 · link del pulsante «Vedi i nuovi annunci», senza tracciamento, non il logo", () => {
   const link = extractSavedSearchLink(EMAIL_HTML);
   eq(link.source, "pulsante", "dal pulsante");
-  eq(link.url, SEARCH_URL, "URL della ricerca senza utm_* e kxconfid");
+  eq(link.url, SEARCH_URL, "URL della ricerca: UTM rimossi, kxconfid conservato");
   eq(subitoSavedSearchDigest(EMAIL_26)!.searchKey, "subito.it/annunci-marche/vendita/appartamenti/ancona?advt=0,2", "chiave stabile della ricerca");
 });
 Deno.test("2 · pulsante con redirect di tracciamento, link alternativo, link mancante", () => {
