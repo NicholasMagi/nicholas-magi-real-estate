@@ -148,6 +148,37 @@ export function subitoSearchKey(searchUrl: string | null): string | null {
   }
 }
 
+/**
+ * La pagina ricevuta corrisponde alla ricerca richiesta? Confronta i filtri della ricerca
+ * (regione, tipo, categoria, città dal percorso; parametri come advt) con quelli che la
+ * pagina dichiara nei propri dati (__NEXT_DATA__: query e initialState.search.filters).
+ * true = tutti confermati; false = almeno uno diverso (un'altra ricerca); null = la pagina
+ * non li dichiara tutti (si usa allora il confronto degli URL).
+ */
+export function subitoPageConfirmsSearch(searchUrl: string, html: string): boolean | null {
+  let url: URL;
+  try { url = new URL(searchUrl); } catch { return null; }
+  const path = url.pathname.split("/").filter(Boolean);
+  const region = path[0]?.match(/^annunci-([a-z-]+)$/i)?.[1];
+  if (!region) return null;
+  const wanted: Record<string, string> = { region, type: path[1] || "", category: path[2] || "", city: path[3] || "" };
+  for (const [key, value] of url.searchParams) if (!KEY_IGNORED_PARAMS.test(key)) wanted[key] = value;
+  const raw = String(html || "").match(/<script[^>]*\bid=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i)?.[1];
+  if (!raw) return null;
+  // deno-lint-ignore no-explicit-any
+  let data: any;
+  try { data = JSON.parse(raw); } catch { return null; }
+  const declared: Record<string, unknown> = { ...(data?.query || {}), ...(data?.props?.pageProps?.initialState?.search?.filters || {}) };
+  const norm = (value: unknown) => decodeURIComponent(String(value ?? "")).trim().toLowerCase().replace(/\s+/g, "");
+  let unknown = false;
+  for (const [key, value] of Object.entries(wanted)) {
+    if (!value) continue;
+    if (declared[key] === undefined || declared[key] === null || declared[key] === "") { unknown = true; continue; }
+    if (norm(declared[key]) !== norm(value)) return false;
+  }
+  return unknown ? null : true;
+}
+
 type Anchor = { href: string; text: string };
 function anchors(html: string): Anchor[] {
   const output: Anchor[] = [];

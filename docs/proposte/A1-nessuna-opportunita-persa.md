@@ -1190,7 +1190,7 @@ Riprodotta con la fixture dell'email (`fixtures/subito_saved_search_email.html`)
   avvisi di un singolo annuncio seguono il percorso normale.
 - **Link**: si legge dall'HTML originale dell'email (nuovo campo `bodyHtml`). Si usa il
   pulsante «Vedi i nuovi annunci», gestendo anche i redirect con l'URL annidato. Si
-  tolgono `utm_*` e `kxconfid`. Senza pulsante si usa un altro link alla ricerca;
+  tolgono i parametri di tracciamento `utm_*`, ma si conserva `kxconfid` nell’URL usato per aprire la ricerca; il token viene escluso soltanto dalla chiave stabile della ricerca, perché può variare tra email. Dopo il redirect si verifica che la ricerca finale conservi gli stessi filtri funzionali: se il portale li perde, la notifica resta da verificare e non vengono importati risultati di una ricerca diversa. Senza pulsante si usa un altro link alla ricerca;
   altrimenti `link_mancante`.
 - **Pagina dei risultati**: richiesta GET normale con un timeout di 12 secondi. Pagine
   protette (CAPTCHA, verifica anti-robot, 401, 403, 429) vengono registrate come
@@ -1263,7 +1263,7 @@ degli annunci recuperati.
 - Versione del service worker: `20261126-subito-saved-search-1`.
 
 ### 19.7 Test
-- `subito_test.ts` (19 test): riconoscimento, link del pulsante, pagina, link diretti,
+- `subito_test.ts` (21 test): riconoscimento, link del pulsante, pagina, link diretti,
   inserimento, deduplicazione per ID, riletture, archivio, modifiche manuali, errori,
   recupero parziale, mancato completamento. Usa le funzioni di produzione su un database
   simulato con i vincoli di unicità (`fake_supabase.ts`).
@@ -1323,6 +1323,7 @@ tracciamento, ID di sessione; destinatario assente).
 |---|---|
 | Archivio | Prima di inserire un annuncio nuovo si controlla la tabella `annunci` per ID Subito (`listing_key` e `url`), compresi gli immobili inseriti a mano e quelli eliminati. Se il confronto fallisce, l'email si interrompe: nessun annuncio «nuovo», cursore fermo |
 | `kxconfid` | Conservato nella richiesta HTTP; ignorato solo nella chiave stabile della ricerca (con campagna, ordinamento e pagina) |
+| Redirect | La pagina d'arrivo è valida se i filtri che dichiara nei propri dati (`query`, `search.filters`) coincidono con quelli della ricerca; se ne contraddice uno è un'altra ricerca (nessun annuncio); se non li dichiara vale il confronto delle chiavi. Il solo confronto delle chiavi rifiutava il redirect reale `?advt=0%2C2` → `/da-privati/` |
 | Parser | Solo `items.originalList` (voci `AdItem`); `galleryList` e `boostedItems` esclusi; una voce senza link valido rende il recupero parziale; senza l'elenco dei risultati gli annunci sono solo proposti |
 | Link nell'email | I link a schede nell'email (per esempio suggeriti) non danno mai certezza |
 | Ripubblicati | Un annuncio della finestra con ID più vecchio di uno anteriore alla finestra rende la novità non dimostrabile (`possibili_ripubblicazioni`) |

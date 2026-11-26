@@ -1479,7 +1479,7 @@ function nmreSubitoRecoveryHtml(c){
         const url=validUrl(entry&&entry.url);
         if(!url||!/^https:\/\/(?:www\.)?subito\.it\//i.test(url))return "";
         const facts=[entry.titolo||entry.title||("Annuncio "+(entry.id||"")),Number(entry.prezzo)>0?Number(entry.prezzo).toLocaleString("it-IT")+" €":"",entry.localita||"",entry.pubblicato_il?"pubblicato il "+date(entry.pubblicato_il):""].filter(Boolean).join(" · ");
-        return '<li><a href="'+escape(url)+'" target="_blank" rel="noopener noreferrer" data-subito-listing="'+escape(entry.id||"")+'">'+escape(facts)+'</a></li>';
+        return '<li><a href="'+escape(url)+'" target="_blank" rel="noopener noreferrer" data-subito-listing="'+escape(entry.id||"")+'">'+escape(facts)+' · Apri questo annuncio</a></li>';
       }).filter(Boolean);
       return items.length?'<p><strong>'+escape(label)+'</strong></p><ul class="nmre-subito-list">'+items.join("")+'</ul>':"";
     };
@@ -1506,6 +1506,9 @@ function nmreSubitoRecoveryHtml(c){
 }
 // Link «Apri annuncio» della scheda: l'URL diretto dell'annuncio, altrimenti il link
 // originale dell'email (per una ricerca Subito, la pagina dei risultati).
+function nmreCandidateListingLabel(c){
+  return c&&c.dati_estratti&&c.dati_estratti.ricerca_subito?"Apri ricerca Subito":"Apri annuncio";
+}
 function nmreCandidateListingUrl(c){
   return validUrl(c&&c.url)||validUrl(c&&c.url_originale);
 }
@@ -4889,8 +4892,9 @@ function renderCandidates(){
     const notificationDate=quality.hasNotificationDate
       ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):"Data email non indicata";
     const url=nmreCandidateListingUrl(c);
+    const linkLabel=nmreCandidateListingLabel(c);
     const linkHtml=url
-      ?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer" data-open-listing="'+safe(c.id)+'">Apri annuncio</a>'
+      ?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer" data-open-listing="'+safe(c.id)+'">'+safe(linkLabel)+'</a>'
       :'<span class="candidate-link-warning">Link annuncio non disponibile</span>';
     const ageText=quality.hasNotificationDate
       ?(quality.notificationDays===0?"Email ricevuta oggi":"Email ricevuta "+quality.notificationDays+" giorni fa")

@@ -5,7 +5,7 @@
 // salvataggio protetto, su un database simulato con i vincoli di unicità. Nessuna rete.
 // Uso: deno test --allow-read=. supabase/functions/nmre-gmail-scheduled/subito_real_test.ts
 import { classifyMailbox, emailFromGmailMessage, repairEmailId, sellerForEmail } from "./_shared/mailbox.ts";
-import { identifyNewSubitoListings, parseSubitoResultsPage, parseSubitoDate, subitoAdId } from "./_shared/subito.ts";
+import { identifyNewSubitoListings, parseSubitoResultsPage, parseSubitoDate, subitoAdId, subitoPageConfirmsSearch } from "./_shared/subito.ts";
 import { subitoRowsForEmails, supabaseSubitoDeps } from "./_shared/subito_acquisition.ts";
 import { newSaveCounters, saveCandidateRow } from "./_shared/save_candidate.ts";
 import { assertAllRowsSaved, IncompleteSyncError, processRowsIsolated } from "./_shared/row_isolation.ts";
@@ -219,4 +219,17 @@ Deno.test("link a schede aggiunti all'email reale (annunci suggeriti): ignorati"
   eq(classifyMailbox([email]).subitoDigestById.get("real-26-sugg")!.emailListingUrls.length, 3, "3 link a schede nell'email, come i 3 annunci dichiarati");
   eq(result.outcomes, { "da_verificare:conteggio_diverso": 1 }, "decisione basata solo sulla pagina");
   eq(suggested.every(id => byAd(db, id).length === 0), true, "annunci suggeriti non inseriti");
+});
+
+// ---------- Redirect reale di Subito ----------
+Deno.test("redirect reale (?advt=0%2C2 → /da-privati/): stessa ricerca confermata dai filtri della pagina", async () => {
+  const requested = "https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&kxconfid=kxtest001&order=datedesc";
+  eq(subitoPageConfirmsSearch(requested, REAL_PAGE), true, "la pagina dichiara advt=0,2, marche, vendita, appartamenti, ancona");
+  // Pagina che dichiara un filtro diverso (solo privati): un'altra ricerca, nessun annuncio.
+  const otherSearch = REAL_PAGE.replace('"advt": "0,2", "blc"', '"advt": "0", "blc"').replace('"filters": {"advt": "0,2"}', '"filters": {"advt": "0"}');
+  eq(subitoPageConfirmsSearch(requested, otherSearch), false, "filtro diverso: ricerca diversa");
+  const db = fakeSupabase({ annunci_candidati: [previousDigestRow(SEARCH_KEY)] });
+  const result = await syncCycle(db, [REAL_EMAIL], otherSearch);
+  eq(result.outcomes, { "errore:pagina_vuota": 1 }, "risultati di un'altra ricerca non usati");
+  eq(db.tables.annunci_candidati.filter((row: Any) => String(row.dedup_key).startsWith("subito:")).length, 0, "nessun annuncio inserito");
 });

@@ -116,8 +116,10 @@ Deno.test("1 · non riconosciute: altri mittenti, mittenti che imitano Subito, a
 Deno.test("2 · link del pulsante «Vedi i nuovi annunci»: kxconfid conservato, solo utm_* rimossi, non il logo", () => {
   const link = extractSavedSearchLink(EMAIL_HTML);
   eq(link.source, "pulsante", "dal pulsante");
-  eq(link.url, SEARCH_URL, "URL della ricerca con kxconfid, senza utm_*");
+  eq(link.url, SEARCH_URL, "URL della ricerca: UTM rimossi, kxconfid conservato");
   eq(subitoSavedSearchDigest(EMAIL_26)!.searchKey, "subito.it/annunci-marche/vendita/appartamenti/ancona?advt=0,2", "chiave stabile della ricerca");
+  const changedToken = subitoSavedSearchDigest({ ...EMAIL_26, bodyHtml: EMAIL_HTML.replace("kxconfid=u2p484vrw", "kxconfid=token-diverso") });
+  eq(changedToken?.searchKey, subitoSavedSearchDigest(EMAIL_26)!.searchKey, "kxconfid variabile non crea una nuova ricerca");
 });
 Deno.test("2 · stessa ricerca con kxconfid e campagna diversi: stessa chiave, kxconfid sempre nella richiesta", () => {
   const other = EMAIL_HTML.replace("kxconfid=u2p484vrw", "kxconfid=zz9other").replace("utm_content=20261126", "utm_content=20261127");
@@ -128,8 +130,8 @@ Deno.test("2 · stessa ricerca con kxconfid e campagna diversi: stessa chiave, k
 });
 Deno.test("2 · pulsante con redirect di tracciamento, link alternativo, link mancante", () => {
   const tracked = EMAIL_HTML.replace(/href="https:\/\/www\.subito\.it\/annunci-marche[^"]+"/,
-    'href="https://click.subito.it/track?url=' + encodeURIComponent("https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&order=datedesc&utm_source=knocker") + '"');
-  eq(extractSavedSearchLink(tracked).url, "https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&order=datedesc", "redirect con URL annidato");
+    'href="https://click.subito.it/track?url=' + encodeURIComponent("https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&kxconfid=u2p484vrw&order=datedesc&utm_source=knocker") + '"');
+  eq(extractSavedSearchLink(tracked).url, SEARCH_URL, "redirect con URL annidato");
   const noButton = '<p>Ci sono 3 nuovi risultati</p><a href="https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&amp;utm_source=x">qui</a>';
   eq(extractSavedSearchLink(noButton).source, "altro_link", "senza pulsante: altro link alla ricerca");
   const missing = '<p>Ci sono 3 nuovi risultati</p><a href="https://t.example.com/abc">Vedi i nuovi annunci</a>';
@@ -352,6 +354,27 @@ Deno.test("10 · pagina protetta da CAPTCHA, errore di rete, errore HTTP, pagina
     eq(candidates(db).length, 1, reason + ": nessun annuncio inventato");
     eq(result.advanced, true, reason + ": notifica salvata, le altre email non vengono bloccate");
   }
+});
+Deno.test("10 · redirect Subito che perde i filtri: non acquisisce annunci di un'altra ricerca", async () => {
+  const db = fakeSupabase();
+  const redirected = pages({
+    finalUrl: "https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?order=datedesc"
+  });
+  const result = await syncCycle(db, [EMAIL_26], redirected.fetchPage);
+  const digest = digestOf(db, EMAIL_26.id)!;
+  eq(digest.dati_estratti.ricerca_subito.stato, "errore", "redirect non equivalente: errore");
+  eq(digest.dati_estratti.ricerca_subito.motivo, "pagina_vuota", "redirect con filtri persi: da verificare");
+  eq(candidates(db).filter(row => String(row.dedup_key || "").startsWith("subito:")).length, 0, "nessun annuncio da ricerca diversa");
+  eq(result.advanced, true, "la notifica di errore è stata salvata e può essere ritentata");
+});
+Deno.test("10 · redirect Subito con solo kxconfid diverso: la stessa ricerca resta valida", async () => {
+  const db = await afterPreviousDigest();
+  const redirected = pages({
+    finalUrl: "https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2&kxconfid=token-ruotato&order=datedesc"
+  });
+  const result = await syncCycle(db, [EMAIL_26], redirected.fetchPage);
+  eq(result.counters.inserted, 3, "stessa ricerca: i tre annunci vengono recuperati");
+  eq(digestOf(db, EMAIL_26.id), undefined, "nessuna notifica riepilogativa superflua");
 });
 Deno.test("10 · recupero parziale o incerto: nessuna opportunità certa, annunci plausibili da verificare", async () => {
   // Struttura diversa: soli link, senza date → impossibile sapere quali sono i nuovi.
