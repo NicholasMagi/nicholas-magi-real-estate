@@ -3,22 +3,33 @@
 ## Sources that can be connected directly
 
 ### Immobiliare.it Insights — documented API
-The nmre-insights-sync Edge Function uses the official Comps Finder API:
-- OAuth 2.0 password grant, with credentials stored only as Supabase Edge Function secrets.
-- Search by attribute on active/published sale offers (comparableTypeID=1, contractTypeID=1).
-- Private publisher filter (`clientTypeID=1`) and optional `phoneNumberProvided=true` search filter. This is only a portal-side availability flag: the official output mapping does not expose the seller's phone number, so imported candidates still require opening the original listing and manually verifying the contact details.
-- Restricted to the configured Marche municipality allowlist after the API response.
-- Up to three pages per manual sync; deduplication uses the API UUID.
-- The documented output provides listing URL, title, municipality, asking price, type, gross surface, rooms and bathrooms. `phoneNumberProvided` is a request filter, not a returned phone number. NMRE stores this distinction in the seller evidence and never fills the CRM contact field from that boolean.
+Verificato il 26/11/2026 sulla documentazione ufficiale (https://insights.immobiliare.it/webdocs/service/comps/): Getting started, Search by Attribute, Full Search by Attribute, Search by Property, Comparable Detail (anche per ID annuncio), Mapping of output data, Taxonomies General e Location, Authentication, Errors. Le risposte reali non sono ancora state viste: mancano le credenziali.
 
-Required Supabase Edge Function secrets:
-- INSIGHTS_CLIENT_ID
-- INSIGHTS_CLIENT_SECRET
-- INSIGHTS_USERNAME
-- INSIGHTS_PASSWORD
-- NMRE_INSIGHTS_ENV (sandbox by default; production only after provider approval and entitlement)
+**Cosa consente l'API (Comps API, host `comparables.realitycs.it`, sandbox `sandbox-comparables.realitycs.it`)**
+- Autenticazione OAuth 2.0 password grant su `POST /oauth/token` (client ID e segreto in Basic auth); token valido 4 ore, da riusare: troppe autenticazioni possono causare un blocco temporaneo.
+- `POST /comparables/fullSearchByAttribute`: ricerca per filtri con il **dettaglio completo di ogni risultato** (nessuna seconda chiamata per UUID), **solo per dati Asking** (annunci). È l'endpoint usato da NMRE.
+- `POST /comparables/searchByAttribute`: stessa ricerca con un riepilogo per risultato; serve per le compravendite (che richiedono anche il dettaglio).
+- `GET /comparable/<uuid>` e `GET /comparable/id/<listingId>` (solo Asking): dettaglio di un annuncio; NMRE usa il secondo per verificare il tipo di inserzionista delle opportunità già presenti con un link Immobiliare.it.
+- `POST /comparables/searchByProperty`: ricerca per somiglianza a un immobile descritto (stime), non adatta all'acquisizione.
+- Gli endpoint `/perizia/<uuid>/comparabili/...` (host `appraisal.realitycs.it`) sono un involucro del servizio Perizie: richiedono una perizia creata e una configurazione utente dedicata, «alternativa esclusiva» alla Comps API. Non sono usati.
+- Valori dei filtri (Taxonomies General): `comparableTypeID` 1 = Offerta (3, 4, 6 = compravendite, solo su abilitazione); `contractTypeID` 1 = Vendita, 2 = Affitto; `categoryTypeID` 1 = Residenziale; `clientTypeID` 1 = Privato, 2 = Professionista; `pubblicationStatusID` 1 = Nuovo, 2 = Pubblicato, 3 = Rimosso, 4 = Inattivo.
+- Date dei filtri: formato `DD/MM/YYYY` negli esempi delle richieste. La documentazione non dice esplicitamente quale data filtrano `minDate`/`maxDate` (esistono filtri separati per modifica e rimozione).
+- Area: `boundingBox` (GeoJSON Polygon), `municipalityID`, `marketZoneID` o `omiZoneID`, in alternativa tra loro.
+- Paginazione: `Pagination.page` e `limit` (predefinito **5**, valori diversi su richiesta al Sales team); risposta con `_metadata.total_count` e `_metadata.pages` (`first`, `last`, `next`, `previous`, `self`).
+- Campi restituiti (Mapping of output data): UUID, link dell'annuncio (`listingUrl`, solo Asking), titolo, descrizione, prezzo richiesto, comune e indirizzo, coordinate, superficie, locali, bagni, piano, classe energetica, caratteristiche, fotografie, stato di pubblicazione, `clientType` («Privato»/«Professionista», se disponibile), `collectionDate` (creazione dell'annuncio), `lastUpdateDate` (rimozione, per gli annunci). Sono garantiti solo i campi con asterisco; gli altri possono essere null.
+- **Nessun numero di telefono né recapito** è previsto nell'output. `phoneNumberProvided` è solo un filtro booleano della ricerca, il cui significato non è descritto.
 
-The account must be entitled to Comps Finder and the requested filters. A sandbox or production request must not be run until the provider has supplied the credentials. The server-side `INSIGHTS_LEAD_USE_APPROVED=true` gate must also remain disabled until the provider confirms in writing that using the results for real-estate prospecting/acquisition is permitted. Portal general terms prohibit unauthorized commercial exploitation of portal services/data; obtaining an API token alone does not establish permission for this purpose.
+**Come lo usa NMRE (`nmre-insights-sync`)**
+- Ricerca di tutti gli annunci in vendita, residenziali, nuovi o pubblicati, di privati, negli ultimi 1–90 giorni, nel rettangolo delle Marche; poi la stessa ricerca con `phoneNumberProvided=true` solo per annotare il filtro sugli annunci (mai un numero).
+- Paginazione fino all'ultima pagina dichiarata (limite di sicurezza 200 pagine e tempo massimo): se non si arriva in fondo il risultato è dichiarato **parziale**. Qualsiasi errore della ricerca: **nessuna scrittura**.
+- Solo i comuni dell'allowlist (nomi confrontati senza accenti e con apostrofi uniformati).
+- Confronto con Opportunità, Scartati e Archiviati (link, chiave `immobiliare.it/annunci/<id>`, UUID) e con la tabella `annunci` dell'Archivio (anche immobili inseriti a mano o eliminati): nessun duplicato, nessuna riapertura. Se una lettura fallisce, nessun inserimento.
+- Nuovi annunci inseriti «Da verificare», tipo venditore «Privato» dalla ricerca ufficiale, con descrizione, foto e dati in `dati_estratti.insights`; il campo contatto resta vuoto.
+- Sulle opportunità già presenti cambia solo la classificazione del venditore, e solo se in attesa e non verificata a mano. Titoli, prezzi, note, stati e decisioni non vengono modificati.
+
+Segreti richiesti (Edge Function): INSIGHTS_CLIENT_ID, INSIGHTS_CLIENT_SECRET, INSIGHTS_USERNAME, INSIGHTS_PASSWORD, NMRE_INSIGHTS_ENV (sandbox salvo diversa indicazione).
+
+**Autorizzazione.** `INSIGHTS_LEAD_USE_APPROVED=true` deve restare disattivato finché Immobiliare.it Insights non conferma per iscritto che la licenza consente di usare i risultati per l'acquisizione immobiliare (contatto dei privati). La documentazione tecnica non lo dice; le condizioni generali del portale vietano lo sfruttamento commerciale non autorizzato dei dati. Un token API da solo non è un'autorizzazione.
 
 ## Sources that require portal approval
 
