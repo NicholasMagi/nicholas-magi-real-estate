@@ -12,7 +12,8 @@ function grab(name) {
   if (start < 0) throw new Error("Funzione non trovata: " + name);
   if (html.slice(start - 6, start) === "async ") start -= 6;
   let depth = 0;
-  for (let index = html.indexOf("{", start); index < html.length; index++) {
+  // Il corpo inizia dopo la chiusura dei parametri ("){"): i valori predefiniti come guard={} non contano.
+  for (let index = html.indexOf("){", start) + 1; index < html.length; index++) {
     if (html[index] === "{") depth++;
     else if (html[index] === "}" && --depth === 0) return html.slice(start, index + 1);
   }
@@ -158,6 +159,79 @@ eq((await api.nmreFetchAllById(fakeTable(1203, 500))).data.length, 1203, "pagina
 eq((await api.nmreFetchAllPages(fakeTable(2501, 1000))).data.length, 2501, "paginazione a scostamento: 2501 righe");
 eq((await api.nmreFetchAllPages(fakeTable(1203, 500))).data.length, 1203, "paginazione a scostamento con limite del server a 500");
 eq((await api.nmreFetchAllPages(fakeTable(0, 1000))).data.length, 0, "tabella vuota");
+
+// Verifica del venditore (saveCandidateSeller): il registro venditori si scrive solo
+// dopo che il controllo ottimistico ha accettato la modifica del candidato.
+function sellerHarness({ conflict = false, registryError = null } = {}) {
+  const calls = [];
+  const db = { annunci_candidati: [{ id: "c1", owner_id: "u1", stato: "da_verificare", tipo_venditore: "Da verificare",
+    updated_at: "2026-11-26T08:00:00.123456+00:00", dati_estratti: { pagina_pubblica: { testo: "dati" } } }] };
+  let afterRead = conflict ? row => { row.updated_at = "2026-11-26T08:00:05.000000+00:00"; row.dati_estratti.dato_sincronizzazione = "nuova email"; } : null;
+  const supabase = {
+    from(table) {
+      const state = { table, filters: [], op: "select", payload: null, single: false, returning: false };
+      const builder = {
+        select() { if (state.op !== "select") state.returning = true; return builder; },
+        eq(column, value) { state.filters.push(row => String(row[column]) === String(value)); return builder; },
+        is(column, value) { state.filters.push(row => (row[column] ?? null) === value); return builder; },
+        maybeSingle() { state.single = true; return builder; },
+        update(payload) { state.op = "update"; state.payload = payload; return builder; },
+        upsert(rows, options) { state.op = "upsert"; state.payload = rows; state.options = options; return builder; },
+        then(resolve) {
+          calls.push({ table, op: state.op });
+          if (state.op === "upsert") { resolve({ data: null, error: registryError }); return; }
+          const rows = (db[table] || []).filter(row => state.filters.every(filter => filter(row)));
+          if (state.op === "update") { rows.forEach(row => Object.assign(row, JSON.parse(JSON.stringify(state.payload)))); resolve({ data: state.returning ? rows.map(row => ({ id: row.id })) : null, error: null }); return; }
+          const data = state.single ? (rows[0] ? JSON.parse(JSON.stringify(rows[0])) : null) : rows;
+          if (state.single && afterRead && rows[0]) { const hook = afterRead; afterRead = null; hook(rows[0]); }
+          resolve({ data, error: null });
+        }
+      };
+      return builder;
+    },
+    rpc: async () => { calls.push({ table: "rpc", op: "rpc" }); return { data: { archived: false }, error: null }; }
+  };
+  const messages = [];
+  const fields = { venditore: "Agenzia", seller_identity: "Immobiliare Rossi Srl", contatto: "info@rossi-immobili.it 333 1234567" };
+  const card = { querySelector: selector => { const key = (selector.match(/data-field="([^"]+)"/) || [])[1]; return key in fields ? { value: fields[key] } : null; } };
+  const button = { disabled: false, closest: () => card };
+  const fn = new Function("supabase", "msg", "confirm", "currentUser", "candidateCache", "loadSellerRegistry", "loadCandidates", "loadListings", "prepareCandidateForArchive",
+    'const NMRE_STATUS_HISTORY_LIMIT=50;const NMRE_CONFLICT_MESSAGE="L’annuncio è stato modificato nel frattempo";' +
+    ["normalizeSellerIdentifier", "buildSellerRegistryRows", "nmreAppendStatusHistory", "nmreUpdateCandidateWithHistory", "saveCandidateSeller"].map(grab).join("\n") +
+    ";return saveCandidateSeller;")(
+    supabase, (_id, text, type) => messages.push({ text, type }), () => true, { id: "u1" }, [{ id: "c1", tipo_venditore: "Da verificare" }],
+    async () => calls.push({ table: "reload", op: "seller_registry" }), async () => calls.push({ table: "reload", op: "candidates" }), async () => {},
+    async () => ({ persisted: true }));
+  return { run: () => fn("c1", button), calls, db, messages, button };
+}
+{
+  const h = sellerHarness({ conflict: true });
+  await h.run();
+  const row = h.db.annunci_candidati[0];
+  eq(h.calls.filter(call => call.table === "seller_identity_registry").length, 0, "verifica venditore in conflitto: nessuna scrittura nel registro venditori");
+  eq(row.tipo_venditore, "Da verificare", "verifica venditore in conflitto: classificazione del candidato invariata");
+  eq(row.dati_estratti.dato_sincronizzazione, "nuova email", "verifica venditore in conflitto: dato della sincronizzazione conservato");
+  eq(Array.isArray(row.dati_estratti.storico_stato), false, "verifica venditore in conflitto: nessuna voce di storico scritta");
+  eq(/modificato nel frattempo/.test(h.messages.at(-1)?.text || ""), true, "verifica venditore in conflitto: messaggio di conflitto");
+  eq(h.button.disabled, false, "verifica venditore in conflitto: pulsante riattivato per un nuovo tentativo");
+}
+{
+  const h = sellerHarness();
+  await h.run();
+  const order = h.calls.filter(call => call.op === "update" || call.table === "seller_identity_registry").map(call => call.table + ":" + call.op);
+  eq(order.join(","), "annunci_candidati:update,seller_identity_registry:upsert", "verifica venditore accettata: registro scritto dopo il candidato");
+  eq(h.db.annunci_candidati[0].tipo_venditore, "Agenzia", "verifica venditore accettata: classificazione salvata");
+  eq(h.db.annunci_candidati[0].dati_estratti.storico_stato.at(-1).azione, "classificato_agenzia_e_scartato", "verifica venditore accettata: storico registrato");
+  eq(h.messages.at(-1).type, "success", "verifica venditore accettata: esito positivo");
+}
+{
+  const h = sellerHarness({ registryError: { message: "errore di rete" } });
+  await h.run();
+  eq(h.db.annunci_candidati[0].tipo_venditore, "Agenzia", "registro non disponibile: classificazione del candidato comunque salvata");
+  const last = h.messages.at(-1);
+  eq(last.type === "error" && /NON sono stati memorizzati/.test(last.text) && !/identità è stata memorizzata/.test(last.text), true,
+    "registro non disponibile: l'utente non riceve una falsa conferma di memorizzazione");
+}
 
 if (failures) { console.error(failures + " test non superati"); process.exit(1); }
 console.log("Tutti i test del pannello di recupero superati.");

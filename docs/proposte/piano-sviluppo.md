@@ -220,9 +220,11 @@ restituiscono solo conteggi e indicatori.
 
 ### A.1 Nessuna perdita automatica (priorità più alta del modulo)
 
-**Stato (25/11/2026):** Fase 1 completata (incluse la migrazione del trigger delle
-notifiche, le notifiche dopo lo scarto e la provenienza delle agenzie) e Fase 2
-(avvisi dubbi) preparata, entrambe sul branch con test, non distribuite. Dettaglio: `docs/proposte/A1-nessuna-opportunita-persa.md` (§3 patch,
+**Stato (26/11/2026, riferito dal titolare):** Fase 1: le due migrazioni dei trigger di
+notifica sono applicate in produzione e la funzione `nmre-gmail-scheduled` è attiva
+nella versione 68; il frontend non è ancora distribuito. Fase 2 (avvisi dubbi):
+preparata, **non applicata**. Le versioni registrate delle migrazioni non coincidono
+con i file (rapporto A1 §16). Dettaglio: `docs/proposte/A1-nessuna-opportunita-persa.md` (§3 patch,
 §5 recupero degli 88 scartati, §6 priorità). I punti che seguono restano
 l'obiettivo complessivo; quelli coperti dalla Fase 1 sono indicati nel rapporto.
 

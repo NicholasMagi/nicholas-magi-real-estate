@@ -6,11 +6,22 @@ Rapporto tecnico e proposta · 25/11/2026 · branch `claude/confident-knuth-yvuj
 > che un solo proprietario privato perso per un errore dell'algoritmo. Prima si
 > protegge ogni opportunità, poi si migliora l'intelligenza del classificatore.
 
-**Stato:** Fase 1 completata e Fase 2 preparata, in revisione nella Pull Request
-Draft [NicholasMagi/nicholas-magi-real-estate#68](https://github.com/NicholasMagi/nicholas-magi-real-estate/pull/68).
-**Nulla è distribuito:** nessun merge, deploy, migrazione applicata o modifica ai
-dati di produzione. Le regole del classificatore e del filtro avvisi sono
-**invariate**.
+**Stato al 26/11/2026** (Pull Request Draft
+[NicholasMagi/nicholas-magi-real-estate#68](https://github.com/NicholasMagi/nicholas-magi-real-estate/pull/68);
+lo stato di produzione è quello riferito dal titolare, non verificato da qui):
+
+| Componente | Stato in produzione |
+|---|---|
+| Migrazione protezione `new_opportunities` (file `20261125200000`) | **Applicata**, registrata come versione `20261126004257` |
+| Migrazione protezione `price_drop` (file `20261125202000`) | **Applicata**, registrata come versione `20261126004310` |
+| Edge Function `nmre-gmail-scheduled` | **Versione 68 attiva** |
+| Tabella Fase 2 `nmre_gmail_avvisi_dubbi` (file `20261125201000`) | **Non applicata**; `NMRE_CAPTURE_DUBIOUS_ALERTS` non impostato |
+| Frontend (`index.html`, `sw.js`) | **Non distribuito**: in produzione resta la versione di `main` |
+
+Le versioni registrate delle migrazioni non coincidono con i nomi dei file: vedi
+§16 prima di usare qualsiasi comando `supabase db`. Finché il frontend non è
+distribuito, quello attuale continua a riscartare i duplicati (§16.5). Le regole
+del classificatore e del filtro avvisi sono **invariate**.
 
 Legenda delle fonti:
 - ✅ **Codice**: verificato leggendo il repository.
@@ -93,7 +104,7 @@ classificati come agenzia).
 
 ---
 
-## 3. Fase 1 · Protezione (completata sul branch, non distribuita)
+## 3. Fase 1 · Protezione (migrazioni e funzione distribuite; frontend non distribuito)
 
 Nessuna modifica di schema **richiesta dal codice**. Una sola migrazione, per il
 trigger delle notifiche (§3.2), da applicare **prima** della funzione.
@@ -231,7 +242,7 @@ Totale suite migrazioni: **59 controlli** superati in locale.
 
 ---
 
-## 4. Fase 2 · Avvisi dubbi (preparata, non distribuita)
+## 4. Fase 2 · Avvisi dubbi (preparata, non applicata)
 
 **Obiettivo:** nessun avviso immobiliare escluso dal filtro va perso. Lo si
 conserva in una **sezione da verificare**, con il riferimento all'email
@@ -370,16 +381,16 @@ Vedi §13 per l'esito dettagliato, con i link alle esecuzioni.
 | `deno check` di `nmre-search-engine` e `nmre-insights-sync` con gli import originali, **in locale** | `esm.sh` non è raggiungibile da questo ambiente (eseguito in locale su una copia con import npm equivalenti) | Eseguito dal CI con gli import originali: superato (§13) |
 | Test automatici dell'interfaccia nel CI (Playwright) | Prova eseguita solo in locale con Supabase simulato | Proposto per una fase successiva |
 
-## 7. Distribuzione (solo dopo approvazione)
+## 7. Distribuzione (passi 0–2 eseguiti dal titolare il 26/11/2026; dal passo 3 solo dopo approvazione)
 
 ### 7.1 Ordine esatto
 | Passo | Azione | Come | Verifica | Se qualcosa non va |
 |---|---|---|---|---|
 | 0 | Controlli finali in sola lettura | **AQ17 e AQ17b** secondo la procedura del §14; AQ6 (base delle rielaborazioni), AQ10 (base delle esclusioni) | Tutte le condizioni del §14.4 soddisfatte | Fermarsi nei casi del §14.5 |
-| 1 | **Migrazione del trigger** `20261125200000_guard_agency_candidate_notifications.sql` | SQL Editor di Supabase, **solo questo file**. Non usare `supabase db push`: la cronologia delle migrazioni di produzione non è allineata al repository (P0 §7) e il comando potrebbe tentare di applicare altri file | Messaggio "Trigger … protetto"; `pg_get_triggerdef` contiene `WHEN ((new.tipo_venditore IS DISTINCT FROM 'Agenzia'::text))`; una riga in `private.nmre_trigger_definition_backups` | Rollback 7.2-A |
-| 1-bis | **Migrazione del trigger dei ribassi** `20261125202000_guard_agency_price_drop_notifications.sql` | SQL Editor, solo questo file | Messaggio "Trigger … protetto"; AQ17: `gia_protetto = true` su entrambe le tabelle; la definizione contiene `nmre_candidate_is_agency` e l'eventuale condizione originale | Rollback 7.2-E, poi eventualmente A |
-| 2 | **Funzione `nmre-gmail-scheduled`** dal commit approvato | `supabase functions deploy nmre-gmail-scheduled`; `NMRE_CAPTURE_DUBIOUS_ALERTS` **non impostato**; `NMRE_KEEP_AGENCY_CANDIDATES` non impostato (conserva le agenzie) | Risposte 200 con `keptForReview`, `reopenedOnPriceDrop`, `notificationsAfterDiscard`, `propertyFilterRules`; registro senza errori per 24 ore; nessuna notifica "Nuove opportunità" per agenzie | Rollback 7.2-B |
-| 3 | **Frontend** | Merge della PR su `main` (GitHub Pages); service worker `20261125-no-lost-opportunity-2` | Coda, contrassegni, pannello "Annunci fuori dalla coda" | Rollback 7.2-C |
+| 1 ✅ | **Migrazione del trigger** `20261125200000_guard_agency_candidate_notifications.sql` (applicata, versione `20261126004257`) | SQL Editor di Supabase, **solo questo file**. Non usare `supabase db push`: la cronologia delle migrazioni di produzione non è allineata al repository (P0 §7) e il comando potrebbe tentare di applicare altri file | Messaggio "Trigger … protetto"; `pg_get_triggerdef` contiene `WHEN ((new.tipo_venditore IS DISTINCT FROM 'Agenzia'::text))`; una riga in `private.nmre_trigger_definition_backups` | Rollback 7.2-A |
+| 1-bis ✅ | **Migrazione del trigger dei ribassi** `20261125202000_guard_agency_price_drop_notifications.sql` (applicata, versione `20261126004310`) | SQL Editor, solo questo file | Messaggio "Trigger … protetto"; AQ17: `gia_protetto = true` su entrambe le tabelle; la definizione contiene `nmre_candidate_is_agency` e l'eventuale condizione originale | Rollback 7.2-E, poi eventualmente A |
+| 2 ✅ | **Funzione `nmre-gmail-scheduled`** dal commit approvato (versione 68 attiva) | `supabase functions deploy nmre-gmail-scheduled`; `NMRE_CAPTURE_DUBIOUS_ALERTS` **non impostato**; `NMRE_KEEP_AGENCY_CANDIDATES` non impostato (conserva le agenzie) | Risposte 200 con `keptForReview`, `reopenedOnPriceDrop`, `notificationsAfterDiscard`, `propertyFilterRules`; registro senza errori per 24 ore; nessuna notifica "Nuove opportunità" per agenzie | Rollback 7.2-B |
+| 3 ⏳ | **Frontend** (prossimo passo) | Merge della PR su `main` (GitHub Pages); service worker `20261126-recovery-panel-2` | Coda, contrassegni, pannello "Annunci fuori dalla coda" | Rollback 7.2-C |
 | 4 | (Facoltativo) funzione `nmre-insights-sync` | `supabase functions deploy nmre-insights-sync` | Il connettore resta bloccato senza autorizzazione | Versione precedente |
 | 5 | Recupero guidato degli 88 (§8), uno alla volta | Pannello dell'app | AQ13 | Ogni decisione è reversibile dal pannello |
 | 6 | **Fase 2**: migrazione `20261125201000_gmail_dubious_alerts.sql` | SQL Editor, solo questo file | Tabella con RLS attiva; Q2/Q3: solo policy di select e update per il proprietario | Rollback 7.2-D |
@@ -471,9 +482,9 @@ revoke all on table private.backup_candidati_scartati_20261125 from public, anon
 | `.../_shared/parser.ts` | `propertyEmailDecision()`, `specificPortalListingUrl()` (nessuna regola cambiata) |
 | `.../retention_test.ts`, `property_filter_test.ts`, `dubious_test.ts` | Test |
 | `supabase/functions/nmre-insights-sync/index.ts` | Nessuno scarto automatico dei professionisti (L23) |
-| `supabase/migrations/20261125200000_guard_agency_candidate_notifications.sql` | **Nuovo** (non applicato) |
-| `supabase/migrations/20261125201000_gmail_dubious_alerts.sql` | **Nuovo** (non applicato) |
-| `supabase/migrations/20261125202000_guard_agency_price_drop_notifications.sql` | **Nuovo** (non applicato): nessuna push di ribasso per le agenzie |
+| `supabase/migrations/20261125200000_guard_agency_candidate_notifications.sql` | **Nuovo** · applicato in produzione come versione `20261126004257` (§16) |
+| `supabase/migrations/20261125201000_gmail_dubious_alerts.sql` | **Nuovo** · **non applicato** |
+| `supabase/migrations/20261125202000_guard_agency_price_drop_notifications.sql` | **Nuovo** · applicato in produzione come versione `20261126004310` (§16) |
 | `supabase/rollback/*.rollback.sql` | **Nuovi** |
 | `supabase/tests/run_migration_tests.sh` | **Nuovo**: test su database usa e getta, rifiuta la produzione |
 | `tests/frontend/recovery_test.mjs` | **Nuovo** |
@@ -571,6 +582,10 @@ senza effetti oggi.
 ---
 
 ## 14. Verifica AQ17 prima delle migrazioni (istruzioni operative)
+
+> **26/11/2026:** le due migrazioni risultano applicate (§16). La stessa procedura
+> serve ora come controllo dopo l'applicazione: atteso `gia_protetto = true` e
+> `ha_condizione_when = true` su entrambi i trigger (§14.4, ultimo blocco).
 
 **Scopo:** confermare in produzione, **in sola lettura**, che i due trigger di
 notifica push hanno la forma su cui sono state costruite e testate le migrazioni
@@ -744,3 +759,135 @@ Fase 2 assente, recupero di un'agenzia seguito da una sincronizzazione, presa vi
 secondo scarto, scritture concorrenti e paginazione oltre 1000 notifiche e 1000 scartati;
 verifica con la funzione reale `sellerFieldsForExisting`. Il pannello non è stato provato
 contro il database reale.
+
+
+### 15.1 Ultime correzioni prima della distribuzione (26/11/2026)
+Versione del service worker: `20261126-recovery-panel-2`.
+
+- **Caricamento del pannello senza risultati parziali.** Se fallisce anche una sola
+  lettura dello storico notifiche (o degli scartati), `loadCandidateRecovery()` non
+  salva nulla: resta l'ultima cache valida, il pannello mostra «Dati non aggiornati»
+  con la data dell'ultimo caricamento completo e il pulsante «Riprova». Senza cache
+  mostra «Annunci fuori dalla coda non caricati» e «Riprova». Un aggiornamento forzato
+  a pannello chiuso non svuota più la cache: la segna soltanto da rileggere.
+- **Registro venditori dopo il controllo ottimistico.** `saveCandidateSeller()` ora
+  aggiorna prima il candidato e scrive in `seller_identity_registry` solo se
+  l'aggiornamento è stato accettato. Un conflitto non lascia identità o
+  classificazioni nel registro. Se il registro non è raggiungibile dopo un
+  aggiornamento riuscito, la classificazione resta salvata e l'utente viene avvisato
+  che gli identificativi non sono stati memorizzati (nessuna falsa conferma).
+- Test: 55 test unitari (12 nuovi sulla verifica del venditore, con le funzioni
+  reali estratte da `index.html`: conflitto, ordine delle scritture, registro non
+  disponibile; 4 di questi falliscono sul codice di `5c6ea1c` e passano su quello
+  nuovo); 8 controlli nel browser sul guasto dello
+  storico (primo caricamento, cache valida, «Riprova», pannello chiuso); i 37
+  controlli nel browser precedenti rieseguiti senza regressioni.
+
+---
+
+## 16. Versioni delle migrazioni: file locali e produzione
+
+### 16.1 Il disallineamento
+| File nel repository | Versione registrata in produzione | Stato |
+|---|---|---|
+| `20261125200000_guard_agency_candidate_notifications.sql` | `20261126004257` | Applicata |
+| `20261125201000_gmail_dubious_alerts.sql` (Fase 2) | nessuna | **Non applicata** |
+| `20261125202000_guard_agency_price_drop_notifications.sql` | `20261126004310` | Applicata |
+
+Le due migrazioni sono state applicate dal titolare con una procedura che registra in
+`supabase_migrations.schema_migrations` la data di applicazione come versione, non il
+prefisso del file. Il contenuto è lo stesso, ma per la CLI di Supabase i file locali
+`20261125200000` e `20261125202000` risultano **non applicati** e le versioni
+`20261126004257` e `20261126004310` risultano **senza file locale**. L'intestazione
+dei due file («STATO: NON APPLICATA IN PRODUZIONE») è ormai superata; non è stata
+modificata perché i file delle migrazioni non vanno toccati senza approvazione.
+
+### 16.2 Rischi
+1. **Fase 2 applicata per errore.** `supabase db push` considera da applicare tutti i
+   file locali senza versione remota corrispondente. Con `--include-all` (o con una
+   CLI che lo richiede per inserire versioni più vecchie dell'ultima remota)
+   applicherebbe anche `20261125201000_gmail_dubious_alerts.sql`, che crea la tabella
+   della Fase 2 **senza approvazione**.
+2. **Riesecuzione delle migrazioni dei trigger.** Sono idempotenti (rilevano «già
+   protetto» e terminano senza modifiche), ma verrebbero registrate una seconda volta
+   con altre versioni, peggiorando la cronologia.
+3. **`supabase db pull` / `db diff`** potrebbero generare nuove migrazioni di
+   allineamento con contenuti duplicati.
+4. **Rollback.** I rollback non dipendono dalla versione registrata: cercano il
+   backup in `private.nmre_trigger_definition_backups` tramite i nomi interni
+   `20261125200000_guard_agency_candidate_notifications` e
+   `20261125202000_guard_agency_price_drop_notifications` (costante `v_migration` nei
+   file). Questi nomi interni **non vanno cambiati**, anche se i file vengono rinominati.
+
+### 16.3 Regole fino al riallineamento
+- Non eseguire `supabase db push` (tanto meno con `--include-all`), `db pull`,
+  `db reset --linked` o `migration repair`.
+- Ogni migrazione futura si applica solo dal SQL Editor, un file alla volta, come
+  per i passi 1 e 1-bis.
+
+### 16.4 Procedura proposta (da approvare; non eseguita)
+**Passo A · Controllo in sola lettura** (SQL Editor, un'unica esecuzione):
+```sql
+BEGIN TRANSACTION READ ONLY;
+
+select version, name
+  from supabase_migrations.schema_migrations
+ where version >= '20261125'
+ order by version;
+
+select to_regclass('public.nmre_gmail_avvisi_dubbi') as tabella_fase_2;
+
+select migration, table_name, trigger_name, saved_at
+  from private.nmre_trigger_definition_backups
+ order by saved_at;
+
+ROLLBACK;
+```
+Atteso:
+- solo `20261126004257` e `20261126004310`, con i rispettivi nomi; annotare il valore
+  esatto di `name`;
+- `tabella_fase_2` nulla;
+- due backup con i nomi interni indicati al §16.2.4.
+
+Fermarsi se compare una versione `20261125201000` o un nome `gmail_dubious_alerts`.
+
+**Passo B · Riallineamento nel repository** (commit separato, nessuna scrittura in
+produzione):
+1. Rinominare con `git mv`, senza cambiare il contenuto:
+   - `20261125200000_guard_agency_candidate_notifications.sql` →
+     `20261126004257_<name registrato>.sql`;
+   - `20261125202000_guard_agency_price_drop_notifications.sql` →
+     `20261126004310_<name registrato>.sql`.
+
+   Il suffisso deve coincidere con il campo `name` letto al passo A. I file di
+   rollback possono restare con il nome attuale: dipendono solo dai nomi interni.
+2. Spostare `20261125201000_gmail_dubious_alerts.sql` (e il suo rollback) fuori da
+   `supabase/migrations/`, per esempio in `supabase/migrations_pending/`, così che
+   nessun comando della CLI possa applicarla. Quando la Fase 2 sarà approvata, le si
+   assegnerà una versione successiva a `20261126004310`.
+3. Aggiornare i percorsi in `supabase/tests/run_migration_tests.sh` e nei documenti;
+   la CI deve restare verde.
+
+**Passo C · Verifica senza scritture:**
+- `supabase migration list`: colonne «Local» e «Remote» allineate, nessuna voce
+  della Fase 2;
+- `supabase db push --dry-run`: «Remote database is up to date» (nessuna migrazione
+  da applicare).
+
+Alternativa sconsigliata: `supabase migration repair`. Scrive nella cronologia di
+produzione; se usata, non deve mai includere `20261125201000`.
+
+### 16.5 Situazione transitoria: funzione nuova e frontend vecchio
+Con la versione 68 della funzione attiva, il frontend di `main` (ancora in
+produzione) continua a fare due cose quando l'app è aperta, a ogni aggiornamento:
+
+- **Riscarta i duplicati (D2).** Rimette a «scartato», senza storico, ogni candidato
+  in coda con lo stesso link di un annuncio già scartato. Questo vale anche per un
+  annuncio appena riaperto per ribasso dalla funzione, se ne esiste una copia
+  scartata.
+- **Nasconde le agenzie.** Non mostra le agenzie conservate in coda dalla funzione.
+
+Nessun dato va perso: queste righe saranno visibili e recuperabili nel pannello
+«Annunci fuori dalla coda» (gruppo «Scartato con lo stesso link di uno scarto
+precedente») dopo la distribuzione del frontend. Per questo il passo 3 andrebbe
+eseguito presto, dopo la revisione. AQ13 e AQ16 permettono di misurare questi casi.

@@ -1440,6 +1440,8 @@ let candidateDismissedIndex = [];      // indice leggero degli scartati (id, lin
 let candidateDismissedIndexAt = 0;
 let candidateRecoveryLoadedAt = 0;     // dati completi del pannello, letti solo a pannello aperto
 let candidateRecoveryLoading = null;
+let candidateRecoveryError = null;
+let candidateRecoveryInvalidated = false; // cache valida ma da rileggere alla prossima apertura     // ultimo caricamento completo non riuscito (la cache valida resta)
 let candidateRecoveryFlagged = [];     // scartati con una notifica successiva segnalata dalla sincronizzazione
 let candidateRecoveryLimit = 300;
 let nmreDubiousTableMissing = false;   // Fase 2: tabella non ancora creata (errore PGRST205)
@@ -1480,7 +1482,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-2");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1555,7 +1557,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-1");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-2");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -4264,7 +4266,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-1");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-recovery-panel-2");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);
@@ -5107,7 +5109,8 @@ async function loadCandidates(options={}){
   await nmreRefreshRecoveryFlags();
   const recoveryOpen=!!$("candidateRecoveryPanel")?.open;
   if(recoveryOpen&&(force||nmreRecoveryStale()))await loadCandidateRecovery();
-  else if(!recoveryOpen&&force){candidateDismissedCache=[];candidateRecoveryLoadedAt=0;}
+  // A pannello chiuso la cache valida resta: viene solo segnata da rileggere all'apertura.
+  else if(!recoveryOpen&&force)candidateRecoveryInvalidated=true;
   renderDashboard();
   renderCandidates();
   renderCandidateRecovery();
@@ -5169,7 +5172,7 @@ function nmreNormalizeRecoveryRow(row){
   }};
 }
 function nmreRecoveryStale(){
-  return !candidateRecoveryLoadedAt||Date.now()-candidateRecoveryLoadedAt>NMRE_RECOVERY_FULL_TTL;
+  return candidateRecoveryInvalidated||!candidateRecoveryLoadedAt||Date.now()-candidateRecoveryLoadedAt>NMRE_RECOVERY_FULL_TTL;
 }
 async function nmreRefreshDismissedIndex(force){
   if(!force&&candidateDismissedIndexAt&&Date.now()-candidateDismissedIndexAt<NMRE_DISMISSED_INDEX_TTL)return true;
@@ -5198,7 +5201,11 @@ async function loadCandidateRecovery(){
   candidateRecoveryLoading=(async()=>{
     const {data:rows,error}=await nmreFetchAllById(()=>supabase.from("annunci_candidati")
       .select(NMRE_RECOVERY_COLUMNS).eq("stato","scartato"));
-    if(error){msg("candidateMsg","Impossibile leggere gli annunci scartati: "+error.message,"error");return false;}
+    if(error){
+      candidateRecoveryError="Impossibile leggere gli annunci scartati: "+error.message;
+      msg("candidateMsg",candidateRecoveryError,"error");
+      return false;
+    }
     const items=rows.map(nmreNormalizeRecoveryRow);
     const history=new Map();
     const seen=new Set();
@@ -5211,7 +5218,13 @@ async function loadCandidateRecovery(){
         .select("candidate_id,source_email_id,notified_at,created_at,listing_price,price_drop_percent,listing_title,listing_municipality")
         .in("candidate_id",slice)
         .order("created_at",{ascending:true}).order("candidate_id",{ascending:true}).order("source_email_id",{ascending:true}));
-      if(notificationError){msg("candidateMsg","Storico notifiche degli scartati non disponibile: "+notificationError.message,"error");break;}
+      // Uno storico parziale non viene mai presentato come completo: si conserva
+      // l'ultima cache valida e il caricamento potrà essere ripetuto.
+      if(notificationError){
+        candidateRecoveryError="Storico notifiche degli scartati non disponibile: "+notificationError.message;
+        msg("candidateMsg",candidateRecoveryError,"error");
+        return false;
+      }
       for(const notification of notifications){
         const unique=String(notification.candidate_id)+"|"+String(notification.source_email_id||"")+"|"+String(notification.created_at||"");
         if(seen.has(unique))continue;
@@ -5227,6 +5240,11 @@ async function loadCandidateRecovery(){
     });
     candidateDismissedCache=items;
     candidateRecoveryLoadedAt=Date.now();
+    // Dopo un errore, il messaggio non resta visibile se il nuovo tentativo riesce.
+    if(candidateRecoveryError&&$("candidateMsg")?.textContent===candidateRecoveryError)
+      msg("candidateMsg","Annunci fuori dalla coda caricati completamente.","success");
+    candidateRecoveryError=null;
+    candidateRecoveryInvalidated=false;
     candidateDismissedIndex=items.map(({id,url,tipo_venditore,updated_at})=>({id,url,tipo_venditore,updated_at}));
     candidateDismissedIndexAt=Date.now();
     return true;
@@ -5390,7 +5408,21 @@ function renderCandidateRecovery(){
   }
   // A pannello chiuso non si costruisce l'elenco.
   if(!panel.open)return;
-  if(!candidateRecoveryLoadedAt){box.innerHTML='<p class="hint">Caricamento degli annunci fuori dalla coda…</p>';return;}
+  const retryHtml=candidateRecoveryError
+    ?'<div class="candidate-quality candidate-quality-warning" data-recovery-error><strong>'
+      +(candidateRecoveryLoadedAt?'Dati non aggiornati.':'Annunci fuori dalla coda non caricati.')+'</strong> '
+      +safe(candidateRecoveryError)
+      +(candidateRecoveryLoadedAt?' · Mostro l’ultimo caricamento completo del '+safe(new Date(candidateRecoveryLoadedAt).toLocaleString("it-IT"))+'.':'')
+      +' <button class="secondary" type="button" id="candidateRecoveryRetry">Riprova</button></div>'
+    :'';
+  const bindRetry=()=>$("candidateRecoveryRetry")?.addEventListener("click",async event=>{
+    event.currentTarget.disabled=true;await loadCandidateRecovery();renderCandidateRecovery();
+  });
+  if(!candidateRecoveryLoadedAt){
+    box.innerHTML=retryHtml||'<p class="hint">Caricamento degli annunci fuori dalla coda…</p>';
+    bindRetry();
+    return;
+  }
   const filter=$("candidateRecoveryFilter")?.value||"all";
   const earliestDismissByUrl=new Map();
   for(const item of candidateDismissedCache){
@@ -5408,10 +5440,10 @@ function renderCandidateRecovery(){
     .filter(entry=>filter==="all"||(filter==="with_new"?entry.updates.count>0:entry.group===filter))
     .sort((a,b)=>(b.updates.count>0)-(a.updates.count>0)||latestTime(b)-latestTime(a)
       ||(nmreTime(b.item.updated_at)??0)-(nmreTime(a.item.updated_at)??0));
-  if(!visible.length){box.innerHTML='<p class="hint">Nessun annuncio in questa categoria.</p>';return;}
+  if(!visible.length){box.innerHTML=retryHtml+'<p class="hint">Nessun annuncio in questa categoria.</p>';bindRetry();return;}
   const formatDate=value=>nmreTime(value)!==null?new Date(nmreTime(value)).toLocaleDateString("it-IT"):"data non disponibile";
   const shown=visible.slice(0,candidateRecoveryLimit);
-  box.innerHTML=shown.map(({item,kind,group,updates})=>{
+  box.innerHTML=retryHtml+shown.map(({item,kind,group,updates})=>{
     const last=nmreLastStatusEntry(item);
     const discard=nmreDiscardEntry(item);
     const url=validUrl(item.url||item.url_originale);
@@ -5460,6 +5492,7 @@ function renderCandidateRecovery(){
   box.querySelectorAll("[data-recover]").forEach(btn=>btn.addEventListener("click",()=>recoverCandidate(btn.dataset.recover,btn.dataset.recoverKind,btn)));
   box.querySelectorAll("[data-recovery-seen]").forEach(btn=>btn.addEventListener("click",()=>markDiscardedNotificationsSeen(btn.dataset.recoverySeen,btn)));
   $("candidateRecoveryMore")?.addEventListener("click",()=>{candidateRecoveryLimit+=NMRE_RECOVERY_PAGE;renderCandidateRecovery();});
+  bindRetry();
 }
 // Presa visione: l'annuncio resta scartato; una notifica successiva lo evidenzierà di nuovo.
 async function markDiscardedNotificationsSeen(id,button){
@@ -5753,16 +5786,10 @@ async function saveCandidateSeller(id,button){
       :"Verificato manualmente: identità del venditore non determinata";
 
   const registryRows=seller==="Da verificare"?[]:buildSellerRegistryRows(seller,identity,contact,id);
-  if(registryRows.length){
-    const {error:registryError}=await supabase.from("seller_identity_registry")
-      .upsert(registryRows,{onConflict:"owner_id,identifier_type,identifier_normalized"});
-    if(registryError){
-      msg("candidateMsg","Verifica non salvata nel registro venditori: "+registryError.message,"error");
-      button.disabled=false;
-      return;
-    }
-  }
 
+  // Prima si aggiorna il candidato (con controllo ottimistico su updated_at); il
+  // registro venditori si scrive SOLO se la modifica del candidato è stata accettata.
+  // Un conflitto non lascia quindi identità o classificazioni nel registro.
   const previousSeller=(candidateCache||[]).find(item=>String(item.id)===String(id))?.tipo_venditore||null;
   const {error,updated:sellerUpdated}=await nmreUpdateCandidateWithHistory(id,{
     data:new Date().toISOString(),origine:"utente",
@@ -5774,7 +5801,7 @@ async function saveCandidateSeller(id,button){
     seller_identity:identity||null,
     seller_confidence:seller==="Da verificare"?0:100,
     seller_evidence:evidence+(registryRows.length
-      ?" · "+registryRows.length+" identificativi memorizzati per i prossimi riconoscimenti"
+      ?" · "+registryRows.length+" identificativi indicati per i prossimi riconoscimenti"
       :" · Nessun identificativo riutilizzabile inserito"),
     seller_manual_override:true,
     seller_classification_version:100,
@@ -5786,6 +5813,22 @@ async function saveCandidateSeller(id,button){
     button.disabled=false;
     return;
   }
+
+  let registrySaved=true;
+  if(registryRows.length){
+    const {error:registryError}=await supabase.from("seller_identity_registry")
+      .upsert(registryRows,{onConflict:"owner_id,identifier_type,identifier_normalized"});
+    if(registryError){
+      registrySaved=false;
+      // La classificazione del candidato è salvata; gli identificativi no. Nessun
+      // dato viene annullato: l'utente può ripetere la verifica per memorizzarli.
+      msg("candidateMsg","Classificazione salvata, ma gli identificativi non sono stati memorizzati nel registro venditori: "
+        +registryError.message+". Ripeta la verifica per memorizzarli.","error");
+    }
+  }
+
+  const memorized=registryRows.length>0&&registrySaved;
+  const registryWarning=registrySaved?"":" Gli identificativi NON sono stati memorizzati nel registro venditori: ripeta la verifica per memorizzarli.";
 
   await loadSellerRegistry();
   let privateArchiveMessage="";
@@ -5813,7 +5856,7 @@ async function saveCandidateSeller(id,button){
     }
     const {data:archiveResult,error:archiveError}=await supabase.rpc("nmre_auto_archive_private_candidate",{p_candidate_id:id});
     if(archiveError){
-      msg("candidateMsg","Verifica del privato salvata, ma archiviazione automatica non riuscita: "+archiveError.message,"error");
+      msg("candidateMsg","Verifica del privato salvata, ma archiviazione automatica non riuscita: "+archiveError.message+registryWarning,"error");
       button.disabled=false;
       await loadCandidates({force:true});
       return;
@@ -5825,14 +5868,14 @@ async function saveCandidateSeller(id,button){
       privateArchiveMessage=" Il riconoscimento è salvato; per archiviarlo mancano: "+(archiveResult?.reason==="missing_required_property_data"?"titolo o comune":"un dato necessario alla conferma")+". Completi la scheda e scelga Tieni nell’archivio.";
     }
   }
-  msg("candidateMsg",isAgency
-    ?"Annuncio classificato come agenzia e rimosso dalle opportunità da acquisire. "+(registryRows.length?"La sua identità è stata memorizzata.":"")
+  msg("candidateMsg",(isAgency
+    ?"Annuncio classificato come agenzia e rimosso dalle opportunità da acquisire. "+(memorized?"La sua identità è stata memorizzata.":"")
     :seller==="Privato"
       ?"Venditore verificato come privato."+privateArchiveMessage
-      :"Verifica del venditore salvata. "+(registryRows.length
+      :"Verifica del venditore salvata. "+(memorized
         ?"NMRE potrà riconoscere nuove notifiche che riportano gli stessi identificativi."
-        :"Per insegnare a NMRE a riconoscere questo venditore in futuro, inserisca anche nome, telefono o email verificati."),
-    seller==="Privato"&&privateArchiveMessage.includes("non riuscita")?"error":"success");
+        :"Per insegnare a NMRE a riconoscere questo venditore in futuro, inserisca anche nome, telefono o email verificati."))+registryWarning,
+    !registrySaved||(seller==="Privato"&&privateArchiveMessage.includes("non riuscita"))?"error":"success");
   await loadCandidates({force:true});
 }
 async function confirmCandidate(id,button){

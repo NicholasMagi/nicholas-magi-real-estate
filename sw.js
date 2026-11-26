@@ -1,4 +1,4 @@
-// NMRE service worker build 20261126-recovery-panel-1
+// NMRE service worker build 20261126-recovery-panel-2
 self.addEventListener("install",event=>{self.skipWaiting();});
 self.addEventListener("activate",event=>{event.waitUntil(self.clients.claim());});
 self.addEventListener("push",event=>{
