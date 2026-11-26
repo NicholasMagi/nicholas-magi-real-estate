@@ -39,8 +39,8 @@ jobs:
       - name: Test sync protections (repeated re-reads, seen marker, concurrent manual edits)
         run: deno test supabase/functions/nmre-gmail-scheduled/sync_protection_test.ts
 
-      - name: Test frontend and sync coherence on notifications after discard
-        run: deno test --allow-read=. supabase/functions/nmre-gmail-scheduled/frontend_coherence_test.ts
+      - name: Test frontend and sync coherence, cursor and notification guarantees
+        run: deno test --allow-read=. supabase/functions/nmre-gmail-scheduled/frontend_coherence_test.ts supabase/functions/nmre-gmail-scheduled/cursor_guard_test.ts
 
       - name: Test recovery panel functions in index.html
         run: node tests/frontend/recovery_test.mjs

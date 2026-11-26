@@ -1076,3 +1076,23 @@ Sul codice di `858316e` falliscono 8 controlli.
 - **Distribuzione.** Le correzioni della funzione (B1, B2 lato funzione, B3) **non sono
   distribuite**: in produzione resta la versione 68 finché non viene approvata e
   distribuita una nuova versione.
+
+### 17.6 Prove aggiuntive (26/11/2026)
+- **Conflitto e rielaborazione senza duplicati** (`sync_protection_test.ts`). Un conflitto
+  persistente durante la riapertura produce un errore recuperabile senza scrivere nulla.
+  Al ciclo successivo la stessa email riapre l'annuncio **una sola volta**, e un'ulteriore
+  rilettura non fa nulla: una sola voce di riapertura nello storico, nessuna notifica
+  duplicata. Un'operazione che non aggiorna il record non viene conteggiata come
+  eseguita (`written: false`).
+- **Garanzie strutturali di `index.ts`** (`cursor_guard_test.ts`, sul sorgente reale):
+  - il cursore Gmail si salva una sola volta, dopo tutte le scritture protette;
+  - nessun `catch` tra il ciclo dei candidati e il salvataggio del cursore, cioè nessun
+    conflitto ignorato;
+  - il ramo di errore non salva il cursore;
+  - le notifiche si registrano con `upsert` su `owner_id,source_email_id`.
+
+  Verificato per mutazione: con un `try/catch` attorno alla riapertura il test fallisce.
+
+Totali in locale e in CI: Deno 82 test (12 sulle protezioni della sincronizzazione, 8 di
+coerenza, 4 strutturali); frontend 55 + 41 + 17; migrazioni e rollback 59; nessun file
+della Fase 2 in `supabase/migrations/`.

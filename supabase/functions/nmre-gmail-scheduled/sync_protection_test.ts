@@ -237,6 +237,7 @@ Deno.test("B3 · annuncio recuperato dall'utente durante la sincronizzazione: ne
   const notices = new Map<string, Notice>([["m0", { created_at: "2026-11-15T00:00:00.000Z", price: 200000 }]]);
   const outcome = await syncEmail(world, notices, { id: "m1", price: 180000, declaredPrevious: 200000 });
   assertEquals(outcome.action, "none", "dopo la rilettura il candidato non è più scartato: nessuna azione");
+  assertEquals(outcome.written, false, "operazione non conteggiata come eseguita: nessun record aggiornato");
   assertEquals(((world.state.rows[0].dati_estratti as Record<string, Array<Record<string, unknown>>>).storico_stato).at(-1)?.azione, "riportato_in_revisione", "decisione dell'utente conservata");
 });
 
@@ -264,4 +265,27 @@ Deno.test("B3 · conflitto persistente: nessuna scrittura e interruzione control
   assertEquals(world.state.writes, 0, "nessuna scrittura applicata");
   assertEquals(world.state.rejectedWrites, GUARDED_MAX_ATTEMPTS, "tentativi limitati a " + GUARDED_MAX_ATTEMPTS);
   assertEquals(world.state.rows[0].prezzo, undefined, "dati dell'utente intatti");
+});
+
+Deno.test("B3 · conflitto persistente durante la riapertura, poi rielaborazione: una sola riapertura, nessun duplicato", async () => {
+  const world = fakeDb([row()]);
+  const notices = new Map<string, Notice>([["m0", { created_at: "2026-11-15T00:00:00.000Z", price: 200000 }]]);
+  const r = world.state.rows[0];
+  const historyBefore = historyLength(r);
+  // L'utente modifica il candidato a ogni tentativo: il conflitto non si risolve.
+  let edits = 0;
+  const keepEditing = (target: Row) => { edits++; target.updated_at = "2026-11-26T11:00:0" + edits + ".000Z"; world.state.afterRead = keepEditing; };
+  world.state.afterRead = keepEditing;
+  let thrown: unknown = null;
+  try { await syncEmail(world, notices, { id: "m1", price: 180000, declaredPrevious: 200000 }); } catch (error) { thrown = error; }
+  assertEquals(thrown instanceof CandidateWriteConflict, true, "conflitto persistente: errore recuperabile (il ciclo si interrompe, il cursore non avanza)");
+  assertEquals(r.stato, "scartato", "conflitto persistente: nessuna riapertura scritta");
+  assertEquals(historyLength(r), historyBefore, "conflitto persistente: nessuna voce di storico scritta");
+  // Ciclo successivo: la stessa email viene rielaborata (il cursore non era avanzato).
+  world.state.afterRead = null;
+  assertEquals((await syncEmail(world, notices, { id: "m1", price: 180000, declaredPrevious: 200000 })).action, "reopen", "rielaborazione: la riapertura avviene una volta");
+  assertEquals((await syncEmail(world, notices, { id: "m1", price: 180000, declaredPrevious: 200000 })).action, "none", "ulteriore rilettura: nessuna azione");
+  const reopens = ((r.dati_estratti as Record<string, Array<Record<string, unknown>>>).storico_stato).filter(e => e.azione === "riaperto_per_ribasso");
+  assertEquals(reopens.length, 1, "una sola voce di riapertura nello storico");
+  assertEquals(notices.size, 2, "nessuna notifica duplicata (chiave owner_id + source_email_id)");
 });
