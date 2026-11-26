@@ -153,6 +153,23 @@ Deno.test("3 · più annunci recuperati dalla pagina, con i dati disponibili", (
   eq(trilocale.publishedAt, "2026-11-26T06:58:10.000Z", "data di pubblicazione (ora italiana → UTC)");
   eq(trilocale.advertiserCompany, false, "inserzionista non professionale");
 });
+Deno.test("3 · solo items.originalList: annunci in vetrina e promossi (galleryList, boostedItems) esclusi", () => {
+  const page = parseSubitoResultsPage(PAGE);
+  eq(PAGE.includes("608899999"), true, "la fixture contiene un annuncio promosso recente");
+  eq(page.items.some(item => item.id === "608899999"), false, "annuncio promosso non contato tra i risultati");
+  eq(page.total, 214, "totale dichiarato dalla pagina");
+  // Struttura diversa (elenco dei risultati assente): annunci solo proposti, mai certi.
+  const moved = PAGE.replace('"originalList"', '"altroElenco"');
+  const other = parseSubitoResultsPage(moved);
+  eq(other.source, "next_data_generico", "struttura non riconosciuta");
+  eq(identifyNewSubitoListings({ declaredCount: 3, page: other, emailListingUrls: [], emailDateIso: "2026-11-26T08:24:26.000Z", previousDigestIso: "2026-11-25T08:22:00.000Z" }).reason,
+    "struttura_non_riconosciuta", "nessuna certezza se l'elenco dei risultati non è riconosciuto");
+  // Una voce dell'elenco senza link valido: recupero parziale.
+  const broken = parseSubitoResultsPage(PAGE.replace('"default": "https://www.subito.it/appartamenti/bilocale-arredato-centro-falconara-marittima-608799020.htm"', '"default": "https://www.subito.it/x"'));
+  eq(broken.skipped, 1, "voce non leggibile contata");
+  eq(identifyNewSubitoListings({ declaredCount: 3, page: broken, emailListingUrls: [], emailDateIso: "2026-11-26T08:24:26.000Z", previousDigestIso: "2026-11-25T08:22:00.000Z" }).reason,
+    "dati_parziali", "voce non leggibile: recupero parziale, nessuna certezza");
+});
 Deno.test("4 · ogni annuncio ha il proprio link diretto e il proprio ID", () => {
   const page = parseSubitoResultsPage(PAGE);
   const ids = new Set(page.items.map(item => item.id));

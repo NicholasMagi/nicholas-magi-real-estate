@@ -38,9 +38,17 @@ export type SubitoItem = {
 
 export type SubitoPage = {
   status: "ok" | "bloccata" | "vuota";
-  /** Fonte dei dati: dati strutturati della pagina, JSON-LD o soli link. */
-  source: "next_data" | "json_ld" | "link" | "nessuna";
+  /**
+   * Fonte dei dati: "next_data" = elenco dei risultati della pagina (items.originalList);
+   * "next_data_generico" = annunci trovati altrove nei dati della pagina (struttura non
+   * riconosciuta); poi JSON-LD o soli link.
+   */
+  source: "next_data" | "next_data_generico" | "json_ld" | "link" | "nessuna";
   items: SubitoItem[];
+  /** Voci dell'elenco dei risultati non leggibili (senza link valido): recupero parziale. */
+  skipped?: number;
+  /** Totale dei risultati dichiarato dalla pagina, se presente. */
+  total?: number | null;
 };
 
 // Tolti dalla richiesta HTTP solo i parametri di campagna: kxconfid e ogni altro
@@ -301,16 +309,56 @@ function collectItems(root: unknown, accept: (node: any) => boolean): SubitoItem
 
 const BLOCK_MARKERS = /captcha-delivery\.com|datadome|g-recaptcha|h-captcha|hcaptcha|cf-chl-|challenge-platform|attention required|access denied|accesso negato|verifica di non essere un robot/i;
 
+/**
+ * Contenitore dei risultati della ricerca nei dati della pagina: nella pagina reale
+ * (26/11/2026) è props.pageProps.initialState.items, con originalList (risultati),
+ * galleryList e boostedItems (annunci in vetrina o promossi, che NON sono risultati).
+ */
+// deno-lint-ignore no-explicit-any
+function findResultsContainer(root: any): any | null {
+  const direct = root?.props?.pageProps?.initialState?.items;
+  if (direct && Array.isArray(direct.originalList)) return direct;
+  const stack: unknown[] = [root];
+  let visited = 0;
+  while (stack.length && visited++ < 50000) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+    // deno-lint-ignore no-explicit-any
+    if (!Array.isArray(node) && Array.isArray((node as any).originalList)) return node;
+    for (const value of Array.isArray(node) ? node : Object.values(node as Record<string, unknown>)) stack.push(value);
+  }
+  return null;
+}
+
 /** Annunci della pagina dei risultati, nell'ordine della pagina. */
 export function parseSubitoResultsPage(html: string): SubitoPage {
   const source = String(html || "");
   const nextData = source.match(/<script[^>]*\bid=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i)?.[1];
   if (nextData) {
     try {
-      // deno-lint-ignore no-explicit-any
-      const items = collectItems(JSON.parse(nextData), (node: any) => typeof node?.urls?.default === "string");
-      if (items.length) return { status: "ok", source: "next_data", items };
-    } catch { /* struttura diversa: si prova con le altre fonti */ }
+      const data = JSON.parse(nextData);
+      const container = findResultsContainer(data);
+      if (container) {
+        // Solo l'elenco dei risultati: galleryList e boostedItems sono esclusi.
+        // deno-lint-ignore no-explicit-any
+        const entries = (container.originalList as any[]).filter(entry => !entry?.kind || entry.kind === "AdItem");
+        const unique = new Map<string, SubitoItem>();
+        let skipped = 0;
+        for (const entry of entries) {
+          const item = itemFromObject(entry?.item && typeof entry.item === "object" && !entry.urls ? entry.item : entry);
+          if (!item) skipped++;
+          else if (!unique.has(item.id)) unique.set(item.id, item);
+        }
+        const total = Number.isFinite(Number(container.total)) ? Number(container.total) : null;
+        if (unique.size || skipped) return { status: "ok", source: "next_data", items: [...unique.values()], skipped, total };
+        if (total === 0) return { status: "vuota", source: "next_data", items: [], skipped: 0, total };
+      } else {
+        // Struttura non riconosciuta: gli annunci vengono proposti, mai considerati certi.
+        // deno-lint-ignore no-explicit-any
+        const items = collectItems(data, (node: any) => typeof node?.urls?.default === "string");
+        if (items.length) return { status: "ok", source: "next_data_generico", items };
+      }
+    } catch { /* dati non leggibili: si prova con le altre fonti */ }
   }
   const ldItems: SubitoItem[] = [];
   for (const block of source.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
@@ -349,7 +397,8 @@ export type NewListingsDecision = {
   reason:
     | "annunci_nell_email" | "finestra_temporale"
     | "numero_non_dichiarato" | "nessun_annuncio_nella_pagina" | "date_non_disponibili" | "dati_parziali"
-    | "data_email_mancante" | "nessuna_notifica_precedente" | "pagina_incompleta" | "conteggio_diverso";
+    | "data_email_mancante" | "nessuna_notifica_precedente" | "pagina_incompleta" | "conteggio_diverso"
+    | "struttura_non_riconosciuta";
   /** Annunci nuovi individuati con certezza (vuoto se certain è false). */
   newItems: SubitoItem[];
   /** Annunci plausibili da far verificare al titolare (se certain è false). */
@@ -404,8 +453,9 @@ export function identifyNewSubitoListings(params: {
   }
   if (params.declaredCount === null) return uncertain("numero_non_dichiarato");
   if (!pageItems.length) return uncertain("nessun_annuncio_nella_pagina");
+  if (params.page?.source === "next_data_generico") return uncertain("struttura_non_riconosciuta");
   if (params.page?.source !== "next_data") return uncertain("date_non_disponibili");
-  if (pageItems.some(item => !item.publishedAt)) return uncertain("dati_parziali");
+  if ((params.page?.skipped || 0) > 0 || pageItems.some(item => !item.publishedAt)) return uncertain("dati_parziali");
   if (limit === null) return uncertain("data_email_mancante");
   if (!Number.isFinite(previous)) return uncertain("nessuna_notifica_precedente");
   const inWindow = pageItems.filter(item => {
@@ -430,6 +480,7 @@ export const SUBITO_REASON_TEXT: Record<string, string> = {
   nessuna_notifica_precedente: "Prima email di questa ricerca acquisita da NMRE: non si sa da quando contare i nuovi annunci",
   pagina_incompleta: "La pagina non mostra annunci anteriori all'email precedente: potrebbero esserci altri risultati",
   conteggio_diverso: "Il numero di annunci trovati non corrisponde a quello dichiarato dall'email",
+  struttura_non_riconosciuta: "Elenco dei risultati non riconosciuto nella pagina: gli annunci trovati sono solo proposti",
   link_mancante: "Link alla pagina dei risultati non trovato nell'email",
   pagina_bloccata: "Pagina dei risultati protetta (verifica anti-robot): non aggirata",
   pagina_vuota: "Pagina dei risultati vuota o con una struttura non riconosciuta",
