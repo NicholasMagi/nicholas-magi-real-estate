@@ -114,7 +114,7 @@ const row = build(parsed.items[0], parsed.meta, "00000000-0000-4000-8000-0000000
 assert.equal(row.owner_id, "00000000-0000-4000-8000-000000000001");
 assert.equal(row.dedup_key, "subito:669796300");
 assert.equal(row.listing_key, "subito.it/appartamenti/piazza-diaz-ancona-669796300.htm");
-assert.equal(row.tipo_venditore, "Da verificare");
+assert.equal(row.tipo_venditore, "Privato", "il filtro privati della ricerca preclassifica il venditore");
 assert.equal(row.stato, "da_verificare");
 assert.equal(row.data_pubblicazione, null, "non inventa una data email");
 assert.equal(row.dati_fonte.received_at, null, "l'importazione browser non viene spacciata per una notifica Gmail");
@@ -122,7 +122,17 @@ assert.equal(row.dati_estratti.subito.novita_non_dimostrata, true);
 assert.equal(row.dati_estratti.subito.inserzionista_professionale, false);
 assert.equal(row.dati_estratti.subito.pubblicato_il, "2026-11-26T08:00:00.000Z");
 assert.equal(row.dati_estratti.subito.immagini.length, 1);
-assert.equal(row.seller_confidence, 0);
+assert.equal(row.seller_confidence, 95);
+assert.match(row.seller_evidence, /inserzionista privato/);
+assert.equal(row.dati_fonte.seller_filter_applied, true);
+assert.equal(row.dati_fonte.seller_filter, "privati");
+assert.equal(row.dati_estratti.subito.filtro_venditore, "privati");
+const noIndividualFlag = build(parsed.items[1], parsed.meta, "00000000-0000-4000-8000-000000000001", "batch123");
+assert.equal(noIndividualFlag.tipo_venditore, "Privato", "si usa il filtro utente anche quando la scheda non espone il tipo");
+assert.equal(noIndividualFlag.seller_confidence, 85);
+const professionalConflict = build({ ...parsed.items[0], advertiser_company: true }, parsed.meta, "00000000-0000-4000-8000-000000000001", "batch123");
+assert.equal(professionalConflict.tipo_venditore, "Da verificare", "una dichiarazione esplicita di inserzionista professionale prevale sul filtro");
+assert.equal(professionalConflict.seller_confidence, 0);
 assert.equal(row.email_subject, "Importazione manuale dalla pagina Subito");
 
-console.log("Importazione Subito da browser: parsing, validazioni, deduplica interna e scheda «Da verificare» verificati.");
+console.log("Importazione Subito da browser: parsing, validazioni, deduplica e classificazione del filtro privati verificate.");
