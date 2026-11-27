@@ -116,6 +116,26 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .candidate-inbox-search input{width:100%;margin:0}
 .candidate-inbox-toolbar-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .candidate-inbox-toolbar-actions .search-filter-count{font-size:11px;color:var(--muted)}
+/* Nuove opportunità: una riga compatta per immobile, uguale per ogni portale. */
+#candidateList{--row-cols:minmax(0,2fr) minmax(0,1fr) 6rem 4.4rem 7.2rem 5.4rem 6.8rem 16rem}
+.candidate-row-head{display:grid;grid-template-columns:var(--row-cols);gap:10px;padding:6px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);border-bottom:1px solid var(--line)}
+.candidate.candidate-row{margin:0;padding:0;border:0;border-bottom:1px solid var(--line);border-left:3px solid #d9dee6;border-radius:0;background:#fff}
+.candidate-row-main{display:grid;grid-template-columns:var(--row-cols);gap:10px;align-items:center;padding:8px 12px;min-width:0}
+.candidate-row-title{min-width:0;display:flex;flex-direction:column;gap:3px}.candidate-row-title strong{font-size:13px;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.candidate-row-tags{display:flex;flex-wrap:wrap;gap:4px}.candidate-row-tag{font-size:10px;line-height:1.3;padding:1px 6px;border-radius:999px;background:#f1f3f6;color:#4b5563;white-space:nowrap}.candidate-row-tag-price{background:#e8f6ec;color:#1f6b3a;font-weight:700}.candidate-row-tag-warning{background:#fff3df;color:#8a5300;font-weight:700}
+.candidate-row-cell{min-width:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.candidate-row-label{display:none}.candidate-row-empty{color:var(--muted)}
+.candidate-row-seller{font-size:11px;font-weight:700;padding:2px 7px;border-radius:999px;white-space:nowrap}.candidate-row-seller-privato{background:#e8f6ec;color:#1f6b3a}.candidate-row-seller-verificare{background:#fff6e0;color:#7a5600}.candidate-row-seller-agenzia{background:#fdf1f0;color:#7a221e}
+.candidate-row-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}.candidate-row-actions button,.candidate-row-actions a{width:auto;min-width:0;flex:0 0 auto;min-height:34px;padding:0 10px;font-size:12px;white-space:nowrap}.candidate-row-open{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:8px;text-decoration:none;font-weight:600}.candidate-row-actions .gold{font-weight:700}
+.candidate-row .candidate-detail-panel{margin:0 12px 10px}.candidate-row .candidate-detail-panel:not([open]){display:none}.candidate-row-summary{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.candidate-row-origin{margin-bottom:6px}
+@media (max-width:1200px){
+ .candidate-row-head{display:none}
+ .candidate-row-main{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 10px;padding:10px 12px}
+ .candidate-row-title{grid-column:1/-1}.candidate-row-label{display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--muted)}
+ .candidate-row-actions{grid-column:1/-1;justify-content:flex-start;flex-wrap:wrap;margin-top:4px}.candidate-row-actions button,.candidate-row-actions a{min-height:44px;flex:1 1 0;justify-content:center;padding:0 8px}
+}
+/* Il launcher NOVA è fisso anche su tablet: lasciare spazio per scorrere oltre l'ultima opportunità. */
+@media(max-width:1200px){#candidateList{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}}
 .candidate-email-card{padding:13px 14px;margin:9px 0;background:#fff;border:1px solid var(--line);border-left-width:4px;border-radius:0 11px 11px 0;min-width:0;overflow-wrap:anywhere}
 .candidate-email-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:10px;color:var(--muted);min-width:0}
 .candidate-email-sender{font-weight:700;color:#526075;overflow-wrap:anywhere}
@@ -136,6 +156,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
  .candidate-email-date{margin-left:0}
  .candidate-email-card{padding:11px 10px}
  .candidate-email-card .candidate-actions-primary>*{flex:1 1 auto}
+
 }
 
 .candidate-duplicate-warning{margin:10px 0;padding:11px 13px;border:1px solid #e3c99e;border-left:4px solid #bd8950;border-radius:10px;background:#fff9ee;color:#614d33;font-size:12px;line-height:1.5;overflow-wrap:anywhere;min-width:0}
@@ -1614,7 +1635,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261127-subito-browser-importer-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261127-compact-opportunities-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1689,7 +1710,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261127-subito-browser-importer-1");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261127-compact-opportunities-1");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -4891,7 +4912,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261127-subito-browser-importer-1");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261127-compact-opportunities-1");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);
@@ -5954,15 +5975,12 @@ function renderCandidates(){
     renderDashboard();
     return;
   }
-  box.innerHTML=uniqueRanked.map(({item:c,priority,quality})=>{
+  box.innerHTML='<div class="candidate-row-head" aria-hidden="true"><span>Immobile</span><span>Comune</span><span>Prezzo</span><span>Superficie</span><span>Portale</span><span>Data</span><span>Venditore</span><span></span></div>'
+    +uniqueRanked.map(({item:c,priority,quality})=>{
     const isPrivate=c.tipo_venditore==="Privato";
     const notificationDate=quality.hasNotificationDate
       ?new Date(c.data_pubblicazione).toLocaleDateString("it-IT"):(c.is_browser_import?"Importazione browser":"Data email non indicata");
     const url=nmreCandidateListingUrl(c);
-    const linkLabel=nmreCandidateListingLabel(c);
-    const linkHtml=url
-      ?'<a href="'+safe(url)+'" target="_blank" rel="noopener noreferrer" data-open-listing="'+safe(c.id)+'">'+safe(linkLabel)+'</a>'
-      :'<span class="candidate-link-warning">Link annuncio non disponibile</span>';
     const ageText=quality.hasNotificationDate
       ?(quality.notificationDays===0?"Email ricevuta oggi":"Email ricevuta "+quality.notificationDays+" giorni fa")
       :"Data di ricezione dell'email non disponibile";
@@ -6040,42 +6058,56 @@ function renderCandidates(){
       Number(c.superficie_mq)>0?Number(c.superficie_mq).toLocaleString("it-IT")+" m²":null,
       Number(c.locali)>0?Number(c.locali).toLocaleString("it-IT")+" locali":null
     ].filter(Boolean).join(" · ");
-    const quickTags=[
-      '<span class="candidate-quick-tag">Qualità dati '+quality.qualityScore+'/100</span>',
-      latestPriceDrop?'<span class="candidate-quick-tag candidate-quick-tag-price">Ribasso documentato</span>':""
-    ].filter(Boolean).join("");
-    const reviewAction='<button class="gold" type="button" data-open-candidate-details="'+safe(c.id)+'">'+(c.is_browser_import?"Verifica annuncio":"Verifica email")+'</button>';
     const sourceTheme=candidateSourceTheme(c.portale);
     const sourceLabel=sourceTheme==="idealista"?"Idealista":sourceTheme==="immobiliare"?"Immobiliare.it":sourceTheme==="subito"?"Subito":(c.portale||"Portale non indicato");
     const emailSubject=String(c.email_subject||"Notifica immobiliare").trim();
     const emailSender=String(c.notification_sender||sourceLabel).trim();
     const emailCount=c.is_browser_import?"Importata da browser":Number(c.notification_count)>1?Number(c.notification_count)+" email collegate":"1 email";
     const sellerStateLabel=isPrivate?(c.dati_fonte?.seller_filter_applied?"Privato · filtro Subito · archiviazione da completare":"Privato riconosciuto · archiviazione da completare"):"Venditore da verificare";
-    const duplicateBadge=quality.duplicate?'<span class="candidate-email-duplicate">Possibile duplicato</span>':"";
     const lastDecision=nmreLastStatusEntry(c);
-    const reopenBadge=lastDecision&&lastDecision.azione==="riaperto_per_ribasso"
-      ?'<span class="candidate-email-duplicate candidate-reopened-badge">Riaperto dopo lo scarto · '+safe(lastDecision.motivo||"nuovo ribasso documentato")+'</span>'
-      :"";
-    const dismissedBadge=c.previously_dismissed?'<span class="candidate-email-duplicate">Già scartato in passato · verificare'+(Number(c.price_drop_percent)>0?' · nuovo ribasso':'')+'</span>':"";
 
-    return '<article id="candidate-'+safe(c.id)+'" class="candidate candidate-email-card candidate-source-'+sourceTheme+'" data-candidate="'+safe(c.id)+'" data-url="'+safe(c.url||"")+'" data-url-originale="'+safe(c.url_originale||"")+'" data-portal="'+safe(c.portale||"Portale non indicato")+'">'
-      +'<div class="candidate-email-meta">'
-      +'<span class="candidate-source-badge candidate-source-badge-'+sourceTheme+'">'+safe(sourceLabel)+'</span>'
-      +'<span class="candidate-email-sender">'+safe(emailSender)+'</span>'
-      +'<span class="candidate-email-date">'+safe(notificationDate)+'</span>'
-      +'<span class="candidate-email-count">'+safe(emailCount)+'</span>'
+    // Riga compatta, identica per ogni portale (stesso componente): titolo, comune, prezzo,
+    // superficie, portale, data e venditore; azioni sempre visibili; tutto il resto (email,
+    // qualità, storico, campi di verifica) nel pannello dei dettagli, invariato.
+    const rowSearch=c.dati_estratti&&c.dati_estratti.ricerca_subito&&typeof c.dati_estratti.ricerca_subito==="object"?c.dati_estratti.ricerca_subito:null;
+    const rowSearchUrl=rowSearch?validUrl(rowSearch.url_ricerca):null;
+    const sellerKind=c.tipo_venditore==="Privato"?"privato":c.tipo_venditore==="Agenzia"?"agenzia":"verificare";
+    const rowCell=(col,label,value,empty)=>'<div class="candidate-row-cell" data-col="'+col+'"><span class="candidate-row-label">'+label+'</span>'+(value?safe(value):'<span class="candidate-row-empty">'+safe(empty||"—")+'</span>')+'</div>';
+    const rowTags=[
+      latestPriceDrop?'<span class="candidate-row-tag candidate-row-tag-price">Ribasso −'+safe(Number(latestPriceDrop.price_drop_percent).toLocaleString("it-IT"))+'%</span>':"",
+      lastDecision&&lastDecision.azione==="riaperto_per_ribasso"?'<span class="candidate-row-tag">Riaperto dopo lo scarto</span>':"",
+      quality.duplicate?'<span class="candidate-row-tag candidate-row-tag-warning">Possibile duplicato</span>':"",
+      c.previously_dismissed?'<span class="candidate-row-tag">Già scartato in passato</span>':"",
+      rowSearch?'<span class="candidate-row-tag">Ricerca salvata'+(rowSearch.annunci_dichiarati?' · '+safe(rowSearch.annunci_dichiarati)+' annunci':"")+'</span>':""
+    ].filter(Boolean).join("");
+    return '<article id="candidate-'+safe(c.id)+'" class="candidate candidate-row candidate-source-'+sourceTheme+'" data-candidate="'+safe(c.id)+'" data-url="'+safe(c.url||"")+'" data-url-originale="'+safe(c.url_originale||"")+'" data-portal="'+safe(c.portale||"Portale non indicato")+'">'
+      +'<div class="candidate-row-main">'
+      +'<div class="candidate-row-title"><strong>'+safe(c.titolo||"Annuncio immobiliare")+'</strong>'+(rowTags?'<span class="candidate-row-tags">'+rowTags+'</span>':"")+'</div>'
+      +rowCell("comune","Comune",c.comune,"Comune n/d")
+      +rowCell("prezzo","Prezzo",Number(c.prezzo)>0?formatCurrency(c.prezzo):"","Prezzo n/d")
+      +rowCell("superficie","Superficie",Number(c.superficie_mq)>0?Number(c.superficie_mq).toLocaleString("it-IT")+" m²":"","m² n/d")
+      +'<div class="candidate-row-cell" data-col="portale"><span class="candidate-row-label">Portale</span><span class="candidate-source-badge candidate-source-badge-'+sourceTheme+'">'+safe(sourceLabel)+'</span></div>'
+      +rowCell("data","Data",notificationDate,"Data n/d")
+      +'<div class="candidate-row-cell" data-col="venditore"><span class="candidate-row-label">Venditore</span><span class="candidate-row-seller candidate-row-seller-'+sellerKind+'">'+safe(c.tipo_venditore||"Da verificare")+'</span></div>'
+      +'<div class="candidate-row-actions">'
+      +(url?'<a class="candidate-row-open" href="'+safe(url)+'" target="_blank" rel="noopener noreferrer" data-open-listing="'+safe(c.id)+'" title="Apri l’annuncio originale">Apri</a>':'<span class="candidate-link-warning">Link n/d</span>')
+      +(rowSearchUrl?'<button type="button" class="secondary" data-subito-import-link="'+safe(rowSearchUrl)+'" data-subito-import-label="'+safe(String(c.email_subject||"").replace(/\s+ha\s+\d+\s+nuov[oi]\s+annunc[io].*$/i,"").slice(0,160))+'" data-subito-import-candidate="'+safe(c.id)+'">Importa</button>':"")
+      +'<button class="secondary" type="button" data-open-candidate-details="'+safe(c.id)+'" aria-expanded="false">Dettagli</button>'
+      +(isPrivate?'<button class="gold" type="button" data-confirm="'+safe(c.id)+'">Archivia</button>':"")
+      +'<button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta</button>'
       +'</div>'
-      +'<div class="candidate-quick-summary">'
-      +'<div class="candidate-email-subject"><span>'+(c.is_browser_import?"Origine":"Oggetto email")+'</span> '+safe(emailSubject)+'</div>'
-      +'<h3>'+safe(c.titolo||"Annuncio immobiliare")+'</h3>'
-      +'<p class="candidate-quick-facts">'+safe(quickFacts||"Caratteristiche dell’immobile da completare")+'</p>'
-      +'<div class="candidate-email-status">'+safe(sellerStateLabel)+' '+reopenBadge+' '+duplicateBadge+' '+dismissedBadge+'</div>'
       +'</div>'
-      +nmreSubitoRecoveryHtml(c)
-      +'<div class="candidate-actions candidate-actions-primary">'+reviewAction+linkHtml+'<button class="gold" type="button" data-confirm="'+safe(c.id)+'">Archivia</button><button class="danger" type="button" data-discard="'+safe(c.id)+'">'+(c.is_browser_import?"Scarta opportunità":"Scarta email")+'</button></div>'
       +'<details class="candidate-detail-panel" data-candidate-details>'
-      +'<summary>'+(c.is_browser_import?"Dettagli annuncio e verifica del venditore":"Apri email e verifica del venditore")+'</summary>'
+      +'<summary class="candidate-row-summary">'+(c.is_browser_import?"Dettagli annuncio e verifica del venditore":"Dettagli, email e verifica del venditore")+'</summary>'
       +'<div class="candidate-detail-content">'
+      +'<div class="candidate-email-meta candidate-row-origin">'
+      +'<span class="candidate-email-sender">'+safe(emailSender)+'</span>'
+      +'<span class="candidate-email-count">'+safe(emailCount)+'</span>'
+      +'<span class="candidate-email-subject"><span>'+(c.is_browser_import?"Origine":"Oggetto email")+'</span> '+safe(emailSubject)+'</span>'
+      +'</div>'
+      +'<div class="candidate-email-status">'+safe(sellerStateLabel)+'</div>'
+      +(quickFacts?'<p class="candidate-quick-facts">'+safe(quickFacts)+'</p>':"")
+      +nmreSubitoRecoveryHtml(c)
       +analysisHtml
       +priceDropHtml
       +qualityHtml
@@ -6100,19 +6132,25 @@ function renderCandidates(){
       +'</div></details>'
       +'</article>';
   }).join("");
+  // Archivia è disponibile solo per i candidati già verificati come privati.
+  // Non modificare mai la selezione del venditore implicitamente al clic.
   box.querySelectorAll("[data-confirm]").forEach(btn=>btn.addEventListener("click",()=>{
-    const card=btn.closest("[data-candidate]");
-    const seller=card?.querySelector('[data-field="venditore"]');
-    if(seller)seller.value="Privato";
     confirmCandidate(btn.dataset.confirm,btn);
   }));
   box.querySelectorAll("[data-open-candidate-details]").forEach(btn=>btn.addEventListener("click",()=>{
     const card=btn.closest("[data-candidate]");
     const details=card?.querySelector("[data-candidate-details]");
-    if(details)details.open=true;
+    if(!details)return;
+    // «Dettagli» apre e chiude il pannello della riga; all'apertura porta alla verifica del venditore.
+    details.open=!details.open;
+    btn.setAttribute("aria-expanded",details.open?"true":"false");
+    if(!details.open)return;
     const seller=card?.querySelector('[data-field="venditore"]');
     seller?.scrollIntoView({behavior:"smooth",block:"center"});
     seller?.focus({preventScroll:true});
+  }));
+  box.querySelectorAll("[data-candidate-details]").forEach(details=>details.addEventListener("toggle",()=>{
+    details.closest("[data-candidate]")?.querySelector("[data-open-candidate-details]")?.setAttribute("aria-expanded",details.open?"true":"false");
   }));
   box.querySelectorAll("[data-save-seller]").forEach(btn=>btn.addEventListener("click",()=>saveCandidateSeller(btn.dataset.saveSeller,btn)));
   box.querySelectorAll("[data-enrich]").forEach(btn=>btn.addEventListener("click",()=>analyzeCandidatePage(btn.dataset.enrich,btn)));
