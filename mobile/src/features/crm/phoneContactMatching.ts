@@ -70,7 +70,7 @@ function normalizeContactEmail(value: string): string {
   return value.trim().toLocaleLowerCase("en-US");
 }
 
-/** Merge only when normalized full name and a strong identifier both match. */
+/** Merge only when name and a strong identifier match without conflicting identifiers. */
 export function findCertainDuplicateGroups<T extends DuplicateContactIdentity>(contacts: T[]): T[][] {
   const parent = new Map<string, string>();
   const find = (id: string): string => {
@@ -86,19 +86,20 @@ export function findCertainDuplicateGroups<T extends DuplicateContactIdentity>(c
     if (rootA !== rootB) parent.set(rootB, rootA);
   };
   contacts.forEach(contact => parent.set(contact.id, contact.id));
-  const byIdentity = new Map<string, string>();
-  for (const contact of contacts) {
-    if (!contact.full_name?.trim()) continue;
-    const name = normalizeContactName(contact.full_name);
-    const identifiers = [
-      contact.phone ? "phone:" + (normalizePhoneNumber(contact.phone) ?? "") : "",
-      contact.email?.trim() ? "email:" + normalizeContactEmail(contact.email) : ""
-    ].filter(value => !value.endsWith(":"));
-    for (const identifier of identifiers) {
-      const key = name + "|" + identifier;
-      const previous = byIdentity.get(key);
-      if (previous) union(previous, contact.id);
-      else byIdentity.set(key, contact.id);
+  for (let i = 0; i < contacts.length; i += 1) {
+    const a = contacts[i];
+    if (!a.full_name?.trim()) continue;
+    for (let j = i + 1; j < contacts.length; j += 1) {
+      const b = contacts[j];
+      if (!b.full_name?.trim() || normalizeContactName(a.full_name) !== normalizeContactName(b.full_name)) continue;
+      const phoneA = a.phone ? normalizePhoneNumber(a.phone) : null;
+      const phoneB = b.phone ? normalizePhoneNumber(b.phone) : null;
+      const emailA = a.email?.trim() ? normalizeContactEmail(a.email) : null;
+      const emailB = b.email?.trim() ? normalizeContactEmail(b.email) : null;
+      const phoneConflict = Boolean(phoneA && phoneB && phoneA !== phoneB);
+      const emailConflict = Boolean(emailA && emailB && emailA !== emailB);
+      if (phoneConflict || emailConflict) continue;
+      if ((phoneA && phoneA === phoneB) || (emailA && emailA === emailB)) union(a.id, b.id);
     }
   }
   const groups = new Map<string, T[]>();
