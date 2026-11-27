@@ -1220,7 +1220,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
   <div class="candidate-inbox-toolbar">
     <div class="candidate-inbox-search">
       <label for="candidateSearch">Cerca nelle email</label>
-      <input id="candidateSearch" type="search" placeholder="Oggetto, mittente, immobile o comune">
+      <input id="candidateSearch" type="search" placeholder="Oggetto, immobile, comune, via, contatto, telefono o ID annuncio">
     </div>
     <div class="candidate-inbox-toolbar-actions">
       <span id="candidateFilterCount" class="search-filter-count">Caricamento email…</span>
@@ -1374,7 +1374,7 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
 <div class="search-filter-panel">
   <div class="search-filter-head"><div class="search-filter-title">Ricerca archivio · Filtri commerciali e immobiliari</div><span class="small">Combinabili tra loro</span></div>
   <div class="search-filter-grid">
-    <div class="search-filter-field"><label for="listingSearch">Parola chiave</label><input id="listingSearch" type="search" placeholder="Titolo, via, comune, contatto"></div>
+    <div class="search-filter-field"><label for="listingSearch">Parola chiave</label><input id="listingSearch" type="search" placeholder="Titolo, via, comune, contatto o telefono"></div>
     <div class="search-filter-field"><label for="listingTownFilter">Comune</label><select id="listingTownFilter"><option value="">Tutti i comuni</option></select></div>
     <div class="search-filter-field"><label for="listingTypeFilter">Tipologia</label><select id="listingTypeFilter"><option value="">Tutte le tipologie</option></select></div>
     <div class="search-filter-field"><label for="listingPortalFilter">Portale / fonte</label><select id="listingPortalFilter"><option value="">Tutte le fonti</option></select></div>
@@ -4883,6 +4883,27 @@ function candidateSourceTheme(portal){
   if(value.includes("subito"))return "subito";
   return "other";
 }
+/**
+ * Ricerca comune a Opportunità e Archivio: testo su tutti i campi indicati e, se la ricerca
+ * è un numero (almeno 6 cifre, con o senza +39, spazi o trattini), confronto normalizzato
+ * con i numeri dell'annuncio e del contatto collegato della Rubrica, secondari compresi.
+ */
+function nmreLinkedContact(item){
+  return item&&item.contact_id?(nmreCrmContacts||[]).find(contact=>String(contact.id)===String(item.contact_id))||null:null;
+}
+function nmreListingPhoneSearchKeys(item){
+  const contact=nmreLinkedContact(item);
+  const contactKeys=contact?(typeof nmreContactPhoneKeysAll==="function"?nmreContactPhoneKeysAll(contact):nmrePhoneKeys(contact.phone)):[];
+  return [...new Set([...nmreExtractListingPhones(item).flatMap(nmrePhoneKeys),...contactKeys])];
+}
+function nmreSearchMatches(texts,term,phoneKeys){
+  if(!term)return true;
+  if(texts.filter(Boolean).join(" ").toLocaleLowerCase("it").includes(term))return true;
+  const digits=term.replace(/\D/g,"");
+  if(digits.length<6||/[^\d\s+().\/-]/.test(term))return false;
+  const key=digits.startsWith("0039")?digits.slice(4):digits.startsWith("39")&&digits.length>=11?digits.slice(2):digits;
+  return (phoneKeys||[]).some(phoneKey=>phoneKey.includes(key));
+}
 function renderCandidates(){
   const box=$("candidateList");
   const data=candidateCache||[];
@@ -4907,9 +4928,10 @@ function renderCandidates(){
     return true;
   };
   const visible=data.filter(item=>{
-    const haystack=[item.email_subject,item.notification_sender,item.titolo,item.comune,item.portale,item.tipologia_immobile].filter(Boolean).join(" ").toLocaleLowerCase("it");
+    const texts=[item.email_subject,item.notification_sender,item.titolo,item.comune,item.indirizzo,item.portale,item.tipologia_immobile,item.contatto,
+      item.url,item.url_originale,item.dati_estratti?.subito?.id,nmreLinkedContact(item)?.full_name];
     const quality=qualityById.get(String(item.id));
-    return (!term||haystack.includes(term))
+    return (!term||nmreSearchMatches(texts,term,nmreListingPhoneSearchKeys(item)))
       &&(!town||item.comune===town)
       &&(!type||item.tipologia_immobile===type)
       &&(!portal||item.portale===portal)
@@ -6402,8 +6424,8 @@ function renderListings(){
   const seller=$("sellerFilter").value;
   const contactStatus=$("contactFilter").value;
   const filtered=data.filter(item=>{
-    const haystack=[item.titolo,item.comune,item.portale,item.contatto,item.tipologia_immobile].filter(Boolean).join(" ").toLocaleLowerCase("it");
-    return (!query||haystack.includes(query))
+    const texts=[item.titolo,item.comune,item.indirizzo,item.portale,item.contatto,item.tipologia_immobile,item.url,nmreLinkedContact(item)?.full_name];
+    return (!query||nmreSearchMatches(texts,query,nmreListingPhoneSearchKeys(item)))
       &&(!town||item.comune===town)
       &&(!propertyType||item.tipologia_immobile===propertyType)
       &&(!portal||item.portale===portal)
