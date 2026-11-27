@@ -84,7 +84,20 @@ try {
     await page.screenshot({ path: `${OUT}/page-1.png`, fullPage: false }).catch(() => {});
 
     if (first.status === 200 && !first.challengeDetected && first.listingLinkCount > 0) {
-      const next = bottom.nextLinks.find((a) => {
+      const pageTwoButton = page.locator('button[aria-label="Andare a pagina 2"]');
+      const pageTwoCount = await pageTwoButton.count();
+      if (pageTwoCount > 0) {
+        report.paginationMethod = "normal click on Subito button Andare a pagina 2";
+        await pageTwoButton.first().click({ timeout: 8000 });
+        await wait(3500);
+        const second = await snapshot(page, null);
+        second.status = 200;
+        second.challengeDetected = challengeLike(second.title, second.bodyStart, second.url);
+        report.pages.push(second);
+        report.paginationFollowed = true;
+        await page.screenshot({ path: `${OUT}/page-2.png`, fullPage: false }).catch(() => {});
+      }
+      const next = report.paginationFollowed ? null : bottom.nextLinks.find((a) => {
         try {
           const u = new URL(a.href);
           return u.origin === "https://www.subito.it" && u.href !== first.url;
@@ -99,7 +112,7 @@ try {
         report.pages.push(second);
         report.paginationFollowed = true;
         await page.screenshot({ path: `${OUT}/page-2.png`, fullPage: false }).catch(() => {});
-      } else {
+      } else if (!report.paginationFollowed) {
         report.paginationLinkFound = null;
       }
     }
