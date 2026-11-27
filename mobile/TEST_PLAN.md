@@ -111,3 +111,17 @@ Still required after local dependency installation:
 - [ ] Missing title or municipality blocks archive with a clear message.
 - [ ] Archiving a candidate classified as Privato but not manually verified does not show it as Privato confermato.
 - [ ] Repeating archive after success does not create a second listing.
+
+
+## 12. Native phone contacts sync (draft implementation)
+- [ ] Install dependencies with npm ci and confirm expo-contacts resolves from the committed lockfile.
+- [ ] Run npm run test:contacts and npm test.
+- [ ] Run npm run typecheck, npm run lint and npm run check:expo.
+- [ ] Build iOS and Android development clients; Expo Go is not sufficient proof for a release binary.
+- [ ] Test permission not requested, granted, denied, permanently denied and revoked from Settings.
+- [ ] Test import of empty, name-only, phone-only, email-only, multiple-number and duplicate-number contacts.
+- [ ] Verify a repeated sync creates no duplicate CRM rows and never overwrites populated CRM fields.
+- [ ] Verify Italian local/+39/0039 formatting and multiple numbers in one listing contact field.
+- [ ] Verify an archived listing is linked only when exactly one CRM contact matches; ambiguous matches remain unlinked.
+- [ ] Verify foreground refresh and contact-change listener on physical iOS and Android devices.
+- [ ] Confirm no contact data is persisted locally and no production migration or deployment is needed for this mobile client change.
