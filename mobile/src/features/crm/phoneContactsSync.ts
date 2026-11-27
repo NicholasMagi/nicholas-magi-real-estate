@@ -152,15 +152,19 @@ async function importDeviceContacts(
       for (const match of byName.get(nameKey) ?? []) candidates.set(match.id, match);
     }
 
-    if (candidates.size > 1 || (candidates.size === 0 && !item.fullName)) {
+    if (
+      candidates.size > 1 ||
+      (candidates.size === 0 && !item.fullName) ||
+      (candidates.size === 0 && phoneNumbers.length === 0 && !email && (deviceNameCounts.get(nameKey) ?? 0) > 1)
+    ) {
       ambiguous += 1;
       continue;
     }
 
     const matchedCandidate = candidates.size === 1 ? candidates.values().next().value as CrmContact | undefined : undefined;
     let matched: CrmContact | null = matchedCandidate ?? null;
-    const primaryPhone = item.phoneNumbers[0]?.trim() || null;
-    const primaryEmail = item.emails[0]?.trim() || null;
+    const primaryPhone = item.phoneNumbers.find(value => normalizePhoneNumber(value) !== null)?.trim() ?? null;
+    const primaryEmail = item.emails.find(value => value.includes("@"))?.trim() ?? null;
 
     if (!matched) {
       const { data: inserted, error: insertError } = await supabase
