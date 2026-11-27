@@ -341,17 +341,46 @@ export type CrmContactSummary = {
   email: string | null;
   contact_type: string | null;
   status: string | null;
+  source: string | null;
 };
 
 export async function loadCrmContacts(ownerId: string): Promise<CrmContactSummary[]> {
   if (!ownerId) throw new Error("Sessione utente non disponibile.");
   if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
-  const { data, error } = await supabase
+  const contacts: CrmContactSummary[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const { data, error } = await supabase
+      .from("nmre_contacts")
+      .select("id,full_name,phone,email,contact_type,status,source")
+      .eq("owner_id", ownerId)
+      .order("full_name", { ascending: true })
+      .range(offset, offset + 99);
+    if (error) throw new Error("Non è stato possibile caricare i contatti CRM.");
+    const page = (data ?? []) as CrmContactSummary[];
+    contacts.push(...page);
+    if (page.length < 100) break;
+  }
+  return contacts;
+}
+
+export async function updateCrmContact(
+  ownerId: string,
+  contactId: string,
+  patch: Pick<CrmContactSummary, "full_name" | "phone" | "email" | "contact_type">
+): Promise<void> {
+  if (!ownerId || !contactId) throw new Error("Contatto non valido.");
+  if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
+  const fullName = patch.full_name.trim();
+  if (!fullName) throw new Error("Inserisca nome e cognome.");
+  const { error } = await supabase
     .from("nmre_contacts")
-    .select("id,full_name,phone,email,contact_type,status")
+    .update({
+      full_name: fullName,
+      phone: patch.phone?.trim() || null,
+      email: patch.email?.trim() || null,
+      contact_type: patch.contact_type
+    })
     .eq("owner_id", ownerId)
-    .order("full_name", { ascending: true })
-    .limit(100);
-  if (error) throw new Error("Non è stato possibile caricare i contatti CRM.");
-  return (data ?? []) as CrmContactSummary[];
+    .eq("id", contactId);
+  if (error) throw new Error("Non è stato possibile salvare le modifiche al contatto.");
 }
