@@ -31,6 +31,14 @@ if ls "$MIG" | grep -qi 'quiet_unproven_subito_candidates'; then bad "la migrazi
 [[ -f "$ROOT/supabase/migrations_pending/20261126210000_quiet_unproven_subito_candidates.sql" && -f "$ROOT/supabase/rollback/20261126210000_quiet_unproven_subito_candidates.rollback.sql" ]] \
   && ok "migrazione delle schede Subito e rollback presenti" || bad "migrazione o rollback delle schede Subito mancanti"
 
+# 1-quater. Registro delle ricerche Subito (intera ricerca): in attesa di approvazione
+if ls "$MIG" | grep -qi 'subito_search_sync_log'; then bad "la migrazione del registro Subito è in supabase/migrations/ senza approvazione"; else ok "migrazione del registro Subito non applicabile automaticamente"; fi
+if grep -lqi 'nmre_subito_ricerche_sync' "$MIG"/*.sql 2>/dev/null; then bad "una migrazione applicabile tocca nmre_subito_ricerche_sync"; else ok "nessuna migrazione applicabile tocca nmre_subito_ricerche_sync"; fi
+[[ -f "$ROOT/supabase/migrations_pending/20261127020000_subito_search_sync_log.sql" && -f "$ROOT/supabase/rollback/20261127020000_subito_search_sync_log.rollback.sql" ]] \
+  && ok "migrazione del registro Subito e rollback presenti" || bad "migrazione o rollback del registro Subito mancanti"
+[[ "20261127020000" > "$latest_applied" ]] && ok "versione del registro Subito successiva all'ultima applicabile" || bad "versione del registro Subito non successiva a $latest_applied"
+[[ "20261127020000" < "$(date -u +%Y%m%d%H%M%S)" ]] && ok "versione del registro Subito non nel futuro" || bad "versione del registro Subito nel futuro"
+
 # 2. Versioni delle protezioni allineate alla produzione
 for f in 20261126004257_guard_agency_candidate_notifications.sql 20261126004310_guard_agency_price_drop_notifications.sql; do
   [[ -f "$MIG/$f" ]] && ok "presente $f" || bad "mancante $f"

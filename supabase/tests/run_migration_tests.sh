@@ -25,6 +25,8 @@ QUIET="$ROOT/supabase/migrations_pending/20261126210000_quiet_unproven_subito_ca
 QUIET_RB="$ROOT/supabase/rollback/20261126210000_quiet_unproven_subito_candidates.rollback.sql"
 TOKENS_STABLE="$ROOT/supabase/migrations_pending/20261126200000_gmail_tokens_rpc_stable.sql"
 TOKENS_STABLE_RB="$ROOT/supabase/rollback/20261126200000_gmail_tokens_rpc_stable.rollback.sql"
+SYNC_LOG="$ROOT/supabase/migrations_pending/20261127020000_subito_search_sync_log.sql"
+SYNC_LOG_RB="$ROOT/supabase/rollback/20261127020000_subito_search_sync_log.rollback.sql"
 DB="nmre_migration_test_$$"
 
 psql_db() { psql -X -q -v ON_ERROR_STOP=1 -d "$DB" "$@"; }
@@ -392,5 +394,35 @@ for unsafe in \
 done
 psql -X -q -d postgres -c "drop database $DB" >/dev/null
 
+
+echo "== Registro delle ricerche Subito: RLS, permessi, una riga per email"
+base_schema
+psql_db -f "$SYNC_LOG" >/dev/null 2>&1
+psql_db -f "$SYNC_LOG" >/dev/null 2>&1   # idempotenza
+A=00000000-0000-0000-0000-00000000000a
+psql_db <<'SQL' >/dev/null
+insert into public.nmre_subito_ricerche_sync (owner_id, gmail_message_id, ricerca_chiave, url_ricerca, esito, motivo, annunci_trovati, nuove_opportunita)
+values ('00000000-0000-0000-0000-00000000000a','m-a','subito.it/annunci-marche/vendita/appartamenti/ancona?advt=0,2','https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2','completa','ricerca_completa',30,2),
+       ('00000000-0000-0000-0000-00000000000b','m-b',null,null,'errore','pagina_bloccata',0,0);
+SQL
+sync_user() { psql_db -At <<SQL 2>&1 | tail -1
+set role authenticated; select set_config('request.jwt.claim.sub', '$1', false);
+$2
+SQL
+}
+expect "registro: l'utente vede solo le proprie ricerche" 1 "$(sync_user $A "select count(*) from public.nmre_subito_ricerche_sync;")"
+expect "registro: l'utente non può modificare" 1 "$(sync_user $A "update public.nmre_subito_ricerche_sync set nuove_opportunita=99;" | grep -c 'permission denied' || true)"
+expect "registro: l'utente non può inserire" 1 "$(sync_user $A "insert into public.nmre_subito_ricerche_sync (owner_id, gmail_message_id, esito, motivo) values ('$A','x','completa','ricerca_completa');" | grep -c 'permission denied' || true)"
+expect "registro: l'utente non può cancellare" 1 "$(sync_user $A "delete from public.nmre_subito_ricerche_sync;" | grep -c 'permission denied' || true)"
+expect "registro: anon non legge nulla" 1 "$(psql_db -At -c "set role anon; select count(*) from public.nmre_subito_ricerche_sync" 2>&1 | grep -c 'permission denied' || true)"
+expect "registro: una sola riga per email (rielaborazione = aggiornamento)" 1 "$(psql_db -c "insert into public.nmre_subito_ricerche_sync (owner_id, gmail_message_id, esito, motivo) values ('$A','m-a','completa','ricerca_completa')" 2>&1 | grep -c 'duplicate key' || true)"
+expect "registro: upsert sulla chiave dell'email" 1 "$(psql_db -At -c "insert into public.nmre_subito_ricerche_sync (owner_id, gmail_message_id, esito, motivo, nuove_opportunita) values ('$A','m-a','completa','ricerca_completa',0) on conflict (owner_id, gmail_message_id) do update set nuove_opportunita=excluded.nuove_opportunita; select count(*) from public.nmre_subito_ricerche_sync where gmail_message_id='m-a'" | tail -1)"
+expect "registro: esito sconosciuto rifiutato" 1 "$(psql_db -c "insert into public.nmre_subito_ricerche_sync (owner_id, gmail_message_id, esito, motivo) values ('$A','m-z','riuscita','x')" 2>&1 | grep -c 'violates check constraint' || true)"
+expect "registro: link non Subito rifiutato" 1 "$(psql_db -c "insert into public.nmre_subito_ricerche_sync (owner_id, gmail_message_id, esito, motivo, url_ricerca) values ('$A','m-y','completa','x','javascript:alert(1)')" 2>&1 | grep -c 'violates check constraint' || true)"
+expect "registro: nessuna tabella esistente modificata" "id owner_id stato tipo_venditore" "$(psql_db -At -c "select string_agg(column_name, ' ' order by ordinal_position) from information_schema.columns where table_name='annunci_candidati'")"
+psql_db -f "$SYNC_LOG_RB" >/dev/null 2>&1
+expect "registro · rollback: l'app non legge più la tabella" 1 "$(sync_user $A "select count(*) from public.nmre_subito_ricerche_sync;" | grep -c 'permission denied' || true)"
+expect "registro · rollback: i dati restano" 2 "$(psql_db -At -c "select count(*) from public.nmre_subito_ricerche_sync")"
+psql -X -q -d postgres -c "drop database $DB" >/dev/null
 
 echo "Tutti i test delle migrazioni superati."

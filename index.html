@@ -95,6 +95,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .gmail-sync-stat{padding:10px;border:1px solid var(--line);border-radius:9px;background:white;min-width:0}
 .gmail-sync-stat strong{display:block;font-size:20px;font-variant-numeric:tabular-nums;color:var(--ink)}
 .gmail-sync-stat span{display:block;font-size:10px;color:var(--muted);margin-top:3px}
+.subito-search-log{margin-top:12px;font-size:12px;line-height:1.5}.subito-search-log ul{margin:6px 0 0 18px;padding:0;overflow-wrap:anywhere}.subito-search-log li{margin:4px 0}.subito-search-log-error{color:#a3261e;font-weight:700}
 .gmail-sync-details{margin-top:10px;font-size:11px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
 @media(max-width:650px){.gmail-sync-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
@@ -779,6 +780,10 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
     <div class="gmail-sync-stat"><strong id="gmailSyncSuccessStreak">—</strong><span>Ultimi esiti riusciti consecutivi</span></div>
   </div>
   <div id="gmailSyncDetails" class="gmail-sync-details">Il sistema registrerà il riepilogo della prossima esecuzione automatica.</div>
+  <div id="subitoSearchLog" class="subito-search-log" hidden>
+    <strong>Ricerche Subito · ultime sincronizzazioni</strong>
+    <ul id="subitoSearchLogList"></ul>
+  </div>
 </div>
 <div id="gmailMsg" class="status">Gmail lavora in background. Gli annunci ambigui richiedono la Sua approvazione.</div>
 </section>
@@ -1594,7 +1599,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-nmre-browser-import-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261127-subito-full-search-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1669,7 +1674,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261126-nmre-browser-import-1");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261127-subito-full-search-1");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -1817,12 +1822,52 @@ function nmreRenderSyncAlert(health){
 }
 $("nmreSyncAlertOpen")?.addEventListener("click",()=>nmreNavigateToTarget("gmailSyncTitle"));
 
+// Registro delle ricerche salvate Subito (nmre_subito_ricerche_sync): una riga per email.
+// La tabella esiste solo dopo la migrazione 20261127020000: prima il pannello resta nascosto.
+const NMRE_SUBITO_LOG_OUTCOME={completa:"completa",parziale:"parziale · in attesa di recupero",errore:"non riuscita · in attesa di recupero",assorbita:"aggiornata da un'email più recente"};
+function nmreSubitoLogLine(log){
+  const when=Date.parse(log.eseguita_il||"");
+  const date=Number.isFinite(when)?new Intl.DateTimeFormat("it-IT",{dateStyle:"short",timeStyle:"short"}).format(new Date(when)):"data non disponibile";
+  const name=log.ricerca_nome||log.ricerca_chiave||"ricerca non riconosciuta";
+  const outcome=NMRE_SUBITO_LOG_OUTCOME[log.esito]||String(log.esito||"esito sconosciuto");
+  const parts=[date+" · "+name+" · "+outcome];
+  if(log.esito!=="assorbita"){
+    parts.push(Number(log.annunci_trovati||0)+" annunci trovati"+(log.pagine_dichiarate?" ("+Number(log.pagine_lette||0)+"/"+Number(log.pagine_dichiarate)+" pagine)":""));
+    parts.push(Number(log.nuove_opportunita||0)+" nuove opportunità");
+    parts.push(Number(log.gia_in_opportunita||0)+" già in Opportunità");
+    parts.push(Number(log.gia_in_archivio||0)+" già in Archivio");
+    parts.push(Number(log.da_verificare||0)+" da verificare");
+    if(Number(log.duplicati_da_unificare||0))parts.push(Number(log.duplicati_da_unificare)+" duplicati da unificare");
+  }
+  if(log.esito==="parziale"||log.esito==="errore")parts.push("Motivo: "+(log.motivo_testo||log.motivo||"non indicato"));
+  return parts.join(" · ");
+}
+async function loadSubitoSearchLog(){
+  const box=$("subitoSearchLog"),list=$("subitoSearchLogList");
+  if(!box||!list||!currentUser||!supabase)return;
+  const {data,error}=await supabase.from("nmre_subito_ricerche_sync")
+    .select("eseguita_il,ricerca_nome,ricerca_chiave,url_ricerca,esito,motivo,motivo_testo,pagine_lette,pagine_dichiarate,annunci_trovati,nuove_opportunita,gia_in_opportunita,gia_in_archivio,da_verificare,duplicati_da_unificare")
+    .order("eseguita_il",{ascending:false}).limit(10);
+  if(error||!Array.isArray(data)||!data.length){box.hidden=true;list.replaceChildren();return;}
+  list.replaceChildren(...data.map(log=>{
+    const item=document.createElement("li");
+    if(log.esito==="parziale"||log.esito==="errore")item.className="subito-search-log-error";
+    item.append(document.createTextNode(nmreSubitoLogLine(log)));
+    if(/^https:\/\/www\.subito\.it\//.test(String(log.url_ricerca||""))){
+      const link=document.createElement("a");link.href=log.url_ricerca;link.target="_blank";link.rel="noopener noreferrer";link.textContent="Apri la ricerca";
+      item.append(" · ",link);
+    }
+    return item;
+  }));
+  box.hidden=false;
+}
 async function loadGmailSyncStatus(){
   if(!currentUser||!supabase)return;
   const title=$("gmailSyncTitle");
   const lastRun=$("gmailSyncLastRun");
   const details=$("gmailSyncDetails");
   const setCount=(id,value)=>$(id).textContent=Number(value||0).toLocaleString("it-IT");
+  loadSubitoSearchLog().catch(()=>{const box=$("subitoSearchLog");if(box)box.hidden=true;});
   const {data,error}=await supabase.from("nmre_gmail_sync_runs")
     .select("status,sync_mode,started_at,completed_at,duration_ms,read_count,property_notifications_count,inserted_count,auto_archived_count,needs_user_review_count,excluded_agencies_count,duplicates_or_existing_count,error_message")
     .order("completed_at",{ascending:false})
@@ -4831,7 +4876,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261126-nmre-browser-import-1");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261127-subito-full-search-1");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);

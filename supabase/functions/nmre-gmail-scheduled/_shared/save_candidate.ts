@@ -6,6 +6,13 @@
 //  - preserve_existing: un annuncio già presente non viene riscritto (nessuna modifica
 //    manuale o dato esistente sovrascritto), si registra solo la nuova notifica;
 //  - ricerca dell'annuncio già acquisito anche per ID Subito (oltre alla listing_key).
+// Per l'acquisizione dell'intera ricerca Subito (NMRE_SUBITO_FULL_SEARCH):
+//  - fill_missing: sull'annuncio già presente si completano SOLO i campi vuoti (mai note,
+//    contatti, classificazione o valori già presenti, inseriti a mano o no);
+//  - sighting_only: un annuncio ritrovato nella ricerca non è una nuova notifica; lo storico
+//    si aggiorna solo se il prezzo è cambiato rispetto all'ultimo registrato;
+//  - skip_auto_archive: le nuove schede restano in Nuove opportunità (nessuna archiviazione
+//    automatica, decide il titolare).
 import { existingCandidatePatch, processedVersionMark } from "./retention.ts";
 import type { DiscardedNotificationPatchInfo, ExistingCandidateRow } from "./retention.ts";
 import { guardedCandidateUpdate } from "./guarded.ts";
@@ -16,13 +23,49 @@ import { subitoAdIdFromListingKey } from "./subito.ts";
 export type SaveCounters = {
   inserted: number; updated: number; notificationEventsLinked: number; autoArchived: number;
   autoArchiveErrors: number; reopenedOnPriceDrop: number; notificationsAfterDiscard: number;
+  /** Annunci ritrovati senza novità (nessuna notifica registrata). */
+  sightingsWithoutChanges?: number;
+  /** Annunci già presenti di cui sono stati completati campi vuoti. */
+  fieldsCompleted?: number;
 };
 export function newSaveCounters(): SaveCounters {
   return { inserted: 0, updated: 0, notificationEventsLinked: 0, autoArchived: 0, autoArchiveErrors: 0, reopenedOnPriceDrop: 0, notificationsAfterDiscard: 0 };
 }
 
 const CANDIDATE_COLUMNS = "id,seller_manual_override,stato,listing_key,tipo_venditore,dati_estratti,deduplication_version,data_extraction_version,seller_classification_version";
-const INTERNAL_FIELDS = ["explicit_price_reduction", "notification_source_id", "subito_ad_id", "preserve_existing"];
+const INTERNAL_FIELDS = ["explicit_price_reduction", "notification_source_id", "subito_ad_id", "preserve_existing", "fill_missing", "sighting_only", "skip_auto_archive"];
+
+/** Colonne che il ritrovamento di un annuncio può completare, solo se vuote. */
+const FILLABLE_COLUMNS = ["comune", "prezzo", "superficie_mq", "locali", "camere", "bagni", "tipologia_immobile"] as const;
+const FILL_COLUMNS = "id,titolo,dati_estratti,updated_at," + FILLABLE_COLUMNS.join(",");
+const empty = (value: unknown) => value === null || value === undefined || value === "";
+
+/**
+ * Campi vuoti dell'annuncio già presente che il nuovo rilevamento può completare. Nessun
+ * valore esistente viene sostituito: né i campi del database né quelli dei dati Subito.
+ * Il titolo si completa solo se è quello provvisorio ("Annuncio Subito <ID>").
+ */
+// deno-lint-ignore no-explicit-any
+export function missingFieldsPatch(current: Record<string, any>, row: Record<string, any>, nowIso: string): Record<string, unknown> | null {
+  const patch: Record<string, unknown> = {};
+  for (const column of FILLABLE_COLUMNS) if (empty(current[column]) && !empty(row[column])) patch[column] = row[column];
+  if (/^Annuncio Subito \d+$/.test(String(current.titolo || "")) && row.titolo && !/^Annuncio Subito \d+$/.test(String(row.titolo))) patch.titolo = row.titolo;
+  const currentData = current.dati_estratti && typeof current.dati_estratti === "object" ? current.dati_estratti : {};
+  const incoming = row.dati_estratti?.subito;
+  if (incoming && typeof incoming === "object") {
+    const existing = currentData.subito && typeof currentData.subito === "object" ? currentData.subito : null;
+    const merged = { ...(existing || {}) };
+    let changed = !existing;
+    for (const [key, value] of Object.entries(incoming)) {
+      const isEmptyList = Array.isArray(merged[key]) && merged[key].length === 0;
+      if ((empty(merged[key]) || isEmptyList) && !empty(value) && !(Array.isArray(value) && value.length === 0)) { merged[key] = value; changed = true; }
+    }
+    if (changed) patch.dati_estratti = { ...currentData, subito: existing ? merged : incoming };
+  }
+  if (!Object.keys(patch).length) return null;
+  patch.updated_at = nowIso;
+  return patch;
+}
 
 // deno-lint-ignore no-explicit-any
 export type SaveClient = GuardedClient & { rpc(name: string, params: Record<string, unknown>): any };
@@ -78,6 +121,14 @@ export async function saveCandidateRow(
 
   if (existingCandidate) {
     candidateId = String(existingCandidate.id);
+    if (row.preserve_existing && row.fill_missing) {
+      // Annuncio ritrovato nell'intera ricerca: solo i campi vuoti vengono completati.
+      const fillResult = await guardedCandidateUpdate(admin, owner, candidateId, FILL_COLUMNS,
+        // deno-lint-ignore no-explicit-any
+        (current: any) => missingFieldsPatch(current, row, now()));
+      if (fillResult.status === "error") throw new Error("Completamento dei dati dell'annuncio già presente non riuscito");
+      if (fillResult.status === "updated") counters.fieldsCompleted = (counters.fieldsCompleted || 0) + 1;
+    }
     if (row.preserve_existing) {
       // Annuncio già presente: nessun dato riscritto. Solo la chiave dell'immobile, se manca.
       if (row.listing_key && !existingCandidate.listing_key) {
@@ -190,6 +241,12 @@ export async function saveCandidateRow(
 
   const currentPrice = row.explicit_price_reduction?.currentPrice
     ?? (Number(row.prezzo) > 0 ? Number(row.prezzo) : null);
+  // Annuncio ritrovato nella ricerca senza un prezzo diverso dall'ultimo registrato:
+  // non è una nuova notifica (nessuna riapertura, nessun segno sulle schede scartate).
+  if (row.sighting_only && existingCandidate && !(currentPrice !== null && lastRecordedPrice !== null && currentPrice !== lastRecordedPrice)) {
+    counters.sightingsWithoutChanges = (counters.sightingsWithoutChanges || 0) + 1;
+    return candidateId;
+  }
   const hasPriceDrop = currentPrice !== null && previousPrice !== null && previousPrice > currentPrice;
   const priceDropAmount = hasPriceDrop ? Number(previousPrice) - currentPrice : null;
   const priceDropPercent = hasPriceDrop
@@ -255,7 +312,7 @@ export async function saveCandidateRow(
   counters.notificationEventsLinked++;
 
   // Archivia solo i privati con prova esplicita ad alta affidabilita o verifica manuale gia salvata.
-  if (row.tipo_venditore === "Privato") {
+  if (row.tipo_venditore === "Privato" && !row.skip_auto_archive) {
     const { data: archiveResult, error: archiveError } = await admin
       .rpc("nmre_auto_archive_private_candidate", { p_candidate_id: candidateId });
     // Non bloccante: il candidato è già salvato e resta in coda per l'archiviazione manuale.

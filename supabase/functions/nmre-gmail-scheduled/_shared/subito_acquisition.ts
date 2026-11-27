@@ -72,6 +72,39 @@ function previousAttempts(existing: { dati_estratti?: unknown } | null): number 
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
+/**
+ * Lettura di una pagina dei risultati con tutte le verifiche: protezioni del sito (mai
+ * aggirate), errori HTTP, redirect verso un'altra ricerca, pagina vuota. Condivisa dal
+ * recupero dei soli annunci nuovi e da quello dell'intera ricerca.
+ */
+export async function readSubitoResultsPage(
+  requestUrl: string,
+  searchUrl: string,
+  searchKey: string | null,
+  fetchPage: SubitoAcquisitionDeps["fetchPage"]
+): Promise<{ page: SubitoPage | null; error: string | null }> {
+  try {
+    const response = await fetchPage(requestUrl);
+    const finalSearchUrl = normalizeSubitoSearchUrl(response.finalUrl);
+    // Un redirect verso un'altra ricerca Subito (per esempio con filtri persi) non è
+    // una risposta valida: non dobbiamo classificare annunci di una ricerca diversa.
+    // kxconfid e i parametri di ordinamento restano irrilevanti per l’identità della ricerca.
+    // Subito riscrive l'URL (reale: ?advt=0%2C2 → /da-privati/): se la pagina dichiara i
+    // filtri applicati, vale il confronto con quelli; altrimenti il confronto delle chiavi.
+    const confirmed = subitoPageConfirmsSearch(searchUrl, response.html);
+    const finalOk = !!finalSearchUrl && (confirmed === true || (confirmed === null && subitoSearchKey(finalSearchUrl) === searchKey));
+    if (isBlockedSubitoPage(response.status, response.html)) return { page: null, error: "pagina_bloccata" };
+    if (response.status < 200 || response.status >= 300) return { page: null, error: "errore_http" };
+    if (!finalOk) return { page: null, error: "pagina_vuota" };
+    const page = parseSubitoResultsPage(response.html.slice(0, SUBITO_PAGE_MAX_BYTES));
+    if (page.status === "bloccata") return { page: null, error: "pagina_bloccata" };
+    if (page.status === "vuota") return { page, error: "pagina_vuota" };
+    return { page, error: null };
+  } catch {
+    return { page: null, error: "errore_rete" };
+  }
+}
+
 export async function acquireSubitoDigest(
   email: SubitoEmail,
   digest: SubitoDigest,
@@ -91,32 +124,10 @@ export async function acquireSubitoDigest(
     status: "errore", reason, items: [], decision: null, archived: [], proposals: [], pageSource: null, pageCount: 0, attempts,
     retry: retryable && attempts < SUBITO_MAX_ATTEMPTS, keepDigestRecord: true
   });
-  let page: SubitoPage | null = null;
-  let pageError: string | null = null;
   if (!digest.searchUrl) return fail("link_mancante", false);
-  {
-    try {
-      const response = await deps.fetchPage(digest.searchUrl);
-      const finalSearchUrl = normalizeSubitoSearchUrl(response.finalUrl);
-      // Un redirect verso un'altra ricerca Subito (per esempio con filtri persi) non è
-      // una risposta valida: non dobbiamo classificare annunci di una ricerca diversa.
-      // kxconfid e i parametri di ordinamento restano irrilevanti per l’identità della ricerca.
-      // Subito riscrive l'URL (reale: ?advt=0%2C2 → /da-privati/): se la pagina dichiara i
-      // filtri applicati, vale il confronto con quelli; altrimenti il confronto delle chiavi.
-      const confirmed = subitoPageConfirmsSearch(digest.searchUrl, response.html);
-      const finalOk = !!finalSearchUrl && (confirmed === true || (confirmed === null && subitoSearchKey(finalSearchUrl) === digest.searchKey));
-      if (isBlockedSubitoPage(response.status, response.html)) pageError = "pagina_bloccata";
-      else if (response.status < 200 || response.status >= 300) pageError = "errore_http";
-      else if (!finalOk) pageError = "pagina_vuota";
-      else {
-        page = parseSubitoResultsPage(response.html.slice(0, SUBITO_PAGE_MAX_BYTES));
-        if (page.status === "bloccata") pageError = "pagina_bloccata";
-        else if (page.status === "vuota") pageError = "pagina_vuota";
-      }
-    } catch {
-      pageError = "errore_rete";
-    }
-  }
+  const read = await readSubitoResultsPage(digest.searchUrl, digest.searchUrl, digest.searchKey, deps.fetchPage);
+  const page: SubitoPage | null = read.page;
+  const pageError: string | null = read.error;
   if (pageError) return fail(pageError, true);
 
   let previousDigestIso: string | null = null;

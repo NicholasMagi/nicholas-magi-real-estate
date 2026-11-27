@@ -49,6 +49,10 @@ export type SubitoPage = {
   skipped?: number;
   /** Totale dei risultati dichiarato dalla pagina, se presente. */
   total?: number | null;
+  /** Numero di pagine dei risultati dichiarato dalla pagina (items.totalPages), se presente. */
+  totalPages?: number | null;
+  /** Numero della pagina che Subito dichiara di aver mostrato (search.page), se presente. */
+  pageNumber?: number | null;
 };
 
 // Tolti dalla richiesta HTTP solo i parametri di campagna: kxconfid e ogni altro
@@ -361,6 +365,27 @@ function findResultsContainer(root: any): any | null {
   return null;
 }
 
+function positiveInt(value: unknown, allowZero: boolean): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isInteger(number) && (number > 0 || (allowZero && number === 0)) ? number : null;
+}
+
+/**
+ * URL della pagina n dei risultati della stessa ricerca: stessi filtri (compreso quello
+ * sugli inserzionisti) e parametro o=n. Il numero della pagina effettivamente mostrata
+ * va sempre confermato con pageNumber della risposta: il parametro non è dato per certo.
+ */
+export function subitoSearchPageUrl(searchUrl: string, pageNumber: number): string | null {
+  if (!Number.isInteger(pageNumber) || pageNumber < 1) return null;
+  const normalized = normalizeSubitoSearchUrl(searchUrl);
+  if (!normalized) return null;
+  const url = new URL(normalized);
+  url.searchParams.delete("o");
+  if (pageNumber > 1) url.searchParams.set("o", String(pageNumber));
+  return url.toString();
+}
+
 /** Annunci della pagina dei risultati, nell'ordine della pagina. */
 export function parseSubitoResultsPage(html: string): SubitoPage {
   const source = String(html || "");
@@ -380,9 +405,11 @@ export function parseSubitoResultsPage(html: string): SubitoPage {
           if (!item) skipped++;
           else if (!unique.has(item.id)) unique.set(item.id, item);
         }
-        const total = Number.isFinite(Number(container.total)) ? Number(container.total) : null;
-        if (unique.size || skipped) return { status: "ok", source: "next_data", items: [...unique.values()], skipped, total };
-        if (total === 0) return { status: "vuota", source: "next_data", items: [], skipped: 0, total };
+        const total = positiveInt(container.total, true);
+        const totalPages = positiveInt(container.totalPages, false);
+        const pageNumber = positiveInt(data?.props?.pageProps?.initialState?.search?.page, false);
+        if (unique.size || skipped) return { status: "ok", source: "next_data", items: [...unique.values()], skipped, total, totalPages, pageNumber };
+        if (total === 0) return { status: "vuota", source: "next_data", items: [], skipped: 0, total, totalPages, pageNumber };
       } else {
         // Struttura non riconosciuta: gli annunci vengono proposti, mai considerati certi.
         // deno-lint-ignore no-explicit-any
