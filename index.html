@@ -154,6 +154,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
  .candidate-email-date{margin-left:0}
  .candidate-email-card{padding:11px 10px}
  .candidate-email-card .candidate-actions-primary>*{flex:1 1 auto}
+ /* Spazio di scorrimento: impedisce al launcher fisso NOVA di coprire l'ultima opportunità. */
+ #candidateList{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 }
 
 .candidate-duplicate-warning{margin:10px 0;padding:11px 13px;border:1px solid #e3c99e;border-left:4px solid #bd8950;border-radius:10px;background:#fff9ee;color:#614d33;font-size:12px;line-height:1.5;overflow-wrap:anywhere;min-width:0}
