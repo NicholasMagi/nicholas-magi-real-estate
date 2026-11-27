@@ -7,14 +7,14 @@
 export const ANCONA_MUNICIPALITIES = new Set([
   "agugliano", "ancona", "arcevia", "barbara", "belvedere ostrense",
   "camerano", "camerata picena", "castelbellino", "castelfidardo",
-  "castelleone di suasa", "castelplanio", "cerreto d'esi", "chiaravalle",
+  "castelleone di suasa", "castelplanio", "cerreto d esi", "chiaravalle",
   "corinaldo", "cupramontana", "fabriano", "falconara marittima",
   "filottrano", "genga", "jesi", "loreto", "maiolati spontini", "mergo",
   "monsano", "monte roberto", "monte san vito", "montecarotto",
-  "montemarciano", "morro d'alba", "numana", "offagna", "osimo", "ostra",
+  "montemarciano", "morro d alba", "numana", "offagna", "osimo", "ostra",
   "ostra vetere", "poggio san marcello", "polverigi", "rosora",
   "san marcello", "san paolo di jesi", "santa maria nuova", "sassoferrato",
-  "senigallia", "serra de' conti", "serra san quirico", "sirolo",
+  "senigallia", "serra de conti", "serra san quirico", "sirolo",
   "staffolo", "trecastelli"
 ]);
 
@@ -29,7 +29,7 @@ export const MACERATA_MUNICIPALITIES = new Set([
   "muccia", "penna san giovanni", "petriolo", "pieve torina", "pioraco",
   "poggio san vicino", "pollenza", "porto recanati", "potenza picena",
   "recanati", "ripe san ginesio", "san ginesio", "san severino marche",
-  "sant'angelo in pontano", "sarnano", "sefro", "serrapetrona",
+  "sant angelo in pontano", "sarnano", "sefro", "serrapetrona",
   "serravalle di chienti", "tolentino", "treia", "urbisaglia", "ussita",
   "valfornace", "visso"
 ]);
