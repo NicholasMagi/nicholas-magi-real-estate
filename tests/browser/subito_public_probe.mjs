@@ -91,7 +91,8 @@ try {
         await pageTwoButton.first().click({ timeout: 8000 });
         await wait(3500);
         const second = await snapshot(page, null);
-        second.status = 200;
+        second.clientSideNavigation = true;
+        second.pageChanged = (second.searchState?.page != null && first.searchState?.page != null && second.searchState.page !== first.searchState.page) || JSON.stringify(second.listingLinkSamples) !== JSON.stringify(first.listingLinkSamples);
         second.challengeDetected = challengeLike(second.title, second.bodyStart, second.url);
         report.pages.push(second);
         report.paginationFollowed = true;
@@ -122,7 +123,7 @@ try {
       report.outcome = "blocked_or_challenge";
     } else if (report.pages[0]?.status === 200 && report.pages[0]?.listingLinkCount > 0) {
       report.outcome = report.paginationFollowed
-        ? (last?.status === 200 && last?.listingLinkCount > 0 && !last?.challengeDetected ? "first_and_second_page_readable" : "first_page_readable_second_page_not_readable")
+        ? (last?.listingLinkCount > 0 && !last?.challengeDetected && last?.pageChanged ? "first_and_second_page_readable" : "first_page_readable_second_page_not_readable")
         : "first_page_readable_pagination_link_not_identified";
     } else {
       report.outcome = "page_loaded_but_no_listing_links_detected";
