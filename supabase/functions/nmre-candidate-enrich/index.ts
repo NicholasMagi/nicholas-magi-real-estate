@@ -1,8 +1,19 @@
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "https://nicholasmagi.github.io",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+function corsHeadersFor(req: Request): HeadersInit {
+  const origin = req.headers.get("Origin");
+  const isGitHubPages = origin === "https://nicholasmagi.github.io";
+  const isVercelProduction = origin === "https://nicholas-magi-real-estate.vercel.app";
+  // Allow only this Vercel project’s branch-preview hostnames, not arbitrary *.vercel.app sites.
+  const isVercelPreview = !!origin && /^https:\/\/nicholas-magi-real-estate-git-[a-z0-9-]+-nicholasmagi\.vercel\.app$/i.test(origin);
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+  if (origin && (isGitHubPages || isVercelProduction || isVercelPreview)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+  }
+  return headers;
+}
 
 const ALLOWED_HOSTS = [
   "immobiliare.it",
@@ -13,10 +24,10 @@ const ALLOWED_HOSTS = [
   "casa.trovit.it",
 ];
 
-function reply(data: unknown, status = 200) {
+function reply(data: unknown, status = 200, req?: Request) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...(req ? corsHeadersFor(req) : {}), "Content-Type": "application/json" },
   });
 }
 
@@ -169,15 +180,15 @@ async function fetchPage(initial: URL): Promise<{ html: string; finalUrl: string
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return reply({ success: false, error: "Metodo non consentito." }, 405);
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeadersFor(req) });
+  if (req.method !== "POST") return reply({ success: false, error: "Metodo non consentito." }, 405, req);
 
   try {
     const authorization = req.headers.get("Authorization");
-    if (!authorization?.startsWith("Bearer ")) return reply({ success: false, error: "Autenticazione richiesta." }, 401);
+    if (!authorization?.startsWith("Bearer ")) return reply({ success: false, error: "Autenticazione richiesta." }, 401, req);
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
-    if (!supabaseUrl || !supabaseKey) return reply({ success: false, error: "Configurazione non disponibile." }, 500);
+    if (!supabaseUrl || !supabaseKey) return reply({ success: false, error: "Configurazione non disponibile." }, 500, req);
 
     const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
     const supabase = createClient(supabaseUrl, supabaseKey, {
@@ -185,12 +196,12 @@ Deno.serve(async (req: Request) => {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
     const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData.user) return reply({ success: false, error: "Sessione non valida." }, 401);
+    if (userError || !userData.user) return reply({ success: false, error: "Sessione non valida." }, 401, req);
 
     const body = await req.json();
-    if (typeof body?.url !== "string" || body.url.length > 2000) return reply({ success: false, error: "Link annuncio non valido." }, 400);
+    if (typeof body?.url !== "string" || body.url.length > 2000) return reply({ success: false, error: "Link annuncio non valido." }, 400, req);
     const initial = allowedUrl(body.url);
-    if (!initial) return reply({ success: false, error: "Per sicurezza sono ammessi solo link HTTPS dei portali immobiliari supportati." }, 400);
+    if (!initial) return reply({ success: false, error: "Per sicurezza sono ammessi solo link HTTPS dei portali immobiliari supportati." }, 400, req);
 
     const { html, finalUrl } = await fetchPage(initial);
     const meta = metaTags(html);
@@ -233,10 +244,10 @@ Deno.serve(async (req: Request) => {
       final_url: finalUrl,
       retrieved_at: new Date().toISOString(),
       message: hasSuggestions ? "Analisi completata: verificare i valori prima del salvataggio." : "Nessun dato strutturato disponibile.",
-    });
+    }, 200, req);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Errore durante l'analisi della pagina.";
     console.error("nmre-candidate-enrich:", message);
-    return reply({ success: false, error: message }, 422);
+    return reply({ success: false, error: message }, 422, req);
   }
 });
