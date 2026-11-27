@@ -134,6 +134,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
  .candidate-row-title{grid-column:1/-1}.candidate-row-label{display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--muted)}
  .candidate-row-actions{grid-column:1/-1;justify-content:flex-start;flex-wrap:wrap;margin-top:4px}.candidate-row-actions button,.candidate-row-actions a{min-height:44px;flex:1 1 0;justify-content:center;padding:0 8px}
 }
+/* Il launcher NOVA è fisso anche su tablet: lasciare spazio per scorrere oltre l'ultima opportunità. */
+@media(max-width:1200px){#candidateList{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}}
 .candidate-email-card{padding:13px 14px;margin:9px 0;background:#fff;border:1px solid var(--line);border-left-width:4px;border-radius:0 11px 11px 0;min-width:0;overflow-wrap:anywhere}
 .candidate-email-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:10px;color:var(--muted);min-width:0}
 .candidate-email-sender{font-weight:700;color:#526075;overflow-wrap:anywhere}
@@ -154,8 +156,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
  .candidate-email-date{margin-left:0}
  .candidate-email-card{padding:11px 10px}
  .candidate-email-card .candidate-actions-primary>*{flex:1 1 auto}
- /* Spazio di scorrimento: impedisce al launcher fisso NOVA di coprire l'ultima opportunità. */
- #candidateList{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+
 }
 
 .candidate-duplicate-warning{margin:10px 0;padding:11px 13px;border:1px solid #e3c99e;border-left:4px solid #bd8950;border-radius:10px;background:#fff9ee;color:#614d33;font-size:12px;line-height:1.5;overflow-wrap:anywhere;min-width:0}
