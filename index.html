@@ -6649,7 +6649,7 @@ async function saveManualSubitoCandidate(event) {
     return;
   }
   const listingKey = canonicalCandidateUrl(url);
-  if (!listingKey || !/^subito\\.it\\//i.test(listingKey)) {
+  if (!listingKey || !/^subito\.it\//i.test(listingKey)) {
     msg(statusId, "Il link deve aprire un singolo annuncio Subito.", "error");
     return;
   }
