@@ -15,7 +15,7 @@ async function snapshot(page, response) {
   return await page.evaluate(({ status }) => {
     const body = document.body?.innerText || "";
     const anchors = [...document.querySelectorAll("a[href]")].map((a) => ({
-      text: (a.innerText || a.getAttribute("aria-label") || "").trim().replace(/\\s+/g, " ").slice(0, 90),
+      text: (a.innerText || a.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ").slice(0, 90),
       href: a.href,
       rel: a.getAttribute("rel") || "",
       aria: a.getAttribute("aria-label") || "",
@@ -25,7 +25,7 @@ async function snapshot(page, response) {
     const listingLinks = anchors.filter((a) => {
       try {
         const u = new URL(a.href);
-        return u.hostname === "www.subito.it" && /\\.htm(?:$|[?#])/i.test(u.pathname + u.search);
+        return u.hostname === "www.subito.it" && /\.htm(?:$|[?#])/i.test(u.pathname + u.search);
       } catch { return false; }
     });
     const nextLinks = anchors.filter((a) =>
@@ -37,7 +37,7 @@ async function snapshot(page, response) {
       title: document.title,
       url: location.href,
       bodyChars: body.length,
-      bodyStart: body.slice(0, 850).replace(/\\s+/g, " "),
+      bodyStart: body.slice(0, 850).replace(/\s+/g, " "),
       listingLinkCount: listingLinks.length,
       listingLinkSamples: listingLinks.slice(0, 5).map((a) => ({ text: a.text, href: a.href })),
       nextLinks: nextLinks.slice(0, 8),
