@@ -63,7 +63,7 @@ export function hasNameIdentityConflict(input: {
 export type DuplicateContactIdentity = { id: string; full_name: string | null; phone: string | null; email: string | null };
 
 function normalizeContactName(value: string): string {
-  return value.trim().replace(/\\s+/g, " ").toLocaleLowerCase("it-IT");
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("it-IT");
 }
 
 function normalizeContactEmail(value: string): string {
