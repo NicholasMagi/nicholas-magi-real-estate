@@ -55,6 +55,7 @@ const report = {
   startedAt: new Date().toISOString(),
   pages: [],
   paginationFollowed: false,
+  paginationThirdFollowed: false,
   outcome: "not_started",
 };
 
@@ -97,6 +98,18 @@ try {
         report.pages.push(second);
         report.paginationFollowed = true;
         await page.screenshot({ path: `${OUT}/page-2.png`, fullPage: false }).catch(() => {});
+        const pageThreeButton = page.locator('button[aria-label="Andare a pagina 3"]');
+        if (await pageThreeButton.count() > 0 && !second.challengeDetected && second.listingLinkCount > 0) {
+          await pageThreeButton.first().click({ timeout: 8000 });
+          await wait(3500);
+          const third = await snapshot(page, null);
+          third.clientSideNavigation = true;
+          third.pageChanged = (third.searchState?.page != null && second.searchState?.page != null && third.searchState.page !== second.searchState.page) || JSON.stringify(third.listingLinkSamples) !== JSON.stringify(second.listingLinkSamples);
+          third.challengeDetected = challengeLike(third.title, third.bodyStart, third.url);
+          report.pages.push(third);
+          report.paginationThirdFollowed = true;
+          await page.screenshot({ path: `${OUT}/page-3.png`, fullPage: false }).catch(() => {});
+        }
       }
       const next = report.paginationFollowed ? null : bottom.nextLinks.find((a) => {
         try {
@@ -118,11 +131,14 @@ try {
       }
     }
 
+    report.filtersPreserved = report.pages.map((p) => ({ pageUrl: p.url, privateFilterAdvt: (() => { try { return new URL(p.url).searchParams.get("advt"); } catch { return null; } })(), preserved: (() => { try { return new URL(p.url).searchParams.get("advt") === "0,2"; } catch { return false; } })() }));
     const last = report.pages.at(-1);
     if (report.pages[0]?.status === 403 || report.pages[0]?.status === 429 || report.pages[0]?.challengeDetected) {
       report.outcome = "blocked_or_challenge";
     } else if (report.pages[0]?.status === 200 && report.pages[0]?.listingLinkCount > 0) {
-      report.outcome = report.paginationFollowed
+      report.outcome = report.paginationThirdFollowed
+        ? (last?.listingLinkCount > 0 && !last?.challengeDetected && last?.pageChanged ? "first_second_and_third_pages_readable" : "first_two_pages_readable_third_page_not_readable")
+        : report.paginationFollowed
         ? (last?.listingLinkCount > 0 && !last?.challengeDetected && last?.pageChanged ? "first_and_second_page_readable" : "first_page_readable_second_page_not_readable")
         : "first_page_readable_pagination_link_not_identified";
     } else {
