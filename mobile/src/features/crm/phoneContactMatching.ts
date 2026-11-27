@@ -43,3 +43,18 @@ export function uniqueContactMatch<T extends { id: string }>(ids: T[]): T | null
   const uniqueIds = new Set(ids.map(item => item.id));
   return uniqueIds.size === 1 ? ids.find(item => item.id === [...uniqueIds][0]) ?? null : null;
 }
+
+/**
+ * A matching name is not enough to merge two records when the device contact
+ * carries a phone/email that does not match any CRM identity. Treat it as a
+ * conflict instead of silently creating a duplicate person.
+ */
+export function hasNameIdentityConflict(input: {
+  nameMatchCount: number;
+  hasStrongIdentifier: boolean;
+  strongMatchCount: number;
+}): boolean {
+  return input.nameMatchCount > 0 &&
+    input.hasStrongIdentifier &&
+    input.strongMatchCount === 0;
+}
