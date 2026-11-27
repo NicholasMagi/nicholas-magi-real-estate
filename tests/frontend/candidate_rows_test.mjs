@@ -20,6 +20,7 @@ for (const attr of ["data-open-listing", "data-open-candidate-details", "data-co
   assert.ok(render.includes(attr), "elemento conservato: " + attr);
 }
 assert.match(render, /target="_blank" rel="noopener noreferrer" data-open-listing=/, "annuncio originale in una nuova scheda");
+assert.match(render, /title="Apri l’annuncio originale"/, "tooltip coerente con il link all’annuncio originale");
 assert.match(render, /\+nmreSubitoRecoveryHtml\(c\)/, "dettagli della ricerca salvata Subito nel pannello");
 assert.match(render, /data-subito-import-link="'\+safe\(rowSearchUrl\)\+'"/, "«Importa» sulla riga della ricerca salvata");
 assert.match(render, /details\.open=!details\.open;/, "«Dettagli» apre e chiude il pannello");
