@@ -77,8 +77,7 @@ async function mergeContactRecords(ownerId: string, primary: CrmContact, duplica
   if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
   const extraPhones = primary.phone && duplicate.phone && normalizePhoneNumber(primary.phone) !== normalizePhoneNumber(duplicate.phone) ? "Telefono aggiuntivo: " + duplicate.phone : "";
   const extraEmails = primary.email && duplicate.email && normalizeEmail(primary.email) !== normalizeEmail(duplicate.email) ? "Email aggiuntiva: " + duplicate.email : "";
-  const mergedNotes = [...new Set([primary.notes, duplicate.notes, extraPhones, extraEmails].map(value => value?.trim()).filter((value): value is string => Boolean(value)))].join("
-");
+  const mergedNotes = [...new Set([primary.notes, duplicate.notes, extraPhones, extraEmails].map(value => value?.trim()).filter((value): value is string => Boolean(value)))].join("\n");
   const patch: Record<string, string | null> = {
     full_name: primary.full_name || duplicate.full_name,
     phone: primary.phone || duplicate.phone,
