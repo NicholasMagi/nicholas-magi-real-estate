@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   canUseNameFallback,
   extractPhoneNumbers,
+  findCertainDuplicateGroups,
   hasNameIdentityConflict,
   normalizePhoneNumber,
   uniqueContactMatch
