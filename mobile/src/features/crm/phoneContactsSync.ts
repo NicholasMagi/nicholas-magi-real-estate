@@ -443,7 +443,7 @@ export async function loadContactRelations(
   if (linksResult.error) throw new Error("Non è stato possibile caricare gli immobili associati.");
   if (interactionsResult.error) throw new Error("Non è stato possibile caricare lo storico delle interazioni.");
 
-  const links = (linksResult.data ?? []) as Array<{ property_id: string; relation_role: string }>;
+  const links = (linksResult.data ?? []) as { property_id: string; relation_role: string }[];
   const propertyIds = links.map(link => link.property_id);
   let properties: CrmLinkedProperty[] = [];
   if (propertyIds.length) {
