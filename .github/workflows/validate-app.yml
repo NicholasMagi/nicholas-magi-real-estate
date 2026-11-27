@@ -73,6 +73,8 @@ jobs:
         run: node tests/frontend/service_worker_version_test.mjs
       - name: Test Subito saved-search sync log panel
         run: node tests/frontend/subito_search_log_test.mjs
+      - name: Test compact opportunity rows (single component, actions, filters, discard)
+        run: node tests/frontend/candidate_rows_test.mjs
       - name: Test NMRE bookmarklet for Subito (manual page accumulation, no network, search match)
         run: deno test --allow-read=. tests/frontend/subito_bookmarklet_test.ts
 
