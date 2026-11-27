@@ -21,6 +21,12 @@ DUBIOUS="$ROOT/supabase/migrations_pending/20261125201000_gmail_dubious_alerts.s
 PRICE="$ROOT/supabase/migrations/20261126004310_guard_agency_price_drop_notifications.sql"
 PRICE_RB="$ROOT/supabase/rollback/20261126004310_guard_agency_price_drop_notifications.rollback.sql"
 DUBIOUS_RB="$ROOT/supabase/rollback/20261125201000_gmail_dubious_alerts.rollback.sql"
+QUIET="$ROOT/supabase/migrations_pending/20261126210000_quiet_unproven_subito_candidates.sql"
+QUIET_RB="$ROOT/supabase/rollback/20261126210000_quiet_unproven_subito_candidates.rollback.sql"
+TOKENS_STABLE="$ROOT/supabase/migrations_pending/20261126200000_gmail_tokens_rpc_stable.sql"
+TOKENS_STABLE_RB="$ROOT/supabase/rollback/20261126200000_gmail_tokens_rpc_stable.rollback.sql"
+SYNC_LOG="$ROOT/supabase/migrations_pending/20261127020000_subito_search_sync_log.sql"
+SYNC_LOG_RB="$ROOT/supabase/rollback/20261127020000_subito_search_sync_log.rollback.sql"
 DB="nmre_migration_test_$$"
 
 psql_db() { psql -X -q -v ON_ERROR_STOP=1 -d "$DB" "$@"; }
@@ -283,5 +289,145 @@ select count(*) from public.nmre_gmail_avvisi_dubbi;
 SQL
 )"
 expect "rollback: i dati raccolti restano" 2 "$(psql_db -At -c "select count(*) from public.nmre_gmail_avvisi_dubbi")"
+
+echo "== Schede Subito con novità non dimostrata: nessuna notifica per scheda"
+psql -X -q -d postgres -c "drop database if exists $DB" >/dev/null
+base_schema
+psql_db -c "alter table public.annunci_candidati add column dati_estratti jsonb" >/dev/null
+if psql_db -f "$QUIET" >/dev/null 2>&1; then echo "FAIL la migrazione doveva fermarsi senza la protezione delle agenzie" >&2; exit 1; fi
+pass "senza la protezione delle agenzie la migrazione si ferma"
+psql_db -f "$GUARD" >/dev/null 2>&1
+guarded_def="$(psql_db -At -c "select pg_get_triggerdef(oid) from pg_trigger where tgname='nmre_notify_candidate_insert'")"
+notify_with() { # tipo_venditore(sql) dati_estratti(json) -> notifiche create
+  psql_db -At <<SQL | tail -1
+insert into public.annunci_candidati (owner_id, stato, tipo_venditore, dati_estratti)
+values ('00000000-0000-0000-0000-00000000000a', 'da_verificare', $1, '$2'::jsonb) returning id \gset
+select count(*) from public.nmre_notifications where candidate_id = :'id';
+SQL
+}
+UNPROVEN='{"subito":{"id":"669796300","novita_non_dimostrata":true}}'
+expect "prima della migrazione: una scheda con novità non dimostrata notifica" 1 "$(notify_with "'Da verificare'" "$UNPROVEN")"
+psql_db -f "$QUIET" >/dev/null
+expect "dopo: scheda con novità non dimostrata senza notifica" 0 "$(notify_with "'Da verificare'" "$UNPROVEN")"
+GROUPED='{"subito":{"id":"700000001","acquisizione":"intera_ricerca","notifica_raggruppata":true}}'
+expect "dopo: scheda dell'intera ricerca con notifica raggruppata senza notifica" 0 "$(notify_with "'Privato'" "$GROUPED")"
+expect "dopo: riepilogo della prima sincronizzazione notifica (una per ricerca)" 1 "$(notify_with "'Da verificare'" '{"ricerca_subito":{"stato":"completo","motivo":"notifica_raggruppata"}}')"
+expect "dopo: scheda dell'intera ricerca senza raggruppamento notifica" 1 "$(notify_with "'Privato'" '{"subito":{"id":"700000002","acquisizione":"intera_ricerca"}}')"
+expect "dopo: scheda Subito con novità dimostrata notifica" 1 "$(notify_with "'Da verificare'" '{"subito":{"id":"669796301"}}')"
+expect "dopo: scheda riepilogativa dell'email notifica (una per email)" 1 "$(notify_with "'Da verificare'" '{"ricerca_subito":{"stato":"da_verificare"}}')"
+expect "dopo: privato da altri portali notifica" 1 "$(notify_with "'Privato'" '{}')"
+expect "dopo: dati_estratti nullo notifica" 1 "$(psql_db -At <<'SQL' | tail -1
+insert into public.annunci_candidati (owner_id, stato, tipo_venditore) values ('00000000-0000-0000-0000-00000000000a', 'da_verificare', 'Privato') returning id \gset
+select count(*) from public.nmre_notifications where candidate_id = :'id';
+SQL
+)"
+expect "dopo: le agenzie restano senza notifica" 0 "$(notify_with "'Agenzia'" '{}')"
+psql_db -f "$QUIET" >/dev/null
+expect "migrazione rieseguita: un solo trigger, nessuna modifica" 1 "$(psql_db -At -c "select count(*) from pg_trigger where tgname='nmre_notify_candidate_insert'")"
+expect "backup della definizione protetta salvato" 1 "$(psql_db -At -c "select count(*) from private.nmre_trigger_definition_backups where migration='20261126210000_quiet_unproven_subito_candidates'")"
+psql_db -f "$QUIET_RB" >/dev/null
+expect "rollback: definizione identica alla protezione delle agenzie" "$guarded_def" "$(psql_db -At -c "select pg_get_triggerdef(oid) from pg_trigger where tgname='nmre_notify_candidate_insert'")"
+expect "rollback: la scheda con novità non dimostrata torna a notificare" 1 "$(notify_with "'Da verificare'" "$UNPROVEN")"
+expect "rollback: la scheda con notifica raggruppata torna a notificare" 1 "$(notify_with "'Privato'" "$GROUPED")"
+expect "rollback: le agenzie restano protette" 0 "$(notify_with "'Agenzia'" '{}')"
+psql_db -c "alter table public.annunci_candidati disable trigger nmre_notify_candidate_insert" >/dev/null
+psql_db -c "delete from private.nmre_trigger_definition_backups where migration='20261126210000_quiet_unproven_subito_candidates'" >/dev/null
+psql_db -f "$QUIET" >/dev/null
+expect "trigger disattivato: resta disattivato dopo la migrazione" D "$(psql_db -At -c "select tgenabled from pg_trigger where tgname='nmre_notify_candidate_insert'")"
+psql -X -q -d postgres -c "drop database $DB" >/dev/null
+
+echo "== Lettura dei token Gmail in sola lettura (nmre_get_gmail_tokens STABLE)"
+psql -X -q -d postgres -c "drop database if exists $DB" >/dev/null
+base_schema
+tokens_function() { # corpo SQL della funzione
+  psql_db <<SQL >/dev/null
+create table if not exists private.gmail_oauth_tokens (email text primary key, token_ciphertext text, scope text, expires_at timestamptz);
+insert into private.gmail_oauth_tokens values ('nmre@example.test', 'v1.iv.cipher', 'gmail.readonly', now()) on conflict do nothing;
+drop function if exists public.nmre_get_gmail_tokens();
+create function public.nmre_get_gmail_tokens()
+returns table (email text, token_ciphertext text, scope text, expires_at timestamptz)
+language sql volatile security definer set search_path = '' as \$f\$ $1 \$f\$;
+do \$r\$ begin if not exists (select 1 from pg_roles where rolname = 'nmre_fn_owner') then create role nmre_fn_owner nologin; end if; end \$r\$;
+grant usage on schema private to nmre_fn_owner;
+grant select on private.gmail_oauth_tokens to nmre_fn_owner;
+alter function public.nmre_get_gmail_tokens() owner to nmre_fn_owner;
+revoke all on function public.nmre_get_gmail_tokens() from public;
+grant execute on function public.nmre_get_gmail_tokens() to service_role;
+SQL
+}
+volatility() { psql_db -At -c "select provolatile from pg_proc where proname='nmre_get_gmail_tokens'"; }
+tokens_function "select t.email, t.token_ciphertext, t.scope, t.expires_at from private.gmail_oauth_tokens t"
+expect "situazione attuale: funzione VOLATILE e SECURITY DEFINER" "v|true" "$(psql_db -At -c "select provolatile::text || '|' || prosecdef::text from pg_proc where proname='nmre_get_gmail_tokens'")"
+before_def="$(psql_db -At -c "select concat_ws('|', md5(prosrc), coalesce(proconfig::text, ''), prosecdef::text, pg_get_userbyid(proowner), coalesce(proacl::text, '')) from pg_proc where proname='nmre_get_gmail_tokens'")"
+psql_db -f "$TOKENS_STABLE" >/dev/null
+expect "dopo la migrazione la funzione è STABLE" s "$(volatility)"
+expect "corpo, search_path, SECURITY DEFINER, proprietario e permessi invariati" "$before_def" "$(psql_db -At -c "select concat_ws('|', md5(prosrc), coalesce(proconfig::text, ''), prosecdef::text, pg_get_userbyid(proowner), coalesce(proacl::text, '')) from pg_proc where proname='nmre_get_gmail_tokens'")"
+expect "lettura riuscita in una transazione READ ONLY" 1 "$(psql_db -At <<'SQL' | tail -1
+begin transaction read only;
+select count(*) from public.nmre_get_gmail_tokens();
+rollback;
+SQL
+)"
+expect "nella stessa transazione READ ONLY una scrittura è rifiutata" 1 "$(psql_db <<'SQL' 2>&1 | grep -c 'read-only transaction' || true
+begin transaction read only;
+select count(*) from public.nmre_get_gmail_tokens();
+insert into private.gmail_oauth_tokens values ('x@example.test', 'c', 's', now());
+rollback;
+SQL
+)"
+expect "nessun dato modificato" 1 "$(psql_db -At -c "select count(*) from private.gmail_oauth_tokens")"
+psql_db -f "$TOKENS_STABLE" >/dev/null
+expect "migrazione rieseguita: già STABLE, nessuna modifica" s "$(volatility)"
+expect "una funzione STABLE in SQL non può scrivere (garanzia di Postgres)" 1 "$(psql_db <<'SQL' 2>&1 | grep -c 'not allowed in a non-volatile function' || true
+create function public.nmre_stable_write_probe() returns void language sql stable as $f$ insert into private.gmail_oauth_tokens values ('p@example.test','c','s',now()) $f$;
+select public.nmre_stable_write_probe();
+SQL
+)"
+psql_db -c "drop function if exists public.nmre_stable_write_probe()" >/dev/null
+expect "proprietario e permessi come prima (nmre_fn_owner, execute solo a service_role)" 1 "$(psql_db -At -c "select count(*) from pg_proc where proname='nmre_get_gmail_tokens' and pg_get_userbyid(proowner)='nmre_fn_owner' and has_function_privilege('service_role', oid, 'execute') and not has_function_privilege('anon', oid, 'execute')")"
+psql_db -f "$TOKENS_STABLE_RB" >/dev/null
+expect "rollback: la funzione torna VOLATILE" v "$(volatility)"
+expect "rollback: corpo, proprietario e permessi invariati" "$before_def" "$(psql_db -At -c "select concat_ws('|', md5(prosrc), coalesce(proconfig::text, ''), prosecdef::text, pg_get_userbyid(proowner), coalesce(proacl::text, '')) from pg_proc where proname='nmre_get_gmail_tokens'")"
+for unsafe in \
+  "insert into private.gmail_oauth_tokens values ('y@example.test','c','s',now()) returning email, token_ciphertext, scope, expires_at" \
+  "select email, token_ciphertext, scope, expires_at from private.gmail_oauth_tokens; select email, token_ciphertext, scope, expires_at from private.gmail_oauth_tokens" \
+  "select email, token_ciphertext, scope, set_config('x.y', 'z', false)::timestamptz from private.gmail_oauth_tokens"; do
+  tokens_function "$unsafe"
+  expect "funzione di prova creata con un corpo non sicuro" 1 "$(psql_db -At -c "select count(*) from pg_proc where proname='nmre_get_gmail_tokens' and provolatile='v'")"
+  if psql_db -f "$TOKENS_STABLE" >/dev/null 2>&1; then echo "FAIL la migrazione doveva fermarsi: $unsafe" >&2; exit 1; fi
+  expect "corpo non sicuro: migrazione interrotta, funzione ancora VOLATILE" v "$(volatility)"
+done
+psql -X -q -d postgres -c "drop database $DB" >/dev/null
+
+
+echo "== Registro delle ricerche Subito: RLS, permessi, una riga per email"
+base_schema
+psql_db -f "$SYNC_LOG" >/dev/null 2>&1
+psql_db -f "$SYNC_LOG" >/dev/null 2>&1   # idempotenza
+A=00000000-0000-0000-0000-00000000000a
+psql_db <<'SQL' >/dev/null
+insert into public.nmre_subito_ricerche_sync (owner_id, gmail_message_id, ricerca_chiave, url_ricerca, esito, motivo, annunci_trovati, nuove_opportunita)
+values ('00000000-0000-0000-0000-00000000000a','m-a','subito.it/annunci-marche/vendita/appartamenti/ancona?advt=0,2','https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2','completa','ricerca_completa',30,2),
+       ('00000000-0000-0000-0000-00000000000b','m-b',null,null,'errore','pagina_bloccata',0,0);
+SQL
+sync_user() { psql_db -At <<SQL 2>&1 | tail -1
+set role authenticated; select set_config('request.jwt.claim.sub', '$1', false);
+$2
+SQL
+}
+expect "registro: l'utente vede solo le proprie ricerche" 1 "$(sync_user $A "select count(*) from public.nmre_subito_ricerche_sync;")"
+expect "registro: l'utente non può modificare" 1 "$(sync_user $A "update public.nmre_subito_ricerche_sync set nuove_opportunita=99;" | grep -c 'permission denied' || true)"
+expect "registro: l'utente non può inserire" 1 "$(sync_user $A "insert into public.nmre_subito_ricerche_sync (owner_id, gmail_message_id, esito, motivo) values ('$A','x','completa','ricerca_completa');" | grep -c 'permission denied' || true)"
+expect "registro: l'utente non può cancellare" 1 "$(sync_user $A "delete from public.nmre_subito_ricerche_sync;" | grep -c 'permission denied' || true)"
+expect "registro: anon non legge nulla" 1 "$(psql_db -At -c "set role anon; select count(*) from public.nmre_subito_ricerche_sync" 2>&1 | grep -c 'permission denied' || true)"
+expect "registro: una sola riga per email (rielaborazione = aggiornamento)" 1 "$(psql_db -c "insert into public.nmre_subito_ricerche_sync (owner_id, gmail_message_id, esito, motivo) values ('$A','m-a','completa','ricerca_completa')" 2>&1 | grep -c 'duplicate key' || true)"
+expect "registro: upsert sulla chiave dell'email" 1 "$(psql_db -At -c "insert into public.nmre_subito_ricerche_sync (owner_id, gmail_message_id, esito, motivo, nuove_opportunita) values ('$A','m-a','completa','ricerca_completa',0) on conflict (owner_id, gmail_message_id) do update set nuove_opportunita=excluded.nuove_opportunita; select count(*) from public.nmre_subito_ricerche_sync where gmail_message_id='m-a'" | tail -1)"
+expect "registro: esito sconosciuto rifiutato" 1 "$(psql_db -c "insert into public.nmre_subito_ricerche_sync (owner_id, gmail_message_id, esito, motivo) values ('$A','m-z','riuscita','x')" 2>&1 | grep -c 'violates check constraint' || true)"
+expect "registro: link non Subito rifiutato" 1 "$(psql_db -c "insert into public.nmre_subito_ricerche_sync (owner_id, gmail_message_id, esito, motivo, url_ricerca) values ('$A','m-y','completa','x','javascript:alert(1)')" 2>&1 | grep -c 'violates check constraint' || true)"
+expect "registro: nessuna tabella esistente modificata" "id owner_id stato tipo_venditore" "$(psql_db -At -c "select string_agg(column_name, ' ' order by ordinal_position) from information_schema.columns where table_name='annunci_candidati'")"
+psql_db -f "$SYNC_LOG_RB" >/dev/null 2>&1
+expect "registro · rollback: l'app non legge più la tabella" 1 "$(sync_user $A "select count(*) from public.nmre_subito_ricerche_sync;" | grep -c 'permission denied' || true)"
+expect "registro · rollback: i dati restano" 2 "$(psql_db -At -c "select count(*) from public.nmre_subito_ricerche_sync")"
+psql -X -q -d postgres -c "drop database $DB" >/dev/null
 
 echo "Tutti i test delle migrazioni superati."

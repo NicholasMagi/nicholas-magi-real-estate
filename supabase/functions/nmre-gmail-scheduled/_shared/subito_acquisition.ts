@@ -49,6 +49,11 @@ export type SubitoAcquisition = {
   decision: NewListingsDecision | null;
   /** Annunci nuovi già presenti solo nell'Archivio: non inseriti, registrati nella notifica. */
   archived: Array<{ id: string; url: string; title: string | null; annuncio_id: string; eliminato: boolean }>;
+  /**
+   * Annunci plausibili la cui novità non è dimostrabile, proposti come schede singole
+   * «Da verificare» (solo con itemCandidates attivo; esclusi quelli solo nell'Archivio).
+   */
+  proposals?: SubitoItem[];
   pageSource: SubitoPage["source"] | null;
   pageCount: number;
   attempts: number;
@@ -67,51 +72,62 @@ function previousAttempts(existing: { dati_estratti?: unknown } | null): number 
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
+/**
+ * Lettura di una pagina dei risultati con tutte le verifiche: protezioni del sito (mai
+ * aggirate), errori HTTP, redirect verso un'altra ricerca, pagina vuota. Condivisa dal
+ * recupero dei soli annunci nuovi e da quello dell'intera ricerca.
+ */
+export async function readSubitoResultsPage(
+  requestUrl: string,
+  searchUrl: string,
+  searchKey: string | null,
+  fetchPage: SubitoAcquisitionDeps["fetchPage"]
+): Promise<{ page: SubitoPage | null; error: string | null }> {
+  try {
+    const response = await fetchPage(requestUrl);
+    const finalSearchUrl = normalizeSubitoSearchUrl(response.finalUrl);
+    // Un redirect verso un'altra ricerca Subito (per esempio con filtri persi) non è
+    // una risposta valida: non dobbiamo classificare annunci di una ricerca diversa.
+    // kxconfid e i parametri di ordinamento restano irrilevanti per l’identità della ricerca.
+    // Subito riscrive l'URL (reale: ?advt=0%2C2 → /da-privati/): se la pagina dichiara i
+    // filtri applicati, vale il confronto con quelli; altrimenti il confronto delle chiavi.
+    const confirmed = subitoPageConfirmsSearch(searchUrl, response.html);
+    const finalOk = !!finalSearchUrl && (confirmed === true || (confirmed === null && subitoSearchKey(finalSearchUrl) === searchKey));
+    if (isBlockedSubitoPage(response.status, response.html)) return { page: null, error: "pagina_bloccata" };
+    if (response.status < 200 || response.status >= 300) return { page: null, error: "errore_http" };
+    if (!finalOk) return { page: null, error: "pagina_vuota" };
+    const page = parseSubitoResultsPage(response.html.slice(0, SUBITO_PAGE_MAX_BYTES));
+    if (page.status === "bloccata") return { page: null, error: "pagina_bloccata" };
+    if (page.status === "vuota") return { page, error: "pagina_vuota" };
+    return { page, error: null };
+  } catch {
+    return { page: null, error: "errore_rete" };
+  }
+}
+
 export async function acquireSubitoDigest(
   email: SubitoEmail,
   digest: SubitoDigest,
   deps: SubitoAcquisitionDeps,
-  options: { batchPreviousIso?: string | null; deferred?: boolean } = {}
+  options: { batchPreviousIso?: string | null; deferred?: boolean; itemCandidates?: boolean } = {}
 ): Promise<SubitoAcquisition> {
   const existing = await deps.existingDigest(String(email.id));
   // Rinvio per limite di letture nel ciclo: non conta come tentativo.
   if (options.deferred) {
     const attemptsSoFar = previousAttempts(existing);
-    return { status: "errore", reason: "rinviato", items: [], decision: null, archived: [], pageSource: null, pageCount: 0,
+    return { status: "errore", reason: "rinviato", items: [], decision: null, archived: [], proposals: [], pageSource: null, pageCount: 0,
       attempts: attemptsSoFar, retry: true, keepDigestRecord: true };
   }
   const attempts = previousAttempts(existing) + 1;
   const receivedAt = emailIso(email.date);
   const fail = (reason: string, retryable: boolean): SubitoAcquisition => ({
-    status: "errore", reason, items: [], decision: null, archived: [], pageSource: null, pageCount: 0, attempts,
+    status: "errore", reason, items: [], decision: null, archived: [], proposals: [], pageSource: null, pageCount: 0, attempts,
     retry: retryable && attempts < SUBITO_MAX_ATTEMPTS, keepDigestRecord: true
   });
-  let page: SubitoPage | null = null;
-  let pageError: string | null = null;
   if (!digest.searchUrl) return fail("link_mancante", false);
-  {
-    try {
-      const response = await deps.fetchPage(digest.searchUrl);
-      const finalSearchUrl = normalizeSubitoSearchUrl(response.finalUrl);
-      // Un redirect verso un'altra ricerca Subito (per esempio con filtri persi) non è
-      // una risposta valida: non dobbiamo classificare annunci di una ricerca diversa.
-      // kxconfid e i parametri di ordinamento restano irrilevanti per l’identità della ricerca.
-      // Subito riscrive l'URL (reale: ?advt=0%2C2 → /da-privati/): se la pagina dichiara i
-      // filtri applicati, vale il confronto con quelli; altrimenti il confronto delle chiavi.
-      const confirmed = subitoPageConfirmsSearch(digest.searchUrl, response.html);
-      const finalOk = !!finalSearchUrl && (confirmed === true || (confirmed === null && subitoSearchKey(finalSearchUrl) === digest.searchKey));
-      if (isBlockedSubitoPage(response.status, response.html)) pageError = "pagina_bloccata";
-      else if (response.status < 200 || response.status >= 300) pageError = "errore_http";
-      else if (!finalOk) pageError = "pagina_vuota";
-      else {
-        page = parseSubitoResultsPage(response.html.slice(0, SUBITO_PAGE_MAX_BYTES));
-        if (page.status === "bloccata") pageError = "pagina_bloccata";
-        else if (page.status === "vuota") pageError = "pagina_vuota";
-      }
-    } catch {
-      pageError = "errore_rete";
-    }
-  }
+  const read = await readSubitoResultsPage(digest.searchUrl, digest.searchUrl, digest.searchKey, deps.fetchPage);
+  const page: SubitoPage | null = read.page;
+  const pageError: string | null = read.error;
   if (pageError) return fail(pageError, true);
 
   let previousDigestIso: string | null = null;
@@ -130,9 +146,24 @@ export async function acquireSubitoDigest(
     previousDigestIso
   });
   if (!decision.certain) {
+    // Con itemCandidates ogni annuncio plausibile diventa una scheda singola «Da verificare»
+    // (nessun annuncio perso). Stesso confronto con l'Archivio degli annunci certi: un
+    // errore interrompe l'email (ritentata, cursore fermo), mai schede senza confronto.
+    const proposals: SubitoItem[] = [];
+    const archivedUnproven: SubitoAcquisition["archived"] = [];
+    if (options.itemCandidates) {
+      for (const item of decision.plausibleItems ?? decision.possibleItems) {
+        const inArchive = await deps.archivedListing(item.id);
+        if (inArchive && !(await deps.knownCandidate(item.id))) {
+          archivedUnproven.push({ id: item.id, url: item.url, title: item.title, annuncio_id: inArchive.annuncioId, eliminato: inArchive.eliminato });
+        } else {
+          proposals.push(item);
+        }
+      }
+    }
     return {
-      status: "da_verificare", reason: decision.reason, items: [], decision, archived: [], pageSource: page?.source ?? null,
-      pageCount: page?.items.length ?? 0, attempts, retry: false, keepDigestRecord: true
+      status: "da_verificare", reason: decision.reason, items: [], decision, archived: archivedUnproven, proposals,
+      pageSource: page?.source ?? null, pageCount: page?.items.length ?? 0, attempts, retry: false, keepDigestRecord: true
     };
   }
   // Confronto con l'Archivio: un annuncio nuovo già archiviato senza candidato d'origine
@@ -151,7 +182,7 @@ export async function acquireSubitoDigest(
     }
   }
   return {
-    status: "completo", reason: decision.reason, items, decision, archived, pageSource: page?.source ?? null,
+    status: "completo", reason: decision.reason, items, decision, archived, proposals: [], pageSource: page?.source ?? null,
     pageCount: page?.items.length ?? 0, attempts, retry: false,
     // La riga riepilogativa serve se esiste già (un tentativo precedente non riuscito) o
     // se un annuncio è stato riconosciuto nell'Archivio: resta traccia dell'esito.
@@ -184,11 +215,17 @@ function itemSeller(item: SubitoItem, classify: (text: string) => SellerResult):
   return fromText;
 }
 
-export function subitoItemRow(item: SubitoItem, ctx: SubitoRowContext, details: { pageSource: string | null }) {
+export function subitoItemRow(item: SubitoItem, ctx: SubitoRowContext, details: { pageSource: string | null; unprovenReason?: string | null }) {
   const gmailId = String(ctx.email.id);
   const receivedAt = emailIso(ctx.email.date);
   const text = [item.title, item.description].filter(Boolean).join(" ");
-  const seller = itemSeller(item, ctx.classifySeller);
+  const classified = itemSeller(item, ctx.classifySeller);
+  // Novità non dimostrata: mai «Privato», così il salvataggio non archivia in automatico
+  // un annuncio forse già visto. L'indicazione resta nell'evidenza e nella scheda.
+  const seller = details.unprovenReason && classified.classification === "Privato"
+    ? { classification: "Da verificare" as const, confidence: 0,
+        evidence: "Il testo indica un privato (" + classified.evidence + "), ma la novità non è dimostrata: verifica manuale, nessuna archiviazione automatica" }
+    : classified;
   const title = item.title || "Annuncio Subito " + item.id;
   const notificationId = subitoNotificationId(gmailId, item.id);
   const campi = {
@@ -220,7 +257,10 @@ export function subitoItemRow(item: SubitoItem, ctx: SubitoRowContext, details: 
         ricerca: ctx.digest.searchKey,
         url_ricerca: ctx.digest.searchUrl,
         fonte_dati: details.pageSource || "email",
-        dettagli_completi: details.pageSource === "next_data"
+        dettagli_completi: details.pageSource === "next_data",
+        // Scheda proposta senza prova di novità: da verificare, nessuna notifica dedicata
+        // (condizione del trigger, migrazione 20261126210000).
+        ...(details.unprovenReason ? { novita_non_dimostrata: true, motivo_novita: details.unprovenReason } : {})
       }
     },
     dati_fonte: {
@@ -304,6 +344,7 @@ export function subitoDigestRow(ctx: SubitoRowContext, result: SubitoAcquisition
         ultimo_tentativo: ctx.nowIso,
         possibili: possible,
         recuperati: inserted,
+        schede_proposte: (result.proposals ?? []).map(item => ({ id: item.id, url: item.url, titolo: item.title })),
         gia_in_archivio: result.archived.map(entry => ({ id: entry.id, url: entry.url, titolo: entry.title, annuncio_id: entry.annuncio_id, eliminato_dall_archivio: entry.eliminato }))
       }
     },
@@ -341,6 +382,11 @@ export function subitoDigestRow(ctx: SubitoRowContext, result: SubitoAcquisition
     subito_ad_id: null,
     preserve_existing: false
   };
+}
+
+/** Schede singole per gli annunci con novità non dimostrata: attive solo con "true". */
+export function subitoItemCandidatesEnabled(envValue: string | undefined): boolean {
+  return String(envValue ?? "").trim().toLowerCase() === "true";
 }
 
 // ---------- Ciclo delle email Subito (usato da index.ts e dai test) ----------
@@ -420,7 +466,7 @@ export type SubitoCycleResult = {
 export async function subitoRowsForEmails(
   entries: Array<{ email: SubitoEmail; digest: SubitoDigest }>,
   deps: SubitoAcquisitionDeps,
-  ctx: { owner: string; classifySeller(text: string): SellerResult; now?: () => string; maxPages?: number }
+  ctx: { owner: string; classifySeller(text: string): SellerResult; now?: () => string; maxPages?: number; itemCandidates?: boolean }
 ): Promise<SubitoCycleResult> {
   const now = ctx.now || (() => new Date().toISOString());
   const maxPages = ctx.maxPages ?? SUBITO_MAX_PAGES_PER_RUN;
@@ -435,12 +481,16 @@ export async function subitoRowsForEmails(
       if (needsPage && !deferred) pagesRead++;
       const acquisition = await acquireSubitoDigest(email, digest, deps, {
         batchPreviousIso: digest.searchKey ? lastBySearch.get(digest.searchKey) ?? null : null,
-        deferred
+        deferred,
+        itemCandidates: ctx.itemCandidates === true
       });
       const key = acquisition.status + ":" + acquisition.reason;
       result.outcomes[key] = (result.outcomes[key] || 0) + 1;
       const rowContext: SubitoRowContext = { owner: ctx.owner, email, digest, classifySeller: ctx.classifySeller, nowIso: now() };
       for (const item of acquisition.items) result.rows.push(subitoItemRow(item, rowContext, { pageSource: acquisition.pageSource }));
+      for (const item of acquisition.proposals ?? []) {
+        result.rows.push(subitoItemRow(item, rowContext, { pageSource: acquisition.pageSource, unprovenReason: acquisition.reason }));
+      }
       if (acquisition.keepDigestRecord) {
         result.rows.push(subitoDigestRow(rowContext, acquisition, acquisition.items.map(item => ({ id: item.id, url: item.url, title: item.title }))));
       }

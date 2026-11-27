@@ -49,6 +49,10 @@ export type SubitoPage = {
   skipped?: number;
   /** Totale dei risultati dichiarato dalla pagina, se presente. */
   total?: number | null;
+  /** Numero di pagine dei risultati dichiarato dalla pagina (items.totalPages), se presente. */
+  totalPages?: number | null;
+  /** Numero della pagina che Subito dichiara di aver mostrato (search.page), se presente. */
+  pageNumber?: number | null;
 };
 
 // Tolti dalla richiesta HTTP solo i parametri di campagna: kxconfid e ogni altro
@@ -361,6 +365,27 @@ function findResultsContainer(root: any): any | null {
   return null;
 }
 
+function positiveInt(value: unknown, allowZero: boolean): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isInteger(number) && (number > 0 || (allowZero && number === 0)) ? number : null;
+}
+
+/**
+ * URL della pagina n dei risultati della stessa ricerca: stessi filtri (compreso quello
+ * sugli inserzionisti) e parametro o=n. Il numero della pagina effettivamente mostrata
+ * va sempre confermato con pageNumber della risposta: il parametro non è dato per certo.
+ */
+export function subitoSearchPageUrl(searchUrl: string, pageNumber: number): string | null {
+  if (!Number.isInteger(pageNumber) || pageNumber < 1) return null;
+  const normalized = normalizeSubitoSearchUrl(searchUrl);
+  if (!normalized) return null;
+  const url = new URL(normalized);
+  url.searchParams.delete("o");
+  if (pageNumber > 1) url.searchParams.set("o", String(pageNumber));
+  return url.toString();
+}
+
 /** Annunci della pagina dei risultati, nell'ordine della pagina. */
 export function parseSubitoResultsPage(html: string): SubitoPage {
   const source = String(html || "");
@@ -380,9 +405,11 @@ export function parseSubitoResultsPage(html: string): SubitoPage {
           if (!item) skipped++;
           else if (!unique.has(item.id)) unique.set(item.id, item);
         }
-        const total = Number.isFinite(Number(container.total)) ? Number(container.total) : null;
-        if (unique.size || skipped) return { status: "ok", source: "next_data", items: [...unique.values()], skipped, total };
-        if (total === 0) return { status: "vuota", source: "next_data", items: [], skipped: 0, total };
+        const total = positiveInt(container.total, true);
+        const totalPages = positiveInt(container.totalPages, false);
+        const pageNumber = positiveInt(data?.props?.pageProps?.initialState?.search?.page, false);
+        if (unique.size || skipped) return { status: "ok", source: "next_data", items: [...unique.values()], skipped, total, totalPages, pageNumber };
+        if (total === 0) return { status: "vuota", source: "next_data", items: [], skipped: 0, total, totalPages, pageNumber };
       } else {
         // Struttura non riconosciuta: gli annunci vengono proposti, mai considerati certi.
         // deno-lint-ignore no-explicit-any
@@ -432,8 +459,10 @@ export type NewListingsDecision = {
     | "struttura_non_riconosciuta" | "possibili_ripubblicazioni";
   /** Annunci nuovi individuati con certezza (vuoto se certain è false). */
   newItems: SubitoItem[];
-  /** Annunci plausibili da far verificare al titolare (se certain è false). */
+  /** Annunci plausibili da far verificare al titolare (se certain è false), al massimo 15. */
   possibleItems: SubitoItem[];
+  /** Tutti gli annunci plausibili, senza limite (se certain è false): base delle schede singole. */
+  plausibleItems?: SubitoItem[];
   /** Annunci trovati nella finestra temporale (per il messaggio di verifica). */
   windowCount: number | null;
   /**
@@ -475,21 +504,21 @@ export function identifyNewSubitoListings(params: {
   const emailTime = params.emailDateIso ? Date.parse(params.emailDateIso) : NaN;
   const limit = Number.isFinite(emailTime) ? emailTime + SUBITO_CLOCK_TOLERANCE_MS : null;
   const previous = params.previousDigestIso ? Date.parse(params.previousDigestIso) : NaN;
-  const possible = () => pageItems
+  const plausible = () => pageItems
     .filter(item => {
       const time = item.publishedAt ? Date.parse(item.publishedAt) : NaN;
       if (!Number.isFinite(time)) return true;
       if (limit !== null && time > limit) return false;
       return !(Number.isFinite(previous) && time <= previous);
-    })
-    .slice(0, SUBITO_MAX_POSSIBLE_ITEMS);
+    });
+  const possible = () => plausible().slice(0, SUBITO_MAX_POSSIBLE_ITEMS);
   const breakdown = (list: SubitoItem[] | null) => ({
     windowCount: list ? list.length : null,
     windowPrivate: list ? list.filter(item => item.advertiserCompany === false).length : null,
     windowProfessional: list ? list.filter(item => item.advertiserCompany === true).length : null
   });
   const uncertain = (reason: NewListingsDecision["reason"], list: SubitoItem[] | null = null, reposted: string[] = []): NewListingsDecision =>
-    ({ certain: false, reason, newItems: [], possibleItems: possible(), ...breakdown(list), windowReposted: reposted });
+    ({ certain: false, reason, newItems: [], possibleItems: possible(), plausibleItems: plausible(), ...breakdown(list), windowReposted: reposted });
 
   if (params.declaredCount === null) return uncertain("numero_non_dichiarato");
   if (!pageItems.length) return uncertain("nessun_annuncio_nella_pagina");
@@ -510,7 +539,7 @@ export function identifyNewSubitoListings(params: {
   const reposted = inWindow.filter(item => Number(item.id) < newestOlderId).map(item => item.id);
   if (reposted.length) return uncertain("possibili_ripubblicazioni", inWindow, reposted);
   if (inWindow.length !== params.declaredCount) return uncertain("conteggio_diverso", inWindow);
-  return { certain: true, reason: "finestra_temporale", newItems: inWindow, possibleItems: [], ...breakdown(inWindow), windowReposted: [] };
+  return { certain: true, reason: "finestra_temporale", newItems: inWindow, possibleItems: [], plausibleItems: [], ...breakdown(inWindow), windowReposted: [] };
 }
 
 /** Testo per il titolare, per ogni motivo di incertezza o errore. */
