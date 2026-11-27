@@ -59,6 +59,8 @@ jobs:
 
       - name: Test Gmail sync health alert
         run: node tests/frontend/sync_alert_test.mjs
+      - name: Test phone address book import (vCard, Contact Picker) and duplicate detection
+        run: node tests/frontend/contacts_import_test.mjs
 
       - name: Check migration layout (phase 2 not applicable, production versions)
         run: |
