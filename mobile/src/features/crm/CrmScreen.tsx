@@ -26,6 +26,7 @@ type PermissionState = "checking" | "not_granted" | "granted" | "blocked";
 
 export function CrmScreen() {
   const { user } = useAuth();
+  const userId = user?.id;
   const [permission, setPermission] = useState<PermissionState>("checking");
   const [syncing, setSyncing] = useState(false);
   const [result, setResult] = useState<PhoneContactSyncResult | null>(null);
@@ -35,7 +36,7 @@ export function CrmScreen() {
   const syncInProgress = useRef(false);
 
   const runSync = useCallback(async () => {
-    if (!user?.id || syncInProgress.current) return;
+    if (!userId || syncInProgress.current) return;
     syncInProgress.current = true;
     setSyncing(true);
     setMessage(null);
@@ -46,9 +47,9 @@ export function CrmScreen() {
         setMessage("Il permesso alla rubrica non è più attivo. Lo riabiliti per continuare la sincronizzazione.");
         return;
       }
-      const next = await syncPhoneContacts(user.id);
+      const next = await syncPhoneContacts(userId);
       setResult(next);
-      setContacts(await loadCrmContacts(user.id));
+      setContacts(await loadCrmContacts(userId));
       setMessage("Rubrica sincronizzata. I dati già presenti nel CRM sono stati preservati.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Sincronizzazione non riuscita. Riprovi.");
@@ -56,12 +57,12 @@ export function CrmScreen() {
       syncInProgress.current = false;
       setSyncing(false);
     }
-  }, [user?.id]);
+  }, [userId]);
 
   useEffect(() => {
     let active = true;
-    if (user?.id) {
-      void loadCrmContacts(user.id).then(rows => {
+    if (userId) {
+      void loadCrmContacts(userId).then(rows => {
         if (active) setContacts(rows);
       }).catch(() => {
         if (active) setMessage("Non è stato possibile caricare la rubrica CRM.");
@@ -84,7 +85,7 @@ export function CrmScreen() {
         }
       });
     return () => { active = false; };
-  }, [runSync, user?.id]);
+  }, [runSync, userId]);
 
   useEffect(() => {
     const contactsSubscription = permission === "granted"
@@ -150,7 +151,7 @@ export function CrmScreen() {
         ) : permission === "granted" ? (
           <>
             <Text style={styles.body}>
-              NMRE importa i nuovi contatti e completa solo i campi CRM vuoti quando apre questa schermata, quando l'app torna attiva e quando il telefono segnala modifiche.
+              NMRE importa i nuovi contatti e completa solo i campi CRM vuoti quando apre questa schermata, quando l&apos;app torna attiva e quando il telefono segnala modifiche.
             </Text>
             <Pressable style={[styles.button, syncing && styles.buttonDisabled]} onPress={() => void runSync()} disabled={syncing}>
               <Text style={styles.buttonText}>{syncing ? "Sincronizzazione…" : "Sincronizza adesso"}</Text>
