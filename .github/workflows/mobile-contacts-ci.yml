@@ -18,6 +18,7 @@ on:
       - "mobile/**"
       - ".github/workflows/mobile-contacts-ci.yml"
 
+# Feature-branch validation includes the CRM interaction-history changes.
 permissions:
   contents: read
 
