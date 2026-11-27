@@ -1,3 +1,14 @@
+## 2026-11-27 — Importazione automatica rubrica nativa (mobile)
+- Sostituita la schermata CRM segnaposto di NMRE Mobile con il collegamento alla rubrica nativa iOS/Android tramite Expo Contacts.
+- Dopo il consenso del sistema, importa i contatti in pagine, confronta telefoni/email/nominativi con `nmre_contacts` e crea solo i record mancanti; completa esclusivamente campi CRM vuoti.
+- Attivato il controllo automatico quando la schermata CRM viene aperta, quando l'app torna in primo piano e quando il sistema segnala modifiche alla rubrica. Non viene promesso un job in background.
+- Gli annunci archiviati senza referente vengono associati solo se i numeri normalizzati individuano un unico contatto. Gli abbinamenti ambigui e i conflitti non vengono scritti.
+- Tutte le modifiche sono confinate a `mobile/`; nessuna migration, Edge Function, tabella o deploy è stato eseguito.
+- Limite dello schema CRM attuale: `nmre_contacts.phone` conserva un solo numero principale. Gli altri numeri letti dal dispositivo partecipano al matching durante la sincronizzazione, ma non vengono salvati come recapiti multipli permanenti. Per questo serve una futura migration additiva verificata su staging.
+- La CI dedicata ha superato npm ci, suite test, typecheck e lint dopo aver corretto il conflitto React/React DOM, il campo email Expo e gli errori lint.
+- Expo Doctor segnala una deriva di versioni SDK già presente nella base mobile (Expo e alcuni moduli 58.0.x); il controllo resta visibile come warning non bloccante, senza aggiornare in blocco lo stack SDK in questa PR.
+- Build native e prove su dispositivi fisici restano necessarie prima del rilascio.
+
 ## 2026-11-25 — Archiviazione automatica solo con prova forte
 - Ripristinata l'archiviazione automatica Gmail, ma solo dietro al gate della funzione SQL nmre_auto_archive_private_candidate.
 - La funzione consente l'inserimento soltanto per etichetta esplicita di venditore privato con confidence almeno 99 o verifica manuale esplicita, e richiede titolo e comune.
