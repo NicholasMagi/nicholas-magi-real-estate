@@ -28,6 +28,7 @@ export type PhoneContactSyncResult = {
   alreadyPresent: number;
   ambiguous: number;
   listingsLinked: number;
+  mergedDuplicates: number;
 };
 
 type CrmContact = {
@@ -35,7 +36,94 @@ type CrmContact = {
   full_name: string | null;
   phone: string | null;
   email: string | null;
+  contact_type?: string | null;
+  status?: string | null;
+  source?: string | null;
+  notes?: string | null;
 };
+
+const REVIEW_FLAG = "NMRE_VERIFICA:";
+
+function reviewNote(notes: string | null | undefined): string | null {
+  const line = notes?.split("\n").find(value => value.trim().startsWith(REVIEW_FLAG));
+  return line ? line.trim().slice(REVIEW_FLAG.length).trim() : null;
+}
+
+export function getContactReviewNote(notes: string | null | undefined): string | null {
+  return reviewNote(notes);
+}
+
+async function flagContactForReview(ownerId: string, contact: CrmContact, reason: string): Promise<void> {
+  if (!supabase || reviewNote(contact.notes)) return;
+  const nextNotes = [contact.notes?.trim(), REVIEW_FLAG + " " + reason].filter(Boolean).join("\n");
+  const { error } = await supabase.from("nmre_contacts").update({ notes: nextNotes }).eq("owner_id", ownerId).eq("id", contact.id);
+  if (error) throw new Error("Non è stato possibile segnalare un contatto da verificare.");
+  contact.notes = nextNotes;
+}
+
+export async function clearContactReviewFlag(ownerId: string, contactId: string): Promise<void> {
+  if (!ownerId || !contactId || !supabase) throw new Error("Contatto non valido.");
+  const { data, error } = await supabase.from("nmre_contacts").select("notes").eq("owner_id", ownerId).eq("id", contactId).maybeSingle();
+  if (error) throw new Error("Non è stato possibile verificare la nota del contatto.");
+  const notes = typeof data?.notes === "string" ? data.notes : "";
+  const cleaned = notes.split("\n").filter(line => !line.trim().startsWith(REVIEW_FLAG)).join("\n").trim();
+  const { error: updateError } = await supabase.from("nmre_contacts").update({ notes: cleaned || null }).eq("owner_id", ownerId).eq("id", contactId);
+  if (updateError) throw new Error("Non è stato possibile rimuovere la segnalazione.");
+}
+
+async function mergeContactRecords(ownerId: string, primary: CrmContact, duplicate: CrmContact): Promise<void> {
+  if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
+  const mergedNotes = [...new Set([primary.notes, duplicate.notes].map(value => value?.trim()).filter((value): value is string => Boolean(value)))].join("\n");
+  const patch: Record<string, string | null> = {
+    full_name: primary.full_name || duplicate.full_name,
+    phone: primary.phone || duplicate.phone,
+    email: primary.email || duplicate.email,
+    contact_type: primary.contact_type && primary.contact_type !== "altro" ? primary.contact_type : (duplicate.contact_type || primary.contact_type || "altro"),
+    status: primary.status && primary.status !== "nuovo" ? primary.status : (duplicate.status || primary.status || "nuovo"),
+    source: primary.source || duplicate.source,
+    notes: mergedNotes || null
+  };
+  const { error: primaryError } = await supabase.from("nmre_contacts").update(patch).eq("owner_id", ownerId).eq("id", primary.id);
+  if (primaryError) throw new Error("Non è stato possibile preparare l'unione dei contatti.");
+
+  const { data: links, error: linksError } = await supabase.from("nmre_property_contacts").select("property_id,relation_role").eq("owner_id", ownerId).eq("contact_id", duplicate.id);
+  if (linksError) throw new Error("Unione sospesa: impossibile leggere gli immobili collegati.");
+  if (links?.length) {
+    const { error } = await supabase.from("nmre_property_contacts").upsert(
+      links.map(link => ({ owner_id: ownerId, property_id: link.property_id, contact_id: primary.id, relation_role: link.relation_role })),
+      { onConflict: "owner_id,property_id,contact_id", ignoreDuplicates: true }
+    );
+    if (error) throw new Error("Unione sospesa: impossibile trasferire gli immobili collegati.");
+  }
+  const moves = await Promise.all([
+    supabase.from("nmre_contact_interactions").update({ contact_id: primary.id }).eq("owner_id", ownerId).eq("contact_id", duplicate.id),
+    supabase.from("nmre_appointments").update({ contact_id: primary.id }).eq("owner_id", ownerId).eq("contact_id", duplicate.id),
+    supabase.from("nmre_properties").update({ contact_id: primary.id }).eq("owner_id", ownerId).eq("contact_id", duplicate.id),
+    supabase.from("annunci").update({ contact_id: primary.id }).eq("owner_id", ownerId).eq("contact_id", duplicate.id),
+    supabase.from("nmre_property_contacts").delete().eq("owner_id", ownerId).eq("contact_id", duplicate.id)
+  ]);
+  if (moves.some(result => result.error)) throw new Error("Unione sospesa: alcune relazioni non sono state trasferite. Il duplicato non è stato cancellato.");
+  const { error: deleteError } = await supabase.from("nmre_contacts").delete().eq("owner_id", ownerId).eq("id", duplicate.id);
+  if (deleteError) throw new Error("Relazioni trasferite, ma il contatto duplicato non è stato eliminato. La sincronizzazione può essere ripetuta.");
+}
+
+async function mergeCertainDuplicateContacts(ownerId: string, contacts: CrmContact[]): Promise<number> {
+  let merged = 0;
+  for (const group of findCertainDuplicateGroups(contacts)) {
+    const primary = group[0];
+    for (const duplicate of group.slice(1)) {
+      await mergeContactRecords(ownerId, primary, duplicate);
+      primary.phone = primary.phone || duplicate.phone;
+      primary.email = primary.email || duplicate.email;
+      primary.contact_type = primary.contact_type && primary.contact_type !== "altro" ? primary.contact_type : duplicate.contact_type;
+      primary.status = primary.status && primary.status !== "nuovo" ? primary.status : duplicate.status;
+      primary.source = primary.source || duplicate.source;
+      primary.notes = [primary.notes, duplicate.notes].filter(Boolean).join("\n");
+      merged += 1;
+    }
+  }
+  return merged;
+}
 
 type ListingRow = {
   id: string;
@@ -94,6 +182,7 @@ async function importDeviceContacts(
   enriched: number;
   alreadyPresent: number;
   ambiguous: number;
+  mergedDuplicates: number;
 }> {
   if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
 
@@ -101,7 +190,7 @@ async function importDeviceContacts(
   for (let offset = 0; ; offset += 100) {
     const { data, error } = await supabase
       .from("nmre_contacts")
-      .select("id,full_name,phone,email")
+      .select("id,full_name,phone,email,contact_type,status,source,notes")
       .eq("owner_id", ownerId)
       .order("full_name", { ascending: true })
       .range(offset, offset + 99);
@@ -110,7 +199,9 @@ async function importDeviceContacts(
     contacts.push(...page);
     if (page.length < 100) break;
   }
-  const mergedDuplicates = await mergeCertainDuplicateContacts(ownerId, contacts);\n  const byPhone = new Map<string, CrmContact[]>();
+  const mergedDuplicates = await mergeCertainDuplicateContacts(ownerId, contacts);
+  const mergedDuplicates = await mergeCertainDuplicateContacts(ownerId, contacts);
+  const byPhone = new Map<string, CrmContact[]>();
   const byEmail = indexBy(contacts, item => item.email ? normalizeEmail(item.email) : null);
   const byName = indexBy(contacts, item => item.full_name ? normalizeName(item.full_name) : null);
 
@@ -160,8 +251,8 @@ async function importDeviceContacts(
       hasStrongIdentifier: phoneNumbers.length > 0 || Boolean(email),
       strongMatchCount
     })) {
-      // Same name but a different phone/email: do not create a second CRM person
-      // automatically. Leave the conflict for manual verification.
+      // Keep possible homonyms visible and marked inside the existing contact row.
+      for (const contact of sameNameContacts) await flagContactForReview(ownerId, contact, "Possibile omonimia: il contatto del telefono ha un numero o una email differenti.");
       ambiguous += 1;
       continue;
     }
@@ -178,6 +269,9 @@ async function importDeviceContacts(
       (candidates.size === 0 && !item.fullName) ||
       (candidates.size === 0 && phoneNumbers.length === 0 && !email && (deviceNameCounts.get(nameKey) ?? 0) > 1)
     ) {
+      for (const phone of phoneNumbers) {
+        for (const contact of byPhone.get(phone) ?? []) await flagContactForReview(ownerId, contact, "Numero condiviso da più voci della rubrica del telefono.");
+      }
       ambiguous += 1;
       continue;
     }
@@ -330,7 +424,8 @@ export async function syncPhoneContacts(ownerId: string): Promise<PhoneContactSy
     enriched: imported.enriched,
     alreadyPresent: imported.alreadyPresent,
     ambiguous: imported.ambiguous,
-    listingsLinked
+    listingsLinked,
+    mergedDuplicates: imported.mergedDuplicates
   };
 }
 
@@ -354,6 +449,7 @@ export type CrmContactSummary = {
   contact_type: string | null;
   status: string | null;
   source: string | null;
+  notes: string | null;
 };
 
 export async function loadCrmContacts(ownerId: string): Promise<CrmContactSummary[]> {
