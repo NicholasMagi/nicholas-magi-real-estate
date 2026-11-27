@@ -86,6 +86,23 @@ export async function saveCandidateRow(
       if (canonicalCandidate) break;
     }
   }
+  // Annunci Subito acquisiti (history_only): anche per URL, su tutte le opportunità di
+  // qualunque stato. La scheda trovata non viene mai modificata (history_only); per le altre
+  // righe il confronto resta quello precedente, così non nasce un nuovo percorso di modifica.
+  if (!canonicalCandidate && row.history_only && subitoId && /^\d{6,}$/.test(String(subitoId))) {
+    for (const pattern of subitoIdLikePatterns(String(subitoId)).url) {
+      const { data, error } = await admin
+        .from("annunci_candidati")
+        .select(CANDIDATE_COLUMNS)
+        .eq("owner_id", owner)
+        .like("url", pattern)
+        .order("created_at", { ascending: true })
+        .limit(1);
+      if (error) throw new Error("Ricerca dell'annuncio Subito già acquisito non riuscita");
+      canonicalCandidate = Array.isArray(data) ? data[0] || null : data;
+      if (canonicalCandidate) break;
+    }
+  }
 
   const existingCandidate = canonicalCandidate || currentCandidate;
   let candidateId: string | null = null;

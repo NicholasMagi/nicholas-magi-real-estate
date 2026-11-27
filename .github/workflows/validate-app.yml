@@ -43,7 +43,7 @@ jobs:
         run: deno test --allow-read=. supabase/functions/nmre-gmail-scheduled/frontend_coherence_test.ts supabase/functions/nmre-gmail-scheduled/cursor_guard_test.ts
 
       - name: Test Subito saved-search emails (recognition, results page, new listings, dedup, errors, card links)
-        run: deno test --allow-read=. supabase/functions/nmre-gmail-scheduled/subito_test.ts supabase/functions/nmre-gmail-scheduled/subito_frontend_test.ts supabase/functions/nmre-gmail-scheduled/subito_real_test.ts supabase/functions/nmre-gmail-scheduled/subito_item_candidates_test.ts supabase/functions/nmre-gmail-scheduled/subito_full_search_test.ts supabase/functions/nmre-gmail-scheduled/browser_import_guard_test.ts
+        run: deno test --allow-read=. supabase/functions/nmre-gmail-scheduled/subito_test.ts supabase/functions/nmre-gmail-scheduled/subito_frontend_test.ts supabase/functions/nmre-gmail-scheduled/subito_real_test.ts supabase/functions/nmre-gmail-scheduled/subito_item_candidates_test.ts supabase/functions/nmre-gmail-scheduled/subito_full_search_test.ts supabase/functions/nmre-gmail-scheduled/browser_import_guard_test.ts supabase/functions/nmre-gmail-scheduled/subito_url_dedup_test.ts
 
       - name: Test recovery panel functions in index.html
         run: node tests/frontend/recovery_test.mjs

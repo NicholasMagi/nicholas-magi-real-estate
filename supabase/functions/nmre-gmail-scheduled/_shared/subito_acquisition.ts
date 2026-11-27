@@ -448,10 +448,13 @@ export function supabaseSubitoDeps(
       const byKey = await admin.from("annunci_candidati").select("id").eq("owner_id", owner).eq("dedup_key", "subito:" + adId).limit(1);
       if (byKey.error) throw new Error("Confronto con le opportunità non riuscito");
       if (byKey.data?.length) return true;
-      for (const pattern of subitoIdLikePatterns(adId).listingKey) {
-        const byListing = await admin.from("annunci_candidati").select("id").eq("owner_id", owner).like("listing_key", pattern).limit(1);
-        if (byListing.error) throw new Error("Confronto con le opportunità non riuscito");
-        if (byListing.data?.length) return true;
+      // Tutte le opportunità, di qualunque stato (scartate comprese): listing_key e url, con e
+      // senza titolo nell'URL. Sola lettura.
+      const patterns = subitoIdLikePatterns(adId);
+      for (const [column, pattern] of [...patterns.listingKey.map(p => ["listing_key", p]), ...patterns.url.map(p => ["url", p])]) {
+        const found = await admin.from("annunci_candidati").select("id").eq("owner_id", owner).like(column, pattern).limit(1);
+        if (found.error) throw new Error("Confronto con le opportunità non riuscito");
+        if (found.data?.length) return true;
       }
       return false;
     },
