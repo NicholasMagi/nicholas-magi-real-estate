@@ -1,6 +1,7 @@
 import { Contact, ContactField } from "expo-contacts";
 import * as ContactsLegacy from "expo-contacts/legacy";
 import { supabase } from "@/shared/supabase/client";
+import { extractPhoneNumbers, normalizePhoneNumber } from "@/features/crm/phoneContactMatching";
 
 const CONTACT_FIELDS = [
   ContactField.FULL_NAME,
@@ -42,14 +43,6 @@ type ListingRow = {
   seller_identity: unknown;
 };
 
-export function normalizePhoneNumber(value: string): string | null {
-  let digits = value.replace(/\D/g, "");
-  if (digits.startsWith("00")) digits = digits.slice(2);
-  // Italian +39 and local formats should resolve to the same national number.
-  if (digits.startsWith("39") && digits.length >= 11) digits = digits.slice(2);
-  return digits.length >= 7 && digits.length <= 15 ? digits : null;
-}
-
 function normalizeEmail(value: string): string {
   return value.trim().toLocaleLowerCase("en-US");
 }
@@ -60,30 +53,6 @@ function normalizeName(value: string): string {
 
 function unique(values: string[]): string[] {
   return [...new Set(values.map(value => value.trim()).filter(Boolean))];
-}
-
-function collectStrings(value: unknown, depth = 0): string[] {
-  if (depth > 5 || value === null || value === undefined) return [];
-  if (typeof value === "string" || typeof value === "number") return [String(value)];
-  if (Array.isArray(value)) return value.flatMap(item => collectStrings(item, depth + 1));
-  if (typeof value === "object") {
-    return Object.values(value as Record<string, unknown>)
-      .flatMap(item => collectStrings(item, depth + 1));
-  }
-  return [];
-}
-
-export function extractPhoneNumbers(value: unknown): string[] {
-  const text = collectStrings(value).join(" ");
-  const matches = text.match(/(?:\+|00)?\d[\d\s()./-]{6,}\d/g) ?? [];
-  return unique(matches
-    .map(item => normalizePhoneNumber(item))
-    .filter((item): item is string => item !== null));
-}
-
-export function uniqueContactMatch<T extends { id: string }>(ids: T[]): T | null {
-  const uniqueIds = new Set(ids.map(item => item.id));
-  return uniqueIds.size === 1 ? ids.find(item => item.id === [...uniqueIds][0]) ?? null : null;
 }
 
 async function readDeviceContacts(): Promise<DeviceContact[]> {
@@ -146,7 +115,11 @@ async function importDeviceContacts(
   }
 
   const deviceNameCounts = new Map<string, number>();
+  const devicePhoneCounts = new Map<string, number>();
   for (const item of deviceContacts) {
+    for (const phone of unique(item.phoneNumbers.map(value => normalizePhoneNumber(value)).filter((value): value is string => value !== null))) {
+      devicePhoneCounts.set(phone, (devicePhoneCounts.get(phone) ?? 0) + 1);
+    }
     const name = item.fullName ? normalizeName(item.fullName) : "";
     if (name) deviceNameCounts.set(name, (deviceNameCounts.get(name) ?? 0) + 1);
   }
@@ -163,6 +136,10 @@ async function importDeviceContacts(
       .filter((value): value is string => value !== null));
     const email = item.emails.map(normalizeEmail).find(Boolean) ?? null;
     const nameKey = item.fullName ? normalizeName(item.fullName) : "";
+    if (phoneNumbers.some(phone => (devicePhoneCounts.get(phone) ?? 0) > 1)) {
+      ambiguous += 1;
+      continue;
+    }
 
     const candidates = new Map<string, CrmContact>();
     for (const phone of phoneNumbers) {
@@ -180,7 +157,8 @@ async function importDeviceContacts(
       continue;
     }
 
-    let matched = candidates.size === 1 ? [...candidates.values()][0] : null;
+    const matchedCandidate = candidates.size === 1 ? candidates.values().next().value as CrmContact | undefined : undefined;
+    let matched: CrmContact | null = matchedCandidate ?? null;
     const primaryPhone = item.phoneNumbers[0]?.trim() || null;
     const primaryEmail = item.emails[0]?.trim() || null;
 
@@ -266,7 +244,10 @@ async function linkListingsByPhone(
 ): Promise<number> {
   if (!supabase || phoneToContactIds.size === 0) return 0;
   let linked = 0;
+  const rowsToCheck: ListingRow[] = [];
 
+  // Read pages before writing: updating contact_id changes the filtered result set,
+  // so writing while offset-paginating could skip later listings.
   for (let offset = 0; offset < MAX_LISTINGS_TO_MATCH; offset += LISTING_PAGE_SIZE) {
     const { data, error } = await supabase
       .from("annunci")
@@ -278,8 +259,12 @@ async function linkListingsByPhone(
       .range(offset, offset + LISTING_PAGE_SIZE - 1);
 
     if (error) throw new Error("Contatti importati, ma non è stato possibile verificare gli annunci da associare.");
-    const rows = (data ?? []) as ListingRow[];
-    for (const row of rows) {
+    const page = (data ?? []) as ListingRow[];
+    rowsToCheck.push(...page);
+    if (page.length < LISTING_PAGE_SIZE) break;
+  }
+
+  for (const row of rowsToCheck) {
       const listingPhones = unique([
         ...extractPhoneNumbers(row.contatto),
         ...extractPhoneNumbers(row.seller_identity)
@@ -300,8 +285,6 @@ async function linkListingsByPhone(
         .select("id")
         .maybeSingle();
       if (!updateError && updated) linked += 1;
-    }
-    if (rows.length < LISTING_PAGE_SIZE) break;
   }
 
   return linked;
