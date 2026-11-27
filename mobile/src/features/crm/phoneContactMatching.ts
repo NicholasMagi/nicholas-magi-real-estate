@@ -29,6 +29,16 @@ export function extractPhoneNumbers(value: unknown): string[] {
     .filter((item): item is string => item !== null));
 }
 
+export function canUseNameFallback(input: {
+  phoneNumbers: string[];
+  email: string | null;
+  deviceNameCount: number;
+}): boolean {
+  // Names alone are weak identifiers. Never use a name to override a different
+  // phone/email identity; only use it when the device contact has no strong ID.
+  return input.phoneNumbers.length === 0 && !input.email && input.deviceNameCount === 1;
+}
+
 export function uniqueContactMatch<T extends { id: string }>(ids: T[]): T | null {
   const uniqueIds = new Set(ids.map(item => item.id));
   return uniqueIds.size === 1 ? ids.find(item => item.id === [...uniqueIds][0]) ?? null : null;
