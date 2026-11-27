@@ -16,6 +16,7 @@ import {
   captureDubiousAlertsEnabled, dubiousAlertEvidence, promotedSellerClassification
 } from "./_shared/dubious.ts";
 import { withSupabase } from "npm:@supabase/server@^1";
+import { isTargetMunicipality, territoryClassification } from "../_shared/territory.ts";
 
 const ACCOUNT = "nicholasmagirealestate@gmail.com";
 const PORTALS = ["idealista.it","immobiliare.it","casa.it","subito.it","green-acres.it","green-acres.com","gate-away.com","trovacasa.it","wikicasa.it"];
@@ -715,18 +716,28 @@ export default {
           stato: "da_verificare"
         };
       }));
+      // Gli annunci con un comune noto fuori dalle province AN/MC non entrano
+      // nelle opportunità; località non riconosciute restano da verificare.
+      const inTerritoryRows = regularRows.filter(row => !row.comune || isTargetMunicipality(row.comune));
+      const outsideTerritoryNotifications = regularRows.length - inTerritoryRows.length;
 
       // Ricerche salvate Subito: un annuncio per riga, con il proprio URL e ID. In caso di
       // incertezza o errore resta la notifica, da verificare (e ritentata se possibile).
       const subitoCycle = await subitoRowsForEmails(
         subitoClassified.map(({ email }) => ({ email, digest: subitoDigestById.get(String(email.id))! })),
         supabaseSubitoDeps(ctx.supabaseAdmin, owner, fetchSubitoPage),
-        { owner, classifySeller: (text: string) => classifySellerWithRegistry(text, sellerRegistry) }
+        {
+          owner,
+          classifySeller: (text: string) => classifySellerWithRegistry(text, sellerRegistry),
+          // Default sicuro: nessuna lettura automatica delle pagine risultati Subito
+          // senza autorizzazione scritta e abilitazione esplicita lato server.
+          allowAutomatedPageFetch: Deno.env.get("NMRE_SUBITO_AUTOMATED_RESULTS_AUTHORIZED") === "true"
+        }
       );
       rowFailures.push(...subitoCycle.failures);
       const subitoRows = subitoCycle.rows;
       const subitoOutcomes = subitoCycle.outcomes;
-      const rows: any[] = [...regularRows, ...subitoRows];
+      const rows: any[] = [...inTerritoryRows, ...subitoRows];
 
       const counters = newSaveCounters();
       const promotedCandidateByEmail = new Map<string, string>();
@@ -796,7 +807,7 @@ export default {
       }
       // Riepilogo diagnostico nei log della funzione: solo conteggi e nomi di regola.
       console.log("nmre-gmail-scheduled summary", JSON.stringify({
-        syncMode, propertyFilterRules, keptForReview, reopenedOnPriceDrop, notificationsAfterDiscard, subitoOutcomes,
+        syncMode, propertyFilterRules, keptForReview, reopenedOnPriceDrop, notificationsAfterDiscard, subitoOutcomes, outsideTerritoryNotifications,
         agencyCandidatesKept: keepAgency, excludedAgencies, dubiousAlertsCaptured: captureDubious,
         dubiousAlertsSaved, promotedAlerts
       }));
@@ -812,6 +823,7 @@ export default {
         propertyNotifications: propertyEmails.length,
         privateRecognized: rows.filter(row => row.tipo_venditore === "Privato").length,
         needsUserReview: rows.filter(row => row.tipo_venditore === "Da verificare").length,
+        outsideTerritoryNotifications,
         excludedAgencies,
         discardedExisting,
         inserted,
