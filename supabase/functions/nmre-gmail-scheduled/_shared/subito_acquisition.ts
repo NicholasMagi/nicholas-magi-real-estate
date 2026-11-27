@@ -8,7 +8,8 @@
 //    notifica resta come candidato "da verificare" con gli annunci plausibili;
 //  - "errore": link mancante, pagina bloccata, vuota, errore di rete o HTTP → la notifica
 //    resta come candidato "da verificare" e, salvo il link mancante, viene ritentata.
-import { canonicalListingKey, bedrooms, bathrooms, extractAdditionalPropertyDetails, propertyType } from "./parser.ts";
+import { canonicalListingKey, bedrooms, bathrooms, extractAdditionalPropertyDetails, propertyType, municipality } from "./parser.ts";
+import { isTargetMunicipality } from "../../_shared/territory.ts";
 import { DATA_EXTRACTION_VERSION, SELLER_CLASSIFICATION_VERSION } from "./retention.ts";
 import type { SellerResult } from "./retention.ts";
 import {
@@ -464,7 +465,15 @@ export async function subitoRowsForEmails(
       const key = acquisition.status + ":" + acquisition.reason;
       result.outcomes[key] = (result.outcomes[key] || 0) + 1;
       const rowContext: SubitoRowContext = { owner: ctx.owner, email, digest, classifySeller: ctx.classifySeller, nowIso: now() };
-      for (const item of acquisition.items) result.rows.push(subitoItemRow(item, rowContext, { pageSource: acquisition.pageSource }));
+      const inTerritoryItems = acquisition.items.filter(item => {
+        const town = municipality(String(item.location || ""));
+        return !town || isTargetMunicipality(town);
+      });
+      const outsideTerritoryItems = acquisition.items.length - inTerritoryItems.length;
+      if (outsideTerritoryItems) {
+        result.outcomes["fuori_territorio"] = (result.outcomes["fuori_territorio"] || 0) + outsideTerritoryItems;
+      }
+      for (const item of inTerritoryItems) result.rows.push(subitoItemRow(item, rowContext, { pageSource: acquisition.pageSource }));
       if (acquisition.keepDigestRecord) {
         result.rows.push(subitoDigestRow(rowContext, acquisition, acquisition.items.map(item => ({ id: item.id, url: item.url, title: item.title }))));
       }
