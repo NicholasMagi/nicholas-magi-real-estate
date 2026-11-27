@@ -128,11 +128,11 @@ async function mergeCertainDuplicateContacts(ownerId: string, contacts: CrmConta
       await mergeContactRecords(ownerId, primary, duplicate);
       primary.phone = primary.phone || duplicate.phone;
       primary.email = primary.email || duplicate.email;
-      primary.contact_type = primary.contact_type && primary.contact_type !== "altro" ? primary.contact_type : duplicate.contact_type;
-      primary.status = primary.status && primary.status !== "nuovo" ? primary.status : duplicate.status;
-      primary.source = primary.source || duplicate.source;
-      primary.municipality = primary.municipality || duplicate.municipality;
-      primary.address = primary.address || duplicate.address;
+      primary.contact_type = primary.contact_type && primary.contact_type !== "altro" ? primary.contact_type : (duplicate.contact_type ?? null);
+      primary.status = primary.status && primary.status !== "nuovo" ? primary.status : (duplicate.status ?? null);
+      primary.source = primary.source || duplicate.source || null;
+      primary.municipality = primary.municipality || duplicate.municipality || null;
+      primary.address = primary.address || duplicate.address || null;
       const secondaryDetails = [
         primary.phone && duplicate.phone && normalizePhoneNumber(primary.phone) !== normalizePhoneNumber(duplicate.phone) ? "Telefono aggiuntivo: " + duplicate.phone : "",
         primary.email && duplicate.email && normalizeEmail(primary.email) !== normalizeEmail(duplicate.email) ? "Email aggiuntiva: " + duplicate.email : ""
