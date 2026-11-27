@@ -6,6 +6,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   Text,
   View
 } from "react-native";
@@ -13,8 +14,10 @@ import { useAuth } from "@/features/auth/AuthProvider";
 import {
   addPhoneContactsChangeListener,
   getPhoneContactsPermission,
+  loadCrmContacts,
   requestPhoneContactsPermission,
   syncPhoneContacts,
+  type CrmContactSummary,
   type PhoneContactSyncResult
 } from "@/features/crm/phoneContactsSync";
 import { theme } from "@/shared/theme";
@@ -27,6 +30,8 @@ export function CrmScreen() {
   const [syncing, setSyncing] = useState(false);
   const [result, setResult] = useState<PhoneContactSyncResult | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [contacts, setContacts] = useState<CrmContactSummary[]>([]);
+  const [search, setSearch] = useState("");
   const syncInProgress = useRef(false);
 
   const runSync = useCallback(async () => {
@@ -43,6 +48,7 @@ export function CrmScreen() {
       }
       const next = await syncPhoneContacts(user.id);
       setResult(next);
+      setContacts(await loadCrmContacts(user.id));
       setMessage("Rubrica sincronizzata. I dati già presenti nel CRM sono stati preservati.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Sincronizzazione non riuscita. Riprovi.");
@@ -54,6 +60,13 @@ export function CrmScreen() {
 
   useEffect(() => {
     let active = true;
+    if (user?.id) {
+      void loadCrmContacts(user.id).then(rows => {
+        if (active) setContacts(rows);
+      }).catch(() => {
+        if (active) setMessage("Non è stato possibile caricare la rubrica CRM.");
+      });
+    }
     void getPhoneContactsPermission()
       .then(permissionResult => {
         if (!active) return;
@@ -71,7 +84,7 @@ export function CrmScreen() {
         }
       });
     return () => { active = false; };
-  }, [runSync]);
+  }, [runSync, user?.id]);
 
   useEffect(() => {
     const contactsSubscription = permission === "granted"
@@ -157,6 +170,32 @@ export function CrmScreen() {
         {message ? <Text style={styles.message}>{message}</Text> : null}
       </View>
 
+      <View style={styles.card}>
+        <View style={styles.contactsHeader}>
+          <Text style={styles.cardTitle}>Contatti in NMRE</Text>
+          <Text style={styles.cardSubtitle}>{contacts.length === 100 ? "Primi 100 contatti" : contacts.length + " contatti"}</Text>
+        </View>
+        <TextInput
+          style={styles.searchInput}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Cerca nome, telefono o email"
+          placeholderTextColor={theme.colors.muted}
+          autoCapitalize="none"
+        />
+        {contacts.filter(contact => [contact.full_name, contact.phone, contact.email].some(value => String(value ?? "").toLocaleLowerCase("it-IT").includes(search.trim().toLocaleLowerCase("it-IT")))).length === 0 ? (
+          <Text style={styles.body}>Nessun contatto trovato.</Text>
+        ) : contacts.filter(contact => [contact.full_name, contact.phone, contact.email].some(value => String(value ?? "").toLocaleLowerCase("it-IT").includes(search.trim().toLocaleLowerCase("it-IT")))).slice(0, 50).map(contact => (
+          <View key={contact.id} style={styles.contactRow}>
+            <View style={styles.contactMain}>
+              <Text style={styles.contactName}>{contact.full_name}</Text>
+              <Text style={styles.contactMeta}>{contact.phone || "Telefono non presente"}{contact.email ? " · " + contact.email : ""}</Text>
+            </View>
+            <Text style={styles.contactStatus}>{contact.contact_type || "altro"}</Text>
+          </View>
+        ))}
+      </View>
+
       {result ? (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Ultima sincronizzazione</Text>
@@ -212,6 +251,13 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: theme.colors.white, fontSize: 14, fontWeight: "800" },
   message: { color: theme.colors.ink, fontSize: 13, lineHeight: 19 },
+  contactsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  searchInput: { minHeight: 44, borderWidth: 1, borderColor: theme.colors.line, borderRadius: theme.radius.control, paddingHorizontal: 12, color: theme.colors.ink, fontSize: 14 },
+  contactRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: theme.colors.line },
+  contactMain: { flex: 1, gap: 4 },
+  contactName: { color: theme.colors.ink, fontSize: 14, fontWeight: "700" },
+  contactMeta: { color: theme.colors.muted, fontSize: 12 },
+  contactStatus: { color: theme.colors.muted, fontSize: 10, textTransform: "capitalize" },
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   stat: { width: "47%", minHeight: 65, borderRadius: 12, backgroundColor: theme.colors.paper, padding: 12, gap: 3 },
   statValue: { color: theme.colors.navy, fontSize: 22, fontWeight: "800" },
