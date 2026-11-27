@@ -112,6 +112,7 @@ async function mergeContactRecords(ownerId: string, primary: CrmContact, duplica
 
 async function mergeCertainDuplicateContacts(ownerId: string, contacts: CrmContact[]): Promise<number> {
   let merged = 0;
+  const removedIds = new Set<string>();
   for (const group of findCertainDuplicateGroups(contacts)) {
     const primary = group[0];
     for (const duplicate of group.slice(1)) {
@@ -122,8 +123,12 @@ async function mergeCertainDuplicateContacts(ownerId: string, contacts: CrmConta
       primary.status = primary.status && primary.status !== "nuovo" ? primary.status : duplicate.status;
       primary.source = primary.source || duplicate.source;
       primary.notes = [primary.notes, duplicate.notes].filter(Boolean).join("\n");
+      removedIds.add(duplicate.id);
       merged += 1;
     }
+  }
+  for (let index = contacts.length - 1; index >= 0; index -= 1) {
+    if (removedIds.has(contacts[index].id)) contacts.splice(index, 1);
   }
   return merged;
 }
@@ -239,6 +244,9 @@ async function importDeviceContacts(
         if ((devicePhoneCounts.get(phone) ?? 0) > 1) {
           for (const contact of byPhone.get(phone) ?? []) await flagContactForReview(ownerId, contact, "Numero condiviso da più voci della rubrica del telefono.");
         }
+      }
+      if (nameKey) {
+        for (const contact of byName.get(nameKey) ?? []) await flagContactForReview(ownerId, contact, "Possibile duplicato: nome e recapito condivisi con più voci della rubrica del telefono.");
       }
       ambiguous += 1;
       continue;
