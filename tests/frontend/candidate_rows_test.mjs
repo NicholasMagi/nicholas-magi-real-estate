@@ -34,4 +34,5 @@ for (const id of ["candidateSearch", "candidateTownFilter", "candidateTypeFilter
   assert.ok(render.includes('"' + id + '"'), "filtro applicato: " + id);
 }
 assert.match(html, /\.candidate-row-head\{display:none\}/, "su schermo stretto la riga diventa una scheda breve, senza intestazione");
+assert.match(html, /#candidateList\{padding-bottom:calc\(84px \+ env\(safe-area-inset-bottom,0px\)\)\}/, "su mobile resta spazio sotto l’ultima riga per non coprirla con il launcher fisso");
 console.log("Nuove opportunità: riga compatta unica, azioni, filtri e scarto verificati.");
