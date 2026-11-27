@@ -17,6 +17,7 @@ import {
   loadCrmContacts,
   requestPhoneContactsPermission,
   syncPhoneContacts,
+  updateCrmContact,
   type CrmContactSummary,
   type PhoneContactSyncResult
 } from "@/features/crm/phoneContactsSync";
@@ -33,6 +34,12 @@ export function CrmScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [contacts, setContacts] = useState<CrmContactSummary[]>([]);
   const [search, setSearch] = useState("");
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editRole, setEditRole] = useState("altro");
+  const [savingContact, setSavingContact] = useState(false);
   const syncInProgress = useRef(false);
 
   const runSync = useCallback(async () => {
@@ -109,6 +116,35 @@ export function CrmScreen() {
     };
   }, [permission, runSync]);
 
+  const selectedContact = contacts.find(contact => contact.id === selectedContactId) ?? null;
+
+  const openContact = (contact: CrmContactSummary) => {
+    setSelectedContactId(contact.id);
+    setEditName(contact.full_name ?? "");
+    setEditPhone(contact.phone ?? "");
+    setEditEmail(contact.email ?? "");
+    setEditRole(contact.contact_type ?? "altro");
+  };
+
+  const saveContact = async () => {
+    if (!userId || !selectedContactId) return;
+    setSavingContact(true);
+    try {
+      await updateCrmContact(userId, selectedContactId, {
+        full_name: editName,
+        phone: editPhone,
+        email: editEmail,
+        contact_type: editRole
+      });
+      setContacts(await loadCrmContacts(userId));
+      setMessage("Contatto aggiornato.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Salvataggio non riuscito.");
+    } finally {
+      setSavingContact(false);
+    }
+  };
+
   const enableImport = async () => {
     setMessage(null);
     try {
@@ -182,7 +218,7 @@ export function CrmScreen() {
       <View style={styles.card}>
         <View style={styles.contactsHeader}>
           <Text style={styles.cardTitle}>Contatti in NMRE</Text>
-          <Text style={styles.cardSubtitle}>{contacts.length === 100 ? "Primi 100 contatti" : contacts.length + " contatti"}</Text>
+          <Text style={styles.cardSubtitle}>{contacts.length + " contatti"}</Text>
         </View>
         <TextInput
           style={styles.searchInput}
@@ -194,16 +230,37 @@ export function CrmScreen() {
         />
         {contacts.filter(contact => [contact.full_name, contact.phone, contact.email].some(value => String(value ?? "").toLocaleLowerCase("it-IT").includes(search.trim().toLocaleLowerCase("it-IT")))).length === 0 ? (
           <Text style={styles.body}>Nessun contatto trovato.</Text>
-        ) : contacts.filter(contact => [contact.full_name, contact.phone, contact.email].some(value => String(value ?? "").toLocaleLowerCase("it-IT").includes(search.trim().toLocaleLowerCase("it-IT")))).slice(0, 50).map(contact => (
-          <View key={contact.id} style={styles.contactRow}>
+        ) : contacts.filter(contact => [contact.full_name, contact.phone, contact.email].some(value => String(value ?? "").toLocaleLowerCase("it-IT").includes(search.trim().toLocaleLowerCase("it-IT")))).map(contact => (
+          <Pressable key={contact.id} style={styles.contactRow} onPress={() => openContact(contact)}>
             <View style={styles.contactMain}>
               <Text style={styles.contactName}>{contact.full_name}</Text>
               <Text style={styles.contactMeta}>{contact.phone || "Telefono non presente"}{contact.email ? " · " + contact.email : ""}</Text>
             </View>
-            <Text style={styles.contactStatus}>{contact.contact_type || "altro"}</Text>
-          </View>
+            <Text style={styles.contactStatus}>{contact.contact_type || "altro"} · Modifica</Text>
+          </Pressable>
         ))}
       </View>
+
+      {selectedContact ? (
+        <View style={styles.card}>
+          <View style={styles.contactsHeader}>
+            <Text style={styles.cardTitle}>Scheda contatto</Text>
+            <Pressable onPress={() => setSelectedContactId(null)}><Text style={styles.contactStatus}>Chiudi</Text></Pressable>
+          </View>
+          <Text style={styles.fieldLabel}>Nome e cognome</Text>
+          <TextInput style={styles.searchInput} value={editName} onChangeText={setEditName} placeholder="Nome e cognome" />
+          <Text style={styles.fieldLabel}>Telefono principale</Text>
+          <TextInput style={styles.searchInput} value={editPhone} onChangeText={setEditPhone} placeholder="Numero telefonico" keyboardType="phone-pad" />
+          <Text style={styles.fieldLabel}>Email</Text>
+          <TextInput style={styles.searchInput} value={editEmail} onChangeText={setEditEmail} placeholder="Email" keyboardType="email-address" autoCapitalize="none" />
+          <Text style={styles.fieldLabel}>Ruolo del contatto</Text>
+          <TextInput style={styles.searchInput} value={editRole} onChangeText={setEditRole} placeholder="es. venditore, acquirente, altro" />
+          <Text style={styles.footnote}>Provenienza: {selectedContact.source === "rubrica_telefono" ? "Rubrica del telefono" : "Inserimento manuale o altra origine"}.</Text>
+          <Pressable style={[styles.button, savingContact && styles.buttonDisabled]} onPress={() => void saveContact()} disabled={savingContact}>
+            <Text style={styles.buttonText}>{savingContact ? "Salvataggio…" : "Salva modifiche"}</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {result ? (
         <View style={styles.card}>
@@ -267,6 +324,7 @@ const styles = StyleSheet.create({
   contactName: { color: theme.colors.ink, fontSize: 14, fontWeight: "700" },
   contactMeta: { color: theme.colors.muted, fontSize: 12 },
   contactStatus: { color: theme.colors.muted, fontSize: 10, textTransform: "capitalize" },
+  fieldLabel: { color: theme.colors.ink, fontSize: 12, fontWeight: "700" },
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   stat: { width: "47%", minHeight: 65, borderRadius: 12, backgroundColor: theme.colors.paper, padding: 12, gap: 3 },
   statValue: { color: theme.colors.navy, fontSize: 22, fontWeight: "800" },
