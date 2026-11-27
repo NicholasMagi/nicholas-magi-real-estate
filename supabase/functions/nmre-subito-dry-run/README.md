@@ -152,6 +152,23 @@ report;
 | `token_non_leggibili_in_sola_lettura` | La funzione dei token non è (ancora) STABLE per PostgREST | Ricontrollare il passo 3; attendere un minuto per il ricaricamento dello schema |
 | `confronto_non_riuscito` | Una lettura di Opportunità o Archivio non è riuscita | Nessuna proposta valida: riprovare |
 
+
+## Esito della prova reale · 27/11/2026
+
+Il titolare ha eseguito la modalità `intera_ricerca` sulla ricerca «Appartamenti a Ancona e provincia».
+La funzione ha risposto HTTP 200 come endpoint, ma il rapporto ha restituito
+`ricerca_non_disponibile`: la prima pagina Subito ha risposto **HTTP 403** (verifica
+anti-robot). Risultato: 0 pagine completate, 0 annunci letti, 0 proposte.
+
+Il rapporto ha confermato `scritture_database = 0`, nessuna scheda creata o modificata,
+nessun registro scritto, nessun cursore Gmail letto o modificato e nessuna notifica.
+Non sono stati effettuati tentativi alternativi né aggiramenti della protezione.
+
+**Conclusione operativa:** l'acquisizione server-side resta non disponibile per questa
+ricerca. Usare l'importazione assistita dal browser già predisposta in NMRE, aprendo
+manualmente le pagine e leggendo solo quella corrente; non riattivare tentativi server-side
+finché non è disponibile un canale autorizzato di accesso ai risultati Subito.
+
 ### Passo 8 · Dopo la prova
 Facoltativo: rimozione della funzione di prova.
 
