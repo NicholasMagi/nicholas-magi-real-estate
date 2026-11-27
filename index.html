@@ -2281,15 +2281,25 @@ function renderAcquisitionPredictor(all=listingCache,candidates=candidateCache,n
    next=status==="interessato"?"Fissare un follow-up con il proprietario interessato":"Pianificare il primo contatto o il richiamo";
   }
   if(status==="appuntamento")next="Confermare l'appuntamento e preparare l'analisi dell'immobile";
-  const qualityFields=[
+  const pq=item.prequalifica&&typeof item.prequalifica==="object"?item.prequalifica:{};
+  const qualificationFields=[
    !!String(item.contatto||"").trim(),
    !!String(item.vendita_motivazione||"").trim(),
    !!String(item.tempistiche_vendita||"").trim(),
    !!(item.altre_agenzie&&item.altre_agenzie!=="da_verificare"),
    !!(item.prezzo_trattabile&&item.prezzo_trattabile!=="da_verificare"),
-   !!String(item.prossimo_contatto_il||"").trim()
+   !!String(item.prossimo_contatto_il||"").trim(),
+   !!String(pq.prezzo_minimo||"").trim(),
+   !!(pq.situazione_mutuo&&pq.situazione_mutuo!=="da_verificare"),
+   !!String(pq.comproprietari||"").trim(),
+   !!(pq.conformita_urbanistica&&pq.conformita_urbanistica!=="da_verificare"),
+   !!(pq.conformita_catastale&&pq.conformita_catastale!=="da_verificare"),
+   !!String(pq.documenti_disponibili||"").trim(),
+   !!String(pq.disponibilita_visite||"").trim(),
+   !!String(pq.urgenza_vendita||"").trim()
   ];
-  const quality={done:qualityFields.filter(Boolean).length,total:qualityFields.length};
+  if(pq.situazione_mutuo==="presente")qualificationFields.push(!!String(pq.importo_mutuo_residuo||"").trim());
+  const quality={done:qualificationFields.filter(Boolean).length,total:qualificationFields.length};
   const gaps=[];
   if(!String(item.contatto||"").trim())gaps.push("recapito");
   if(!String(item.vendita_motivazione||"").trim())gaps.push("motivazione");
@@ -2297,6 +2307,15 @@ function renderAcquisitionPredictor(all=listingCache,candidates=candidateCache,n
   if(!item.altre_agenzie||item.altre_agenzie==="da_verificare")gaps.push("situazione agenzie");
   if(!item.prezzo_trattabile||item.prezzo_trattabile==="da_verificare")gaps.push("margine sul prezzo");
   if(!item.prossimo_contatto_il)gaps.push("data prossimo contatto");
+  if(!pq.prezzo_minimo)gaps.push("prezzo minimo");
+  if(!pq.situazione_mutuo||pq.situazione_mutuo==="da_verificare")gaps.push("mutuo/ipoteche");
+  if(pq.situazione_mutuo==="presente"&&!pq.importo_mutuo_residuo)gaps.push("importo residuo");
+  if(!pq.comproprietari)gaps.push("proprietà");
+  if(!pq.conformita_urbanistica||pq.conformita_urbanistica==="da_verificare")gaps.push("conformità urbanistica");
+  if(!pq.conformita_catastale||pq.conformita_catastale==="da_verificare")gaps.push("conformità catastale");
+  if(!pq.documenti_disponibili)gaps.push("documenti");
+  if(!pq.disponibilita_visite)gaps.push("disponibilità visite");
+  if(!pq.urgenza_vendita)gaps.push("urgenza/necessità");
   if(gaps.length&&score<80)next="Completare la qualificazione: "+gaps.slice(0,3).join(", ");
   rows.push({item,kind,score:Math.min(100,score),signals:signals.slice(0,4),next,tag:"PROPRIETARIO IN CRM",level:score>=65?"high":score>=40?"medium":"low",urgency,quality,gaps});
  };
