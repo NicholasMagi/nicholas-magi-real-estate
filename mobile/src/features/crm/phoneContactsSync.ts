@@ -123,6 +123,7 @@ async function mergeCertainDuplicateContacts(ownerId: string, contacts: CrmConta
   const removedIds = new Set<string>();
   for (const group of findCertainDuplicateGroups(contacts)) {
     const primary = group[0];
+    if (!primary) continue;
     for (const duplicate of group.slice(1)) {
       await mergeContactRecords(ownerId, primary, duplicate);
       primary.phone = primary.phone || duplicate.phone;
@@ -142,7 +143,8 @@ async function mergeCertainDuplicateContacts(ownerId: string, contacts: CrmConta
     }
   }
   for (let index = contacts.length - 1; index >= 0; index -= 1) {
-    if (removedIds.has(contacts[index].id)) contacts.splice(index, 1);
+    const contact = contacts[index];
+    if (contact && removedIds.has(contact.id)) contacts.splice(index, 1);
   }
   return merged;
 }
