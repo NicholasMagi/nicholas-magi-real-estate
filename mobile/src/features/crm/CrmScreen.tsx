@@ -35,6 +35,12 @@ export function CrmScreen() {
     setSyncing(true);
     setMessage(null);
     try {
+      const permissionResult = await getPhoneContactsPermission();
+      if (!permissionResult.granted) {
+        setPermission(permissionResult.canAskAgain ? "not_granted" : "blocked");
+        setMessage("Il permesso alla rubrica non è più attivo. Lo riabiliti per continuare la sincronizzazione.");
+        return;
+      }
       const next = await syncPhoneContacts(user.id);
       setResult(next);
       setMessage("Rubrica sincronizzata. I dati già presenti nel CRM sono stati preservati.");
@@ -68,13 +74,22 @@ export function CrmScreen() {
   }, [runSync]);
 
   useEffect(() => {
-    if (permission !== "granted") return;
-    const contactsSubscription = addPhoneContactsChangeListener(() => { void runSync(); });
+    const contactsSubscription = permission === "granted"
+      ? addPhoneContactsChangeListener(() => { void runSync(); })
+      : null;
     const appStateSubscription = AppState.addEventListener("change", state => {
-      if (state === "active") void runSync();
+      if (state !== "active") return;
+      void getPhoneContactsPermission().then(permissionResult => {
+        if (permissionResult.granted) {
+          setPermission("granted");
+          void runSync();
+        } else {
+          setPermission(permissionResult.canAskAgain ? "not_granted" : "blocked");
+        }
+      });
     });
     return () => {
-      contactsSubscription.remove();
+      contactsSubscription?.remove();
       appStateSubscription.remove();
     };
   }, [permission, runSync]);
@@ -162,7 +177,7 @@ export function CrmScreen() {
       <View style={styles.notice}>
         <Text style={styles.noticeTitle}>Protezione dei dati</Text>
         <Text style={styles.noticeText}>
-          La rubrica viene letta solo dopo il consenso del dispositivo. NMRE salva nel CRM i dati necessari al lavoro; non conserva una copia locale permanente della rubrica e non sovrascrive i campi CRM già compilati.
+          La rubrica viene letta solo dopo il consenso del dispositivo. Tutti i numeri disponibili sono usati per il riconoscimento; il CRM attuale conserva un solo numero principale per contatto. NMRE non conserva una copia locale permanente della rubrica e non sovrascrive i campi CRM già compilati.
         </Text>
       </View>
     </ScrollView>
