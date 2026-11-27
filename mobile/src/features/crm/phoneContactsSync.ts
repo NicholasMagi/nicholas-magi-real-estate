@@ -396,3 +396,145 @@ export async function updateCrmContact(
     .eq("id", contactId);
   if (error) throw new Error("Non è stato possibile salvare le modifiche al contatto.");
 }
+
+
+export type CrmLinkedProperty = {
+  id: string;
+  title: string;
+  municipality: string;
+  status: string;
+  asking_price: number | null;
+  relation_role: string;
+};
+
+export type CrmInteraction = {
+  id: string;
+  interaction_type: string;
+  outcome: string | null;
+  outcome_code: string | null;
+  notes: string | null;
+  next_contact_at: string | null;
+  created_at: string;
+  property_id: string | null;
+};
+
+export async function loadContactRelations(
+  ownerId: string,
+  contactId: string
+): Promise<{ properties: CrmLinkedProperty[]; interactions: CrmInteraction[] }> {
+  if (!ownerId || !contactId) throw new Error("Contatto non valido.");
+  if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
+
+  const [linksResult, interactionsResult] = await Promise.all([
+    supabase
+      .from("nmre_property_contacts")
+      .select("property_id,relation_role")
+      .eq("owner_id", ownerId)
+      .eq("contact_id", contactId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("nmre_contact_interactions")
+      .select("id,interaction_type,outcome,outcome_code,notes,next_contact_at,created_at,property_id")
+      .eq("owner_id", ownerId)
+      .eq("contact_id", contactId)
+      .order("created_at", { ascending: false })
+      .limit(50)
+  ]);
+  if (linksResult.error) throw new Error("Non è stato possibile caricare gli immobili associati.");
+  if (interactionsResult.error) throw new Error("Non è stato possibile caricare lo storico delle interazioni.");
+
+  const links = (linksResult.data ?? []) as Array<{ property_id: string; relation_role: string }>;
+  const propertyIds = links.map(link => link.property_id);
+  let properties: CrmLinkedProperty[] = [];
+  if (propertyIds.length) {
+    const { data, error } = await supabase
+      .from("nmre_properties")
+      .select("id,title,municipality,status,asking_price")
+      .eq("owner_id", ownerId)
+      .in("id", propertyIds);
+    if (error) throw new Error("Non è stato possibile leggere i dati degli immobili associati.");
+    const roleById = new Map(links.map(link => [link.property_id, link.relation_role]));
+    properties = (data ?? []).map(property => ({
+      ...property,
+      relation_role: roleById.get(property.id) ?? "altro"
+    })) as CrmLinkedProperty[];
+  }
+
+  return {
+    properties,
+    interactions: (interactionsResult.data ?? []) as CrmInteraction[]
+  };
+}
+
+export async function searchAvailableProperties(ownerId: string): Promise<Array<{
+  id: string;
+  title: string;
+  municipality: string;
+  status: string;
+}>> {
+  if (!ownerId) throw new Error("Sessione utente non disponibile.");
+  if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
+  const { data, error } = await supabase
+    .from("nmre_properties")
+    .select("id,title,municipality,status")
+    .eq("owner_id", ownerId)
+    .order("updated_at", { ascending: false })
+    .limit(100);
+  if (error) throw new Error("Non è stato possibile cercare gli immobili.");
+  return (data ?? []) as Array<{ id: string; title: string; municipality: string; status: string }>;
+}
+
+export async function linkPropertyToContact(
+  ownerId: string,
+  contactId: string,
+  propertyId: string,
+  relationRole = "proprietario"
+): Promise<void> {
+  if (!ownerId || !contactId || !propertyId) throw new Error("Associazione non valida.");
+  if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
+  const { error } = await supabase
+    .from("nmre_property_contacts")
+    .upsert({
+      owner_id: ownerId,
+      contact_id: contactId,
+      property_id: propertyId,
+      relation_role: relationRole
+    }, { onConflict: "owner_id,property_id,contact_id", ignoreDuplicates: true });
+  if (error) throw new Error("Non è stato possibile associare l'immobile al contatto.");
+}
+
+export async function unlinkPropertyFromContact(
+  ownerId: string,
+  contactId: string,
+  propertyId: string
+): Promise<void> {
+  if (!ownerId || !contactId || !propertyId) throw new Error("Associazione non valida.");
+  if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
+  const { error } = await supabase
+    .from("nmre_property_contacts")
+    .delete()
+    .eq("owner_id", ownerId)
+    .eq("contact_id", contactId)
+    .eq("property_id", propertyId);
+  if (error) throw new Error("Non è stato possibile rimuovere l'associazione.");
+}
+
+export async function addContactInteraction(
+  ownerId: string,
+  contactId: string,
+  input: { interaction_type: string; notes: string; outcome?: string | null; next_contact_at?: string | null }
+): Promise<void> {
+  if (!ownerId || !contactId) throw new Error("Contatto non valido.");
+  if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
+  const { error } = await supabase
+    .from("nmre_contact_interactions")
+    .insert({
+      owner_id: ownerId,
+      contact_id: contactId,
+      interaction_type: input.interaction_type,
+      notes: input.notes.trim() || null,
+      outcome: input.outcome?.trim() || null,
+      next_contact_at: input.next_contact_at || null
+    });
+  if (error) throw new Error("Non è stato possibile registrare l'interazione.");
+}
