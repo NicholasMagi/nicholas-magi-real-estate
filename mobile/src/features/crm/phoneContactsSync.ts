@@ -65,7 +65,7 @@ async function readDeviceContacts(): Promise<DeviceContact[]> {
     output.push(...page.map(item => ({
       fullName: (item.fullName ?? [item.givenName, item.familyName].filter(Boolean).join(" ")).trim() || null,
       phoneNumbers: unique((item.phones ?? []).map(phone => phone.number ?? "")),
-      emails: unique((item.emails ?? []).map(email => email.email ?? ""))
+      emails: unique((item.emails ?? []).map(email => email.address ?? ""))
     })));
     if (page.length < CONTACT_PAGE_SIZE) break;
   }
