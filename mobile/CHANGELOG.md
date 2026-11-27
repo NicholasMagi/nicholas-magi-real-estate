@@ -5,7 +5,8 @@
 - Gli annunci archiviati senza referente vengono associati solo se i numeri normalizzati individuano un unico contatto. Gli abbinamenti ambigui e i conflitti non vengono scritti.
 - Tutte le modifiche sono confinate a `mobile/`; nessuna migration, Edge Function, tabella o deploy è stato eseguito.
 - Limite dello schema CRM attuale: `nmre_contacts.phone` conserva un solo numero principale. Gli altri numeri letti dal dispositivo partecipano al matching durante la sincronizzazione, ma non vengono salvati come recapiti multipli permanenti. Per questo serve una futura migration additiva verificata su staging.
-- Test automatici, typecheck, lint, Expo Doctor e build native restano da eseguire in un workspace con dipendenze installate e su dispositivi fisici.
+- La CI dedicata esegue npm ci, suite test, typecheck, lint ed Expo Doctor; inizialmente ha rilevato un conflitto React/React DOM e un campo email Expo errato, entrambi corretti nei commit successivi.
+- Build native e prove su dispositivi fisici restano necessarie prima del rilascio.
 
 ## 2026-11-25 — Archiviazione automatica solo con prova forte
 - Ripristinata l'archiviazione automatica Gmail, ma solo dietro al gate della funzione SQL nmre_auto_archive_private_candidate.
