@@ -23,7 +23,7 @@ function collectStrings(value: unknown, depth = 0): string[] {
 
 export function extractPhoneNumbers(value: unknown): string[] {
   const text = collectStrings(value).join(" ");
-  const matches = text.match(/(?:\+|00)?\d[\d\\s()./-]{6,}\d/g) ?? [];
+  const matches = text.match(/(?:\+|00)?\d[\d\s()./-]{6,}\d/g) ?? [];
   return unique(matches
     .map(item => normalizePhoneNumber(item))
     .filter((item): item is string => item !== null));
