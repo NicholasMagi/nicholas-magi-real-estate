@@ -88,10 +88,10 @@ export function findCertainDuplicateGroups<T extends DuplicateContactIdentity>(c
   contacts.forEach(contact => parent.set(contact.id, contact.id));
   for (let i = 0; i < contacts.length; i += 1) {
     const a = contacts[i];
-    if (!a.full_name?.trim()) continue;
+    if (!a || !a.full_name?.trim()) continue;
     for (let j = i + 1; j < contacts.length; j += 1) {
       const b = contacts[j];
-      if (!b.full_name?.trim() || normalizeContactName(a.full_name) !== normalizeContactName(b.full_name)) continue;
+      if (!b || !b.full_name?.trim() || normalizeContactName(a.full_name) !== normalizeContactName(b.full_name)) continue;
       const phoneA = a.phone ? normalizePhoneNumber(a.phone) : null;
       const phoneB = b.phone ? normalizePhoneNumber(b.phone) : null;
       const emailA = a.email?.trim() ? normalizeContactEmail(a.email) : null;
