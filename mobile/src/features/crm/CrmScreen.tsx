@@ -397,7 +397,7 @@ export function CrmScreen() {
           <Text style={styles.cardTitle}>Storico interazioni</Text>
           <Text style={styles.fieldLabel}>Tipo di interazione</Text>
           <View style={styles.choiceRow}>
-            {[
+            {([
               ["telefonata", "Chiamata"],
               ["whatsapp", "WhatsApp"],
               ["appuntamento", "Appuntamento"],
