@@ -46,6 +46,10 @@ assert.match(guardedUpdate, /conflict:!error&&updated===0/, "se il controllo ott
 const confirm = html.slice(html.indexOf("async function confirmCandidate"), html.indexOf("async function discardCandidate"));
 assert.match(confirm, /if\(seller!==\"Privato\"\)/, "l'archiviazione è vietata senza verifica manuale del privato");
 assert.match(confirm, /supabase\.rpc\(\"nmre_confirm_annuncio_candidato\"/, "l'archiviazione passa dalla funzione RPC dedicata");
+assert.match(render, /\+\(isPrivate\?'<button class="gold" type="button" data-confirm=/, "il pulsante Archivia è mostrato soltanto per venditori già verificati come privati");
+const confirmHandler = html.slice(html.indexOf('box.querySelectorAll("[data-confirm]")'), html.indexOf('box.querySelectorAll("[data-open-candidate-details]")'));
+assert.match(confirmHandler, /confirmCandidate\(btn\.dataset\.confirm,btn\)/, "il pulsante richiama la conferma senza alterare la classificazione");
+assert.doesNotMatch(confirmHandler, /seller\.value\s*=\s*"Privato"/, "il clic su Archivia non trasforma automaticamente Da verificare in Privato");
 const sellerSave = html.slice(html.indexOf("async function saveCandidateSeller"), html.indexOf("async function confirmCandidate"));
 assert.match(sellerSave, /if\(error\|\|sellerUpdated!==1\)/, "il registro venditori si aggiorna solo dopo il salvataggio accettato");
 assert.ok(sellerSave.indexOf("if(error||sellerUpdated!==1)") < sellerSave.indexOf(".upsert(registryRows"), "nessun identificativo viene registrato se la scheda è in conflitto");
