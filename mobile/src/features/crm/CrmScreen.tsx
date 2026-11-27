@@ -23,6 +23,8 @@ import {
   requestPhoneContactsPermission,
   syncPhoneContacts,
   updateCrmContact,
+  clearContactReviewFlag,
+  getContactReviewNote,
   type CrmContactSummary,
   type CrmLinkedProperty,
   type CrmInteraction,
@@ -71,7 +73,7 @@ export function CrmScreen() {
       const next = await syncPhoneContacts(userId);
       setResult(next);
       setContacts(await loadCrmContacts(userId));
-      setMessage("Rubrica sincronizzata. I dati già presenti nel CRM sono stati preservati.");
+      setMessage(next.mergedDuplicates > 0 ? String(next.mergedDuplicates) + " duplicati certi uniti automaticamente. La rubrica è aggiornata." : "Rubrica sincronizzata. I dati già presenti nel CRM sono stati preservati.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Sincronizzazione non riuscita. Riprovi.");
     } finally {
@@ -305,7 +307,7 @@ export function CrmScreen() {
         ) : contacts.filter(contact => [contact.full_name, contact.phone, contact.email].some(value => String(value ?? "").toLocaleLowerCase("it-IT").includes(search.trim().toLocaleLowerCase("it-IT")))).map(contact => (
           <Pressable key={contact.id} style={styles.contactRow} onPress={() => openContact(contact)}>
             <View style={styles.contactMain}>
-              <Text style={styles.contactName}>{contact.full_name}</Text>
+              <Text style={styles.contactName}>{getContactReviewNote(contact.notes) ? "! " : ""}{contact.full_name}</Text>
               <Text style={styles.contactMeta}>{contact.phone || "Telefono non presente"}{contact.email ? " · " + contact.email : ""}</Text>
             </View>
             <Text style={styles.contactStatus}>{contact.contact_type || "altro"} · Modifica</Text>
@@ -328,6 +330,21 @@ export function CrmScreen() {
           <Text style={styles.fieldLabel}>Ruolo del contatto</Text>
           <TextInput style={styles.searchInput} value={editRole} onChangeText={setEditRole} placeholder="es. venditore, acquirente, altro" />
           <Text style={styles.footnote}>Provenienza: {selectedContact.source === "rubrica_telefono" ? "Rubrica del telefono" : "Inserimento manuale o altra origine"}.</Text>
+          {getContactReviewNote(selectedContact.notes) ? (
+            <View style={styles.reviewWarning}>
+              <Text style={styles.reviewWarningTitle}>! Da verificare</Text>
+              <Text style={styles.reviewWarningText}>{getContactReviewNote(selectedContact.notes)}</Text>
+              <Pressable onPress={() => {
+                if (!userId || !selectedContactId) return;
+                void clearContactReviewFlag(userId, selectedContactId).then(async () => {
+                  setContacts(await loadCrmContacts(userId));
+                  setMessage("Contatto contrassegnato come verificato.");
+                }).catch(error => setMessage(error instanceof Error ? error.message : "Non è stato possibile aggiornare la segnalazione."));
+              }}>
+                <Text style={styles.reviewResolve}>Segna come verificato</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <Pressable style={[styles.button, savingContact && styles.buttonDisabled]} onPress={() => void saveContact()} disabled={savingContact}>
             <Text style={styles.buttonText}>{savingContact ? "Salvataggio…" : "Salva modifiche"}</Text>
           </Pressable>
@@ -388,6 +405,7 @@ export function CrmScreen() {
             <Stat label="Dati completati" value={result.enriched} />
             <Stat label="Già presenti" value={result.alreadyPresent} />
             <Stat label="Annunci associati" value={result.listingsLinked} />
+            <Stat label="Duplicati uniti" value={result.mergedDuplicates} />
             <Stat label="Da verificare" value={result.ambiguous} />
           </View>
           <Text style={styles.footnote}>
@@ -453,6 +471,10 @@ const styles = StyleSheet.create({
   statValue: { color: theme.colors.navy, fontSize: 22, fontWeight: "800" },
   statLabel: { color: theme.colors.muted, fontSize: 11 },
   footnote: { color: theme.colors.muted, fontSize: 12, lineHeight: 18 },
+  reviewWarning: { borderWidth: 1, borderColor: theme.colors.warning, borderRadius: 10, padding: 12, gap: 6, backgroundColor: theme.colors.paper },
+  reviewWarningTitle: { color: theme.colors.warning, fontSize: 13, fontWeight: "800" },
+  reviewWarningText: { color: theme.colors.ink, fontSize: 12, lineHeight: 18 },
+  reviewResolve: { color: theme.colors.navy, fontSize: 12, fontWeight: "800" },
   notice: { borderRadius: theme.radius.card, backgroundColor: theme.colors.softGold, padding: 16, gap: 6 },
   noticeTitle: { color: theme.colors.navy, fontSize: 13, fontWeight: "800" },
   noticeText: { color: theme.colors.ink, fontSize: 12, lineHeight: 18 }
