@@ -229,3 +229,14 @@ Deno.test("scheda della notifica Gmail: pulsante «Importa da Subito» collegato
   eq(/if\(nmreSubitoExpectedSearch\)\{\s*const match=nmreSubitoSearchMatches\(nmreSubitoExpectedSearch\.url,parsed\.meta\);\s*if\(match!==true\)\{\s*throw new Error/.test(html), true,
     "con la notifica collegata, dati di un'altra ricerca o non verificabili: nessuna importazione");
 });
+
+Deno.test("mobile: guida installazione, copia preferito, incolla da appunti e pagina successiva sono disponibili", () => {
+  eq(html.includes('id="subitoBookmarkletMobileCopy"'), true, "copia codice per il preferito mobile");
+  eq(html.includes("Installazione su iPhone e Android"), true, "guida installazione mobile");
+  eq(html.includes("navigator.clipboard.readText()"), true, "incolla da appunti con gesto esplicito");
+  eq(html.includes("await nmreAnalyzeSubitoBrowserPayload()"), true, "l'incolla apre solo l'analisi e l'anteprima");
+  const source = grab("nmreSubitoBookmarkletMain");
+  eq(source.includes("env(safe-area-inset-bottom)") && source.includes("100dvh"), true, "pannello mobile rispetta safe area e altezza viewport");
+  eq(source.includes("Pagina successiva") && source.includes('nextUrl.searchParams.set("o"'), true, "link manuale alla pagina successiva");
+  eq(source.includes("location.assign") || source.includes("location.replace") || source.includes(".click()"), false, "nessuna navigazione o clic automatico");
+});
