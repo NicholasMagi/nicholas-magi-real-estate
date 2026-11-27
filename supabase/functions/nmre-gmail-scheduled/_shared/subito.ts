@@ -532,5 +532,6 @@ export const SUBITO_REASON_TEXT: Record<string, string> = {
   errore_rete: "Pagina dei risultati non raggiungibile (errore di rete o tempo scaduto)",
   errore_http: "La pagina dei risultati ha risposto con un errore",
   rinviato: "Recupero rinviato al ciclo successivo (troppe pagine da leggere in questo ciclo)",
+  autorizzazione_richiesta: "Recupero automatico sospeso: serve autorizzazione scritta del portale per leggere automaticamente le pagine dei risultati",
   confronto_archivio_non_riuscito: "Confronto con l'Archivio non riuscito: nessun annuncio classificato come nuovo"
 };
