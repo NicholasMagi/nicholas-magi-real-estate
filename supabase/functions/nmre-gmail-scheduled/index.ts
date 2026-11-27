@@ -672,6 +672,7 @@ export default {
           bagni: bathrooms(text),
           dati_estratti: {
             ...extractAdditionalPropertyDetails(text),
+            territorio: territoryClassification(municipality(text)),
             riduzione_prezzo: explicitPriceReduction,
             campi_immobile: {
               titolo: title,
