@@ -157,6 +157,10 @@ function normalizeName(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("it-IT");
 }
 
+function extractContactEmails(notes: string | null | undefined): string[] {
+  return unique((notes?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) ?? []).map(normalizeEmail));
+}
+
 function unique(values: string[]): string[] {
   return [...new Set(values.map(value => value.trim()).filter(Boolean))];
 }
@@ -219,12 +223,20 @@ async function importDeviceContacts(
   }
   const mergedDuplicates = await mergeCertainDuplicateContacts(ownerId, contacts);
   const byPhone = new Map<string, CrmContact[]>();
-  const byEmail = indexBy(contacts, item => item.email ? normalizeEmail(item.email) : null);
+  const byEmail = new Map<string, CrmContact[]>();
   const byName = indexBy(contacts, item => item.full_name ? normalizeName(item.full_name) : null);
 
   for (const contact of contacts) {
-    const phone = contact.phone ? normalizePhoneNumber(contact.phone) : null;
-    if (phone) byPhone.set(phone, [...(byPhone.get(phone) ?? []), contact]);
+    const contactPhones = unique([contact.phone ?? "", ...extractPhoneNumbers(contact.notes)]);
+    for (const value of contactPhones) {
+      const phone = normalizePhoneNumber(value);
+      if (phone) byPhone.set(phone, [...(byPhone.get(phone) ?? []), contact]);
+    }
+    const contactEmails = unique([contact.email ?? "", ...extractContactEmails(contact.notes)]);
+    for (const value of contactEmails) {
+      const email = normalizeEmail(value);
+      if (email) byEmail.set(email, [...(byEmail.get(email) ?? []), contact]);
+    }
   }
 
   const deviceNameCounts = new Map<string, number>();
