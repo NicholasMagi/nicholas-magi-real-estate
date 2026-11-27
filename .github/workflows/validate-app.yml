@@ -63,6 +63,8 @@ jobs:
         run: node tests/frontend/contacts_import_test.mjs
       - name: Test Opportunità and Archivio search (fields, linked contact, phone numbers)
         run: node tests/frontend/search_test.mjs
+      - name: Test single canonical service worker version
+        run: node tests/frontend/sw_version_test.mjs
 
       - name: Check migration layout (phase 2 not applicable, production versions)
         run: |

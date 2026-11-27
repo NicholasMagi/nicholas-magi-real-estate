@@ -1,4 +1,4 @@
-// NMRE service worker build 20261126-subito-item-candidates-1
+// NMRE service worker build 20261127-integration-cycle-1
 self.addEventListener("install",event=>{self.skipWaiting();});
 self.addEventListener("activate",event=>{event.waitUntil(self.clients.claim());});
 self.addEventListener("push",event=>{
