@@ -31,6 +31,11 @@ Access request: https://developers.idealista.com/access-request
 
 - Green-Acres documents an XML feed for sending an agency's own listings to Green-Acres. It is an outbound publishing integration, not a search API for privately advertised properties.
 - Subito documents authorized real-estate CRM integrations for publishing/managing professional adverts. Its terms also restrict contacting advertisers to propose intermediation services. NMRE does not scrape Subito or automate such outreach.
+
+### Subito — fallback manuale per le ricerche salvate
+- Il worker Gmail riconosce le email riepilogative delle ricerche salvate e tenta di recuperare gli annunci dalla pagina pubblica dei risultati. Se Subito presenta una verifica anti-robot, NMRE non la aggira: conserva la notifica nella coda e mostra il link alla ricerca.
+- Dalla coda Opportunità l'utente può aprire il singolo annuncio in Subito, copiare il link diretto e importarlo manualmente in NMRE. L'app prova a leggere i soli dati pubblici tramite `nmre-candidate-enrich`; se il portale non li rende disponibili, titolo e comune devono essere inseriti dall'utente.
+- L'importazione crea un candidato `Da verificare`, non un immobile nell'Archivio; deduplica per `listing_key` e controlla anche l'Archivio. Non importa recapiti, non certifica il venditore come privato e non invia messaggi.
 - Casa.it, Gate-away, Trovacasa and Wikicasa remain supported as possible Gmail alert sources when their account alerts arrive in the connected mailbox. No direct inbound public API is assumed without provider documentation or a signed data agreement.
 
 ## General collection policy
