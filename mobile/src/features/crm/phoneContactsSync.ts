@@ -466,12 +466,12 @@ export async function loadContactRelations(
   };
 }
 
-export async function searchAvailableProperties(ownerId: string): Promise<Array<{
+export async function searchAvailableProperties(ownerId: string): Promise<{
   id: string;
   title: string;
   municipality: string;
   status: string;
-}>> {
+}[]> {
   if (!ownerId) throw new Error("Sessione utente non disponibile.");
   if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
   const { data, error } = await supabase
@@ -481,7 +481,7 @@ export async function searchAvailableProperties(ownerId: string): Promise<Array<
     .order("updated_at", { ascending: false })
     .limit(100);
   if (error) throw new Error("Non è stato possibile cercare gli immobili.");
-  return (data ?? []) as Array<{ id: string; title: string; municipality: string; status: string }>;
+  return (data ?? []) as { id: string; title: string; municipality: string; status: string }[];
 }
 
 export async function linkPropertyToContact(
