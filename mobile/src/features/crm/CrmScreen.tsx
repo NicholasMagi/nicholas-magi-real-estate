@@ -49,7 +49,7 @@ export function CrmScreen() {
   const [savingContact, setSavingContact] = useState(false);
   const [linkedProperties, setLinkedProperties] = useState<CrmLinkedProperty[]>([]);
   const [interactions, setInteractions] = useState<CrmInteraction[]>([]);
-  const [availableProperties, setAvailableProperties] = useState<Array<{ id: string; title: string; municipality: string; status: string }>>([]);
+  const [availableProperties, setAvailableProperties] = useState<{ id: string; title: string; municipality: string; status: string }[]>([]);
   const [interactionNote, setInteractionNote] = useState("");
   const [loadingRelations, setLoadingRelations] = useState(false);
   const [savingInteraction, setSavingInteraction] = useState(false);
@@ -149,21 +149,13 @@ export function CrmScreen() {
     }
   }, [userId]);
 
-  useEffect(() => {
-    if (selectedContactId) void refreshRelations(selectedContactId);
-    else {
-      setLinkedProperties([]);
-      setInteractions([]);
-      setAvailableProperties([]);
-    }
-  }, [selectedContactId, refreshRelations]);
-
   const openContact = (contact: CrmContactSummary) => {
     setSelectedContactId(contact.id);
     setEditName(contact.full_name ?? "");
     setEditPhone(contact.phone ?? "");
     setEditEmail(contact.email ?? "");
     setEditRole(contact.contact_type ?? "altro");
+    void refreshRelations(contact.id);
   };
 
   const attachProperty = async (propertyId: string) => {
