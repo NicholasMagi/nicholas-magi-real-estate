@@ -64,3 +64,23 @@ test("same CRM name with a different phone or email is treated as an identity co
     strongMatchCount: 0
   }), false);
 });
+
+
+test("automatic duplicate grouping requires same normalized name and matching phone or email", () => {
+  const groups = findCertainDuplicateGroups([
+    { id: "a", full_name: "Mario Rossi", phone: "+39 333 123 4567", email: null },
+    { id: "b", full_name: "  mario   rossi ", phone: "3331234567", email: "mario@example.it" },
+    { id: "c", full_name: "Mario Rossi", phone: "3337654321", email: null },
+    { id: "d", full_name: "Luigi Bianchi", phone: "3331234567", email: null }
+  ]);
+  assert.equal(groups.length, 1);
+  assert.deepEqual(groups[0].map(item => item.id).sort(), ["a", "b"]);
+});
+
+test("same phone without matching name is not auto-merged", () => {
+  const groups = findCertainDuplicateGroups([
+    { id: "a", full_name: "Mario Rossi", phone: "3331234567", email: null },
+    { id: "b", full_name: "Luigi Bianchi", phone: "3331234567", email: null }
+  ]);
+  assert.equal(groups.length, 0);
+});
