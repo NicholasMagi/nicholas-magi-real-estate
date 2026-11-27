@@ -1,7 +1,7 @@
 import { Contact, ContactField } from "expo-contacts";
 import * as ContactsLegacy from "expo-contacts/legacy";
 import { supabase } from "@/shared/supabase/client";
-import { canUseNameFallback, extractPhoneNumbers, hasNameIdentityConflict, normalizePhoneNumber } from "@/features/crm/phoneContactMatching";
+import { canUseNameFallback, extractPhoneNumbers, findCertainDuplicateGroups, hasNameIdentityConflict, normalizePhoneNumber } from "@/features/crm/phoneContactMatching";
 
 const CONTACT_FIELDS = [
   ContactField.FULL_NAME,
@@ -110,7 +110,7 @@ async function importDeviceContacts(
     contacts.push(...page);
     if (page.length < 100) break;
   }
-  const byPhone = new Map<string, CrmContact[]>();
+  const mergedDuplicates = await mergeCertainDuplicateContacts(ownerId, contacts);\n  const byPhone = new Map<string, CrmContact[]>();
   const byEmail = indexBy(contacts, item => item.email ? normalizeEmail(item.email) : null);
   const byName = indexBy(contacts, item => item.full_name ? normalizeName(item.full_name) : null);
 
@@ -260,7 +260,7 @@ async function importDeviceContacts(
     }
   }
 
-  return { contacts, phoneToContactIds, created, enriched, alreadyPresent, ambiguous };
+  return { contacts, phoneToContactIds, created, enriched, alreadyPresent, ambiguous, mergedDuplicates };
 }
 
 async function linkListingsByPhone(
@@ -363,7 +363,7 @@ export async function loadCrmContacts(ownerId: string): Promise<CrmContactSummar
   for (let offset = 0; ; offset += 100) {
     const { data, error } = await supabase
       .from("nmre_contacts")
-      .select("id,full_name,phone,email,contact_type,status,source")
+      .select("id,full_name,phone,email,contact_type,status,source,notes")
       .eq("owner_id", ownerId)
       .order("full_name", { ascending: true })
       .range(offset, offset + 99);
