@@ -16,7 +16,9 @@ NMRE keeps the existing one-minute incremental Gmail sync as a fallback. Gmail P
    - `GMAIL_PUBSUB_TOPIC_NAME`: full topic resource name from step 2.
    - `GMAIL_PUBSUB_AUDIENCE`: exact OIDC audience / endpoint URL from step 6.
    - `GMAIL_PUBSUB_SERVICE_ACCOUNT_EMAIL`: service account email from step 4.
-   - `GMAIL_PUBSUB_SUBSCRIPTION`: full subscription resource name (optional, but recommended).
+   - `GMAIL_PUBSUB_SUBSCRIPTION`: full subscription resource name, **required**, in the exact form `projects/{project}/subscriptions/{subscription}` (no spaces or trailing newline).
+
+   All three Pub/Sub secrets are required: if one is missing, or the subscription has a different format, `nmre-gmail-push` answers HTTP 503 and the one-minute poll keeps working. A Pub/Sub message whose `subscription` field is not exactly this value is rejected with HTTP 403.
 8. The existing one-minute Gmail worker will register or renew Gmail's Watch automatically after the topic secret is present. Watch is renewed when less than 24 hours remain; the one-minute poll remains active as a recovery path.
 
 ## Validation
@@ -25,7 +27,8 @@ Send a new test email to the connected Gmail mailbox. Check the Supabase Edge Fu
 
 ## Security and reliability
 
-- Pub/Sub delivery is authenticated with a Google-signed OIDC JWT; the handler validates issuer, signature, audience, service-account email and (if configured) subscription name.
+- Pub/Sub delivery is authenticated with a Google-signed OIDC JWT; the handler validates issuer, signature (RS256, Google public keys), audience, service-account email (verified) and the exact subscription name.
+- Logs never contain secret values, OIDC tokens or message contents: only secret names and outcomes.
 - Gmail message contents are not included in Pub/Sub. The callback only uses the notification as a trigger; the existing Gmail API history cursor remains the source of truth.
 - A database lease lock prevents the one-minute fallback and push-triggered sync from processing the mailbox concurrently.
 - The existing incremental history sync, seller classification, manual overrides, candidate deduplication and archival rules remain in place.
