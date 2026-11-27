@@ -58,3 +58,55 @@ export function hasNameIdentityConflict(input: {
     input.hasStrongIdentifier &&
     input.strongMatchCount === 0;
 }
+
+
+export type DuplicateContactIdentity = { id: string; full_name: string | null; phone: string | null; email: string | null };
+
+function normalizeContactName(value: string): string {
+  return value.trim().replace(/\\s+/g, " ").toLocaleLowerCase("it-IT");
+}
+
+function normalizeContactEmail(value: string): string {
+  return value.trim().toLocaleLowerCase("en-US");
+}
+
+/** Merge only when normalized full name and a strong identifier both match. */
+export function findCertainDuplicateGroups<T extends DuplicateContactIdentity>(contacts: T[]): T[][] {
+  const parent = new Map<string, string>();
+  const find = (id: string): string => {
+    const current = parent.get(id) ?? id;
+    if (current === id) return id;
+    const root = find(current);
+    parent.set(id, root);
+    return root;
+  };
+  const union = (a: string, b: string) => {
+    const rootA = find(a);
+    const rootB = find(b);
+    if (rootA !== rootB) parent.set(rootB, rootA);
+  };
+  contacts.forEach(contact => parent.set(contact.id, contact.id));
+  const byIdentity = new Map<string, string>();
+  for (const contact of contacts) {
+    if (!contact.full_name?.trim()) continue;
+    const name = normalizeContactName(contact.full_name);
+    const identifiers = [
+      contact.phone ? "phone:" + (normalizePhoneNumber(contact.phone) ?? "") : "",
+      contact.email?.trim() ? "email:" + normalizeContactEmail(contact.email) : ""
+    ].filter(value => !value.endsWith(":"));
+    for (const identifier of identifiers) {
+      const key = name + "|" + identifier;
+      const previous = byIdentity.get(key);
+      if (previous) union(previous, contact.id);
+      else byIdentity.set(key, contact.id);
+    }
+  }
+  const groups = new Map<string, T[]>();
+  for (const contact of contacts) {
+    const root = find(contact.id);
+    const group = groups.get(root) ?? [];
+    group.push(contact);
+    groups.set(root, group);
+  }
+  return [...groups.values()].filter(group => group.length > 1);
+}
