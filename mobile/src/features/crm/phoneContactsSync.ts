@@ -1,7 +1,7 @@
 import { Contact, ContactField } from "expo-contacts";
 import * as ContactsLegacy from "expo-contacts/legacy";
 import { supabase } from "@/shared/supabase/client";
-import { canUseNameFallback, extractPhoneNumbers, normalizePhoneNumber } from "@/features/crm/phoneContactMatching";
+import { canUseNameFallback, extractPhoneNumbers, hasNameIdentityConflict, normalizePhoneNumber } from "@/features/crm/phoneContactMatching";
 
 const CONTACT_FIELDS = [
   ContactField.FULL_NAME,
@@ -152,6 +152,18 @@ async function importDeviceContacts(
     }
     if (email) {
       for (const match of byEmail.get(email) ?? []) candidates.set(match.id, match);
+    }
+    const strongMatchCount = candidates.size;
+    const sameNameContacts = nameKey ? byName.get(nameKey) ?? [] : [];
+    if (hasNameIdentityConflict({
+      nameMatchCount: sameNameContacts.length,
+      hasStrongIdentifier: phoneNumbers.length > 0 || Boolean(email),
+      strongMatchCount
+    })) {
+      // Same name but a different phone/email: do not create a second CRM person
+      // automatically. Leave the conflict for manual verification.
+      ambiguous += 1;
+      continue;
     }
     if (candidates.size === 0 && nameKey && canUseNameFallback({
       phoneNumbers,
