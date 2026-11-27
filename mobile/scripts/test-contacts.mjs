@@ -84,3 +84,13 @@ test("same phone without matching name is not auto-merged", () => {
   ]);
   assert.equal(groups.length, 0);
 });
+
+
+test("same-name contacts with conflicting strong identifiers are not auto-merged", () => {
+  const groups = findCertainDuplicateGroups([
+    { id: "a", full_name: "Mario Rossi", phone: "3331234567", email: "uno@example.it" },
+    { id: "b", full_name: "Mario Rossi", phone: "3331234567", email: "due@example.it" },
+    { id: "c", full_name: "Mario Rossi", phone: "3337654321", email: "uno@example.it" }
+  ]);
+  assert.equal(groups.length, 0);
+});
