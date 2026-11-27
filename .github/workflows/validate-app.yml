@@ -57,6 +57,9 @@ jobs:
       - name: Test automatic contact matching and safe property linking
         run: node tests/frontend/contact_autolink_test.mjs
 
+      - name: Test Gmail sync health alert
+        run: node tests/frontend/sync_alert_test.mjs
+
       - name: Check migration layout (phase 2 not applicable, production versions)
         run: |
           bash supabase/tests/check_migration_layout.sh

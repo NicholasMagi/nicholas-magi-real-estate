@@ -89,6 +89,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .gmail-sync-last-run{font-size:11px;color:var(--muted);margin-top:4px}
 .gmail-sync-title-success{color:#267447!important}
 .gmail-sync-title-error{color:#a12b27!important}
+.nmre-sync-alert{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:12px 0;padding:12px 14px;border-radius:10px;border:1px solid #e6b8b5;background:#fdf1f0;color:#7a221e;font-size:13px;line-height:1.45}.nmre-sync-alert[hidden]{display:none}.nmre-sync-alert-warning{border-color:#ead29a;background:#fdf8ea;color:#6b4e00}.nmre-sync-alert strong{font-size:13px}.nmre-sync-alert-action{margin-left:auto;min-height:44px;padding:0 14px;border-radius:8px;border:1px solid currentColor;background:#fff;color:inherit;font-weight:700;cursor:pointer}
 .gmail-sync-title-stale{color:#9a642f!important}
 .gmail-sync-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
 .gmail-sync-stat{padding:10px;border:1px solid var(--line);border-radius:9px;background:white;min-width:0}
@@ -600,6 +601,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 </div></header>
 
 <main class="wrap">
+<div id="nmreSyncAlert" class="nmre-sync-alert" role="alert" hidden><strong id="nmreSyncAlertTitle"></strong><span id="nmreSyncAlertText"></span><button type="button" id="nmreSyncAlertOpen" class="nmre-sync-alert-action">Apri il monitor</button></div>
 
 <section id="setup" class="panel">
 <h2>Collegamento a Supabase</h2>
@@ -734,7 +736,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 La casella Gmail viene elaborata dal server in background. Qui non vengono mostrate le email: vede soltanto i dati estratti dagli annunci immobiliari, senza mittente, oggetto o testo dei messaggi.
 </p>
 <div class="topline">
-<div><span class="pill">Sincronizzazione automatica attiva</span><div class="small">Controllo server-side ogni minuto, anche a sito chiuso; la lista si aggiorna ogni minuto quando il sito è aperto.</div></div>
+<div><span class="pill">Sincronizzazione automatica attiva</span><div class="small">Controllo server-side ogni 10 minuti (e subito, con le notifiche push di Gmail quando attive), anche a sito chiuso; la lista si aggiorna ogni minuto quando il sito è aperto.</div></div>
 <button class="secondary" id="connectGmail">Ricollega Gmail</button>
 </div>
 <div class="gmail-sync-monitor" aria-live="polite">
@@ -1724,6 +1726,45 @@ async function loadSellerRegistry(){
   renderSellerRegistry();
 }
 
+// Salute della sincronizzazione Gmail dallo storico nmre_gmail_sync_runs (più recente per primo).
+// Il job pianificato gira ogni 10 minuti: oltre 30 minuti senza un'esecuzione riuscita, o 3
+// errori consecutivi, l'acquisizione è da considerare bloccata.
+function nmreSyncHealth(runs,nowMs){
+  const list=Array.isArray(runs)?runs:[];
+  if(!list.length)return {level:"unknown",title:"",text:"",consecutiveFailures:0,minutesSinceSuccess:null};
+  let consecutiveFailures=0;
+  for(const row of list){if(row&&row.status==="success")break;consecutiveFailures++;}
+  const time=row=>Date.parse(row&&(row.completed_at||row.started_at)||"");
+  const lastSuccess=list.find(row=>row&&row.status==="success"&&Number.isFinite(time(row)));
+  const minutesSinceSuccess=lastSuccess?Math.max(0,Math.floor((nowMs-time(lastSuccess))/60000)):null;
+  const latestAge=Number.isFinite(time(list[0]))?Math.max(0,Math.floor((nowMs-time(list[0]))/60000)):null;
+  const since=minutes=>minutes===null?"":minutes<120?minutes+" minuti":Math.floor(minutes/60)+" ore";
+  if(minutesSinceSuccess===null||minutesSinceSuccess>30||consecutiveFailures>=3){
+    const text=consecutiveFailures>=3
+      ?consecutiveFailures+" sincronizzazioni consecutive non riuscite"+(minutesSinceSuccess!==null?"; ultima riuscita "+since(minutesSinceSuccess)+" fa":"")+"."
+      :minutesSinceSuccess===null?"Nessuna sincronizzazione riuscita nello storico recente."
+      :"Nessuna sincronizzazione riuscita da "+since(minutesSinceSuccess)+".";
+    return {level:"error",title:"Acquisizione Gmail bloccata.",text:text+" I nuovi annunci potrebbero non arrivare.",consecutiveFailures,minutesSinceSuccess};
+  }
+  if(consecutiveFailures>0){
+    return {level:"warning",title:"Ultima sincronizzazione non riuscita.",text:"Errori consecutivi: "+consecutiveFailures+"; ultima riuscita "+since(minutesSinceSuccess)+" fa.",consecutiveFailures,minutesSinceSuccess};
+  }
+  if(latestAge!==null&&latestAge>20){
+    return {level:"warning",title:"Sincronizzazione in ritardo.",text:"Ultimo controllo "+since(latestAge)+" fa: verifichi il job pianificato.",consecutiveFailures,minutesSinceSuccess};
+  }
+  return {level:"ok",title:"",text:"",consecutiveFailures,minutesSinceSuccess};
+}
+function nmreRenderSyncAlert(health){
+  const box=$("nmreSyncAlert");if(!box)return;
+  const visible=health&&(health.level==="error"||health.level==="warning");
+  box.hidden=!visible;
+  box.classList.toggle("nmre-sync-alert-warning",!!visible&&health.level==="warning");
+  if(!visible)return;
+  $("nmreSyncAlertTitle").textContent=health.title;
+  $("nmreSyncAlertText").textContent=health.text;
+}
+$("nmreSyncAlertOpen")?.addEventListener("click",()=>nmreNavigateToTarget("gmailSyncTitle"));
+
 async function loadGmailSyncStatus(){
   if(!currentUser||!supabase)return;
   const title=$("gmailSyncTitle");
@@ -1736,17 +1777,19 @@ async function loadGmailSyncStatus(){
     .limit(200);
   title.classList.remove("gmail-sync-title-success","gmail-sync-title-error","gmail-sync-title-stale");
   if(error){
+    nmreRenderSyncAlert({level:"warning",title:"Stato della sincronizzazione non leggibile.",text:"Non è stato possibile verificare l'ultima acquisizione Gmail."});
     title.textContent="Monitor sincronizzazione non disponibile";
     lastRun.textContent="Non è stato possibile leggere lo stato dal database.";
     details.textContent=error.message||"Errore di lettura del monitor.";
     return;
   }
   const runs=Array.isArray(data)?data:[];
+  nmreRenderSyncAlert(nmreSyncHealth(runs,Date.now()));
   if(!runs.length){
     title.textContent="In attesa della prima esecuzione registrata";
     lastRun.textContent="Non esiste ancora uno storico: il monitor si popolerà alla prossima sincronizzazione pianificata.";
     ["gmailSyncRead","gmailSyncProperty","gmailSyncInserted","gmailSyncAutoArchived","gmailSyncReview","gmailSyncAgencies","gmailSyncDuplicates","gmailSyncRuns24h","gmailSyncErrors24h","gmailSyncSuccessStreak"].forEach(id=>$(id).textContent="—");
-    details.textContent="La raccolta Gmail è configurata per un controllo server-side ogni minuto. Nessun dato storico è stato ricostruito o inventato.";
+    details.textContent="La raccolta Gmail è configurata per un controllo server-side ogni 10 minuti, più le notifiche push di Gmail quando attive. Nessun dato storico è stato ricostruito o inventato.";
     return;
   }
   const latest=runs[0];
