@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
   sectionDivider: { height: 1, backgroundColor: theme.colors.line, marginVertical: 5 },
   relationRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.line },
   addLink: { color: theme.colors.success, fontSize: 12, fontWeight: "800" },
-  removeLink: { color: theme.colors.danger, fontSize: 12, fontWeight: "700" },
+  removeLink: { color: theme.colors.warning, fontSize: 12, fontWeight: "700" },
   interactionItem: { paddingVertical: 10, gap: 5, borderBottomWidth: 1, borderBottomColor: theme.colors.line },
   multilineInput: { minHeight: 76, textAlignVertical: "top", paddingTop: 12 },
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
