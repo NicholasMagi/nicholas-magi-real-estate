@@ -49,15 +49,15 @@ const pageItems = () => JSON.parse(REAL_PAGE.match(/<script[^>]*id=["']__NEXT_DA
   .props.pageProps.initialState.items.originalList;
 const adId = (entry: any) => String(entry.urls?.default || "").match(/-(\d{6,})\.htm/)![1];
 
-function pageFetcher(html = REAL_PAGE) {
+function pageFetcher(html = REAL_PAGE, status = 200) {
   const calls: string[] = [];
-  return { calls, fetchPage: (url: string) => { calls.push(url); return Promise.resolve({ status: 200, finalUrl: FINAL_URL, html }); } };
+  return { calls, fetchPage: (url: string) => { calls.push(url); return Promise.resolve({ status, finalUrl: FINAL_URL, html }); } };
 }
-async function run(seed: Record<string, any[]> = {}, options: { html?: string; message?: any } = {}) {
+async function run(seed: Record<string, any[]> = {}, options: { html?: string; message?: any; status?: number } = {}) {
   const fake = fakeSupabase(seed);
   const before = structuredClone(fake.tables);
   const db = readOnlyDb(fake.client);
-  const page = pageFetcher(options.html);
+  const page = pageFetcher(options.html, options.status);
   const report = await subitoDryRun({ message: options.message ?? gmailMessage("real-26"), db, owner: OWNER, fetchPage: page.fetchPage, nowIso: NOW });
   return { report, fake, before, page, db };
 }
@@ -139,6 +139,17 @@ Deno.test("pagina protetta da verifica anti-robot: nessun aggiramento, nessun an
   eq(report.esito, "pagina_non_disponibile", "esito");
   eq(report.pagina?.motivo, "pagina_bloccata", "motivo");
   eq(report.annunci.length, 0, "nessun annuncio");
+});
+
+Deno.test("HTTP 403 reale da Subito: una sola richiesta, nessun tentativo alternativo e nessuna scrittura", async () => {
+  const { report, fake, before, page } = await run({}, { status: 403, html: "<html><title>Forbidden</title></html>" });
+  assertNoWrites(fake, before, "HTTP 403 Subito");
+  eq(page.calls.length, 1, "una sola richiesta alla prima pagina");
+  eq(report.esito, "pagina_non_disponibile", "esito per HTTP 403");
+  eq(report.pagina?.http, 403, "codice HTTP conservato nel rapporto");
+  eq(report.pagina?.motivo, "pagina_bloccata", "blocco esplicito");
+  eq(report.annunci.length, 0, "nessun annuncio proposto");
+  eq(report.riepilogo.creerebbe_candidato + report.riepilogo.proposta_scheda_da_verificare, 0, "nessuna proposta");
 });
 
 Deno.test("confronto con il database non riuscito: nessun annuncio proposto", async () => {
