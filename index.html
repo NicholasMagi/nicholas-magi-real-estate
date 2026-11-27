@@ -1213,10 +1213,39 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
   <div class="topline">
     <h2>Nuove opportunità</h2>
     <div class="actions">
+      <button class="secondary" id="candidateManualToggle" type="button" aria-expanded="false">＋ Importa da Subito</button>
       <button class="secondary" id="refreshCandidates" type="button">Aggiorna email</button>
     </div>
   </div>
   <p class="candidate-inbox-intro">Qui trova soltanto le email immobiliari ancora da verificare. Quando conferma che il venditore è un privato, NMRE trasferisce l’immobile nell’Archivio; i privati riconosciuti automaticamente con prove affidabili vengono archiviati senza passare da questa coda. Le agenzie e le email scartate vengono escluse.</p>
+  <div id="candidateManualPanel" class="panel archive-manual-form" hidden>
+    <div class="topline">
+      <div><h3>Importa un annuncio Subito nelle Opportunità</h3><p class="hint">Se una ricerca email segnala nuovi annunci ma la pagina risultati è protetta, apra il singolo annuncio in Safari e incolli qui il link. NMRE proverà a leggere i dati pubblici; se non è possibile, inserisca almeno titolo e comune. Il venditore resterà sempre “Da verificare”.</p></div>
+      <button class="secondary" id="candidateManualClose" type="button">Chiudi</button>
+    </div>
+    <form id="candidateManualForm">
+      <label>Link diretto dell’annuncio Subito *<input id="candidateManualUrl" type="url" required maxlength="2000" placeholder="https://www.subito.it/..."></label>
+      <div class="row">
+        <div><label>Titolo / descrizione<input id="candidateManualTitle" maxlength="250" placeholder="Recuperato automaticamente, se disponibile"></label></div>
+        <div><label>Comune<input id="candidateManualTown" maxlength="120" placeholder="Es. Osimo"></label></div>
+      </div>
+      <div class="row">
+        <div><label>Prezzo richiesto (€)<input id="candidateManualPrice" type="number" min="0" max="1000000000" step="1"></label></div>
+        <div><label>Tipologia immobile<input id="candidateManualType" maxlength="100" placeholder="Es. Appartamento, villa"></label></div>
+      </div>
+      <div class="row">
+        <div><label>Superficie (m²)<input id="candidateManualSurface" type="number" min="1" max="100000" step="1"></label></div>
+        <div><label>Locali<input id="candidateManualRooms" type="number" min="0.5" max="100" step="0.5"></label></div>
+      </div>
+      <div class="row">
+        <div><label>Camere<input id="candidateManualBedrooms" type="number" min="0" max="100" step="1"></label></div>
+        <div><label>Bagni<input id="candidateManualBathrooms" type="number" min="0" max="100" step="1"></label></div>
+      </div>
+      <div class="actions"><button class="gold" id="candidateManualSave" type="submit">＋ Aggiungi alle Opportunità</button></div>
+      <p class="hint">L’annuncio viene inserito nella coda “Nuove opportunità”, non nell’Archivio. NMRE controlla i duplicati e non inventa recapiti del venditore.</p>
+      <div id="candidateManualMsg" class="status" aria-live="polite"></div>
+    </form>
+  </div>
   <div class="candidate-inbox-toolbar">
     <div class="candidate-inbox-search">
       <label for="candidateSearch">Cerca nelle email</label>
@@ -6518,6 +6547,203 @@ async function loadListings(){
   renderDashboard();
   renderListings();
 }
+
+function nmreManualSubitoCandidateRecord(input, ownerId, nowIso = new Date().toISOString()) {
+  const url = validUrl(input.url);
+  if (!url) throw new Error("Inserisca un link valido all’annuncio.");
+  const parsed = new URL(url);
+  const host = parsed.hostname.toLowerCase().replace(/^www\\./, "");
+  if (parsed.protocol !== "https:" || !(host === "subito.it" || host.endsWith(".subito.it"))) {
+    throw new Error("Sono ammessi soltanto link HTTPS di annunci Subito.");
+  }
+  if (!isSpecificCandidateUrl(url)) throw new Error("Il link deve aprire un singolo annuncio, non una pagina di ricerca.");
+  const listingKey = canonicalCandidateUrl(url);
+  if (!listingKey) throw new Error("Non è stato possibile riconoscere l’identificativo dell’annuncio.");
+
+  const suggestions = input.suggestions && typeof input.suggestions === "object" ? input.suggestions : {};
+  const pickText = (manual, suggested, max) => {
+    const value = String(manual ?? "").trim() || String(suggested ?? "").trim();
+    return value ? value.slice(0, max) : null;
+  };
+  const pickNumber = (manual, suggested, label, min, max, integer = false) => {
+    const raw = manual !== undefined && manual !== null && String(manual).trim() !== "" ? manual : suggested;
+    if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) {
+      throw new Error(label + " non valido.");
+    }
+    return value;
+  };
+
+  const title = pickText(input.titolo, suggestions.titolo, 250);
+  const town = pickText(input.comune, suggestions.comune, 120);
+  if (!title || !town) throw new Error("Per importare l’annuncio servono almeno titolo e comune. Li può inserire manualmente.");
+  const price = pickNumber(input.prezzo, suggestions.prezzo, "Prezzo", 0, 1000000000);
+  const surface = pickNumber(input.superficie_mq, suggestions.superficie_mq, "Superficie", 1, 100000, true);
+  const rooms = pickNumber(input.locali, suggestions.locali, "Locali", 0.5, 100);
+  const bedrooms = pickNumber(input.camere, suggestions.camere, "Camere", 0, 100, true);
+  const bathrooms = pickNumber(input.bagni, suggestions.bagni, "Bagni", 0, 100, true);
+  const propertyType = pickText(input.tipologia_immobile, suggestions.tipologia_immobile, 100);
+  const sourceId = "subito-manual:" + listingKey;
+  const fields = {
+    titolo: title, comune: town, prezzo: price, tipologia: propertyType,
+    superficie_mq: surface, locali: rooms, camere: bedrooms, bagni: bathrooms
+  };
+  return {
+    owner_id: ownerId,
+    titolo: title,
+    comune: town,
+    prezzo: price,
+    contatto: null,
+    tipo_venditore: "Da verificare",
+    portale: "Subito",
+    url,
+    url_originale: url,
+    data_pubblicazione: null,
+    notification_sender: null,
+    email_subject: "Importazione manuale da Subito",
+    source_email_id: sourceId,
+    dedup_key: sourceId,
+    stato: "da_verificare",
+    tipologia_immobile: propertyType,
+    superficie_mq: surface,
+    locali: rooms,
+    camere: bedrooms,
+    bagni: bathrooms,
+    seller_confidence: 0,
+    seller_evidence: "Importazione manuale da annuncio Subito; identità e tipologia del venditore da verificare.",
+    seller_classification_version: 3,
+    seller_manual_override: false,
+    data_extraction_version: 6,
+    listing_key: listingKey,
+    deduplication_version: 1,
+    dati_fonte: {
+      provider: "NMRE · importazione manuale Subito",
+      source: "subito_manual",
+      url_originale: url,
+      captured_at: nowIso,
+      enrichment_evidence: String(input.enrichmentEvidence || "").slice(0, 160) || null
+    },
+    dati_estratti: {
+      campi_immobile: fields,
+      importazione_manual: true,
+      fonte: "pagina annuncio Subito aperta dall’utente"
+    }
+  };
+}
+
+async function saveManualSubitoCandidate(event) {
+  event.preventDefault();
+  const statusId = "candidateManualMsg";
+  if (!currentUser || !supabase) {
+    msg(statusId, "Sessione non disponibile. Effettui nuovamente l’accesso.", "error");
+    return;
+  }
+  const form = $("candidateManualForm");
+  const button = $("candidateManualSave");
+  if (!form || !button || button.disabled) return;
+  const value = id => $(id).value.trim();
+  const url = validUrl(value("candidateManualUrl"));
+  if (!url) {
+    msg(statusId, "Inserisca un link HTTPS valido.", "error");
+    return;
+  }
+  const manual = {
+    url,
+    titolo: value("candidateManualTitle"),
+    comune: value("candidateManualTown"),
+    prezzo: value("candidateManualPrice"),
+    tipologia_immobile: value("candidateManualType"),
+    superficie_mq: value("candidateManualSurface"),
+    locali: value("candidateManualRooms"),
+    camere: value("candidateManualBedrooms"),
+    bagni: value("candidateManualBathrooms")
+  };
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "Analisi e importazione…";
+  msg(statusId, "NMRE sta verificando il link e controllando i duplicati.");
+  try {
+    let suggestions = {};
+    let enrichmentEvidence = "";
+    let enrichmentWarning = "";
+    try {
+      const { data, error } = await supabase.functions.invoke("nmre-candidate-enrich", { body: { url } });
+      if (error) throw new Error(error.message || "Analisi pubblica non disponibile.");
+      if (!data?.success) throw new Error(data?.error || "Il portale non ha restituito dati analizzabili.");
+      suggestions = data.suggestions && typeof data.suggestions === "object" ? data.suggestions : {};
+      enrichmentEvidence = String(data.evidence || "");
+    } catch (error) {
+      enrichmentWarning = error?.message || "Analisi automatica non disponibile.";
+    }
+
+    const record = nmreManualSubitoCandidateRecord({ ...manual, suggestions, enrichmentEvidence }, currentUser.id);
+    const { data: existingCandidate, error: candidateLookupError } = await supabase
+      .from("annunci_candidati")
+      .select("id,titolo")
+      .eq("owner_id", currentUser.id)
+      .eq("listing_key", record.listing_key)
+      .maybeSingle();
+    if (candidateLookupError) throw candidateLookupError;
+    if (existingCandidate) {
+      msg(statusId, "Questo annuncio è già presente nelle Opportunità: " + (existingCandidate.titolo || "annuncio già acquisito") + ". Nessun duplicato creato.", "error");
+      return;
+    }
+
+    const { data: archived, error: archiveLookupError } = await supabase
+      .from("annunci")
+      .select("id,titolo")
+      .eq("owner_id", currentUser.id)
+      .eq("listing_key", record.listing_key)
+      .maybeSingle();
+    if (archiveLookupError) throw archiveLookupError;
+    if (archived) {
+      msg(statusId, "Questo annuncio risulta già nell’Archivio: " + (archived.titolo || "annuncio già acquisito") + ". Nessun duplicato creato.", "error");
+      return;
+    }
+
+    const { data: saved, error: insertError } = await supabase
+      .from("annunci_candidati")
+      .insert(record)
+      .select("id")
+      .single();
+    if (insertError) {
+      if (insertError.code === "23505") {
+        msg(statusId, "L’annuncio risulta già acquisito. Nessun duplicato creato.", "error");
+        return;
+      }
+      throw insertError;
+    }
+    form.reset();
+    $("candidateManualPanel").hidden = true;
+    $("candidateManualToggle").setAttribute("aria-expanded", "false");
+    await loadCandidates({ force: true });
+    const suffix = enrichmentWarning
+      ? " Importato con i dati inseriti manualmente; lettura automatica non disponibile: " + enrichmentWarning
+      : " Dati pubblici recuperati, da verificare prima del contatto.";
+    msg("candidateMsg", "Annuncio Subito aggiunto alle Nuove opportunità" + (saved?.id ? " (" + saved.id.slice(0, 8) + ")" : "") + "." + suffix, "success");
+  } catch (error) {
+    msg(statusId, error?.message || "Importazione non riuscita. Nessun annuncio è stato aggiunto.", "error");
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
+}
+
+$("candidateManualToggle").addEventListener("click", () => {
+  const panel = $("candidateManualPanel");
+  panel.hidden = !panel.hidden;
+  $("candidateManualToggle").setAttribute("aria-expanded", String(!panel.hidden));
+  if (!panel.hidden) {
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    $("candidateManualUrl").focus({ preventScroll: true });
+  }
+});
+$("candidateManualClose").addEventListener("click", () => {
+  $("candidateManualPanel").hidden = true;
+  $("candidateManualToggle").setAttribute("aria-expanded", "false");
+});
+$("candidateManualForm").addEventListener("submit", saveManualSubitoCandidate);
 
 $("listingForm").addEventListener("submit",async event=>{
   event.preventDefault();
