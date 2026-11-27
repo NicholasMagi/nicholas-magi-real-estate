@@ -2153,12 +2153,25 @@ function renderSellerQualificationReview(details,item){
  const box=details.querySelector("[data-seller-qualification-review]");
  if(!box)return;
  const value=field=>details.querySelector('[data-crm-field="'+field+'"]')?.value||"";
+ const prequalValue=field=>details.querySelector('[data-prequal-field="'+field+'"]')?.value?.trim()||"";
  const current={...item,
   vendita_motivazione:value("vendita_motivazione"),
   tempistiche_vendita:value("tempistiche_vendita"),
   altre_agenzie:value("altre_agenzie"),
   prezzo_trattabile:value("prezzo_trattabile"),
-  prossimo_contatto_il:value("prossimo_contatto_il")
+  prossimo_contatto_il:value("prossimo_contatto_il"),
+  prequalifica:{
+   prezzo_minimo:prequalValue("prezzo_minimo"),
+   situazione_mutuo:prequalValue("situazione_mutuo"),
+   importo_mutuo_residuo:prequalValue("importo_mutuo_residuo"),
+   comproprietari:prequalValue("comproprietari"),
+   conformita_urbanistica:prequalValue("conformita_urbanistica"),
+   conformita_catastale:prequalValue("conformita_catastale"),
+   documenti_disponibili:prequalValue("documenti_disponibili"),
+   disponibilita_visite:prequalValue("disponibilita_visite"),
+   urgenza_vendita:prequalValue("urgenza_vendita"),
+   note:prequalValue("note")
+  }
  };
  const gaps=[];
  if(!String(item.contatto||"").trim())gaps.push("recapito diretto");
@@ -2167,8 +2180,19 @@ function renderSellerQualificationReview(details,item){
  if(!current.altre_agenzie||current.altre_agenzie==="da_verificare")gaps.push("situazione con altre agenzie");
  if(!current.prezzo_trattabile||current.prezzo_trattabile==="da_verificare")gaps.push("margine sul prezzo");
  if(!current.prossimo_contatto_il)gaps.push("data del prossimo contatto");
+ const pq=current.prequalifica;
+ if(!pq.prezzo_minimo)gaps.push("prezzo minimo accettabile");
+ if(!pq.situazione_mutuo||pq.situazione_mutuo==="da_verificare")gaps.push("mutuo e ipoteche");
+ if(pq.situazione_mutuo==="presente"&&!pq.importo_mutuo_residuo)gaps.push("importo residuo del mutuo");
+ if(!pq.comproprietari)gaps.push("proprietà e comproprietari");
+ if(!pq.conformita_urbanistica||pq.conformita_urbanistica==="da_verificare")gaps.push("conformità urbanistica");
+ if(!pq.conformita_catastale||pq.conformita_catastale==="da_verificare")gaps.push("conformità catastale");
+ if(!pq.documenti_disponibili)gaps.push("documenti disponibili");
+ if(!pq.disponibilita_visite)gaps.push("disponibilità per le visite");
+ if(!pq.urgenza_vendita)gaps.push("urgenza e necessità del proprietario");
  const q=sellerQualification(current);
- const completed=6-gaps.length;
+ const total=14+(pq.situazione_mutuo==="presente"?1:0);
+ const completed=Math.max(0,total-gaps.length);
  let status="In approfondimento",next="Approfondire la motivazione e i tempi reali della vendita.";
  if(current.altre_agenzie==="esclusiva"){
   status="Esclusiva attiva";next="Verificare con correttezza la situazione contrattuale e la relativa scadenza, senza sollecitare incarichi concorrenti.";
@@ -2182,8 +2206,8 @@ function renderSellerQualificationReview(details,item){
   next="Chiarire aspettative sul prezzo e risultati ottenuti prima di proporre il prossimo incontro.";
  }
  const price=Number(item.prezzo)>0?formatCurrency(Number(item.prezzo)):"Non disponibile";
- box.innerHTML='<div class="seller-review-top"><strong>Stato: '+safe(status)+'</strong><span>'+completed+'/6 informazioni complete</span></div>'+
-  '<div class="seller-review-meter"><span style="width:'+Math.round(completed/6*100)+'%"></span></div>'+
+ box.innerHTML='<div class="seller-review-top"><strong>Stato: '+safe(status)+'</strong><span>'+completed+'/'+total+' informazioni complete</span></div>'+
+  '<div class="seller-review-meter"><span style="width:'+Math.round(completed/total*100)+'%"></span></div>'+
   '<div class="seller-review-meta">Punteggio commerciale indicativo: <b>'+q.score+'/65</b> · Prezzo richiesto nell’annuncio: <b>'+safe(price)+'</b></div>'+
   '<div class="seller-review-next"><b>Prossima azione consigliata</b><span>'+safe(next)+'</span></div>'+
   (gaps.length?'<div class="seller-review-gaps">Da completare: '+safe(gaps.join(" · "))+'</div>':'<div class="seller-review-gaps">Qualificazione completa. Verifichi che le informazioni siano state confermate dal proprietario.</div>')+
@@ -6455,6 +6479,18 @@ function renderListings(){
       +'<label>Tempistiche desiderate</label><select data-crm-field="tempistiche_vendita"><option value="">Da chiarire</option><option value="entro_30_giorni" '+(item.tempistiche_vendita==="entro_30_giorni"?"selected":"")+'>Entro 30 giorni</option><option value="1_3_mesi" '+(item.tempistiche_vendita==="1_3_mesi"?"selected":"")+'>1–3 mesi</option><option value="3_6_mesi" '+(item.tempistiche_vendita==="3_6_mesi"?"selected":"")+'>3–6 mesi</option><option value="oltre_6_mesi" '+(item.tempistiche_vendita==="oltre_6_mesi"?"selected":"")+'>Oltre 6 mesi</option><option value="senza_fretta" '+(item.tempistiche_vendita==="senza_fretta"?"selected":"")+'>Senza fretta</option></select>'
       +'<label>Rapporto con altre agenzie</label><select data-crm-field="altre_agenzie"><option value="da_verificare" '+((item.altre_agenzie||"da_verificare")==="da_verificare"?"selected":"")+'>Da verificare</option><option value="nessuna" '+(item.altre_agenzie==="nessuna"?"selected":"")+'>Nessuna altra agenzia</option><option value="non_esclusiva" '+(item.altre_agenzie==="non_esclusiva"?"selected":"")+'>Altre agenzie senza esclusiva</option><option value="esclusiva" '+(item.altre_agenzie==="esclusiva"?"selected":"")+'>Esclusiva attiva con altra agenzia</option><option value="in_trattativa" '+(item.altre_agenzie==="in_trattativa"?"selected":"")+'>In trattativa / situazione da chiarire</option></select>'
       +'<label>Disponibilità a valutare una revisione del prezzo</label><select data-crm-field="prezzo_trattabile"><option value="da_verificare" '+((item.prezzo_trattabile||"da_verificare")==="da_verificare"?"selected":"")+'>Da verificare</option><option value="si" '+(item.prezzo_trattabile==="si"?"selected":"")+'>Sì</option><option value="parzialmente" '+(item.prezzo_trattabile==="parzialmente"?"selected":"")+'>In parte</option><option value="no" '+(item.prezzo_trattabile==="no"?"selected":"")+'>No</option></select>'
+      +'<details class="prequalifica-extra"><summary>Completa la prequalifica · proprietà, mutuo e documenti</summary>'
+      +'<label>Prezzo minimo che il proprietario prenderebbe in considerazione (€)</label><input type="number" min="0" step="1000" data-prequal-field="prezzo_minimo" value="'+safe((item.prequalifica||{}).prezzo_minimo||"")+'" placeholder="Da chiarire">'
+      +'<label>Mutuo o ipoteche sull’immobile</label><select data-prequal-field="situazione_mutuo"><option value="">Da verificare</option><option value="nessuno" '+((item.prequalifica||{}).situazione_mutuo==="nessuno"?"selected":"")+'>Nessuno</option><option value="presente" '+((item.prequalifica||{}).situazione_mutuo==="presente"?"selected":"")+'>Presenti</option><option value="da_verificare" '+((item.prequalifica||{}).situazione_mutuo==="da_verificare"?"selected":"")+'>Da verificare</option></select>'
+      +'<label>Importo residuo indicativo (se presente)</label><input data-prequal-field="importo_mutuo_residuo" value="'+safe((item.prequalifica||{}).importo_mutuo_residuo||"")+'" placeholder="Importo o da verificare">'
+      +'<label>Proprietà e comproprietari</label><input data-prequal-field="comproprietari" value="'+safe((item.prequalifica||{}).comproprietari||"")+'" placeholder="Es. unico proprietario / coniuge / eredi">'
+      +'<label>Conformità urbanistica</label><select data-prequal-field="conformita_urbanistica"><option value="">Da verificare</option><option value="conforme" '+((item.prequalifica||{}).conformita_urbanistica==="conforme"?"selected":"")+'>Dichiarata conforme</option><option value="difformita" '+((item.prequalifica||{}).conformita_urbanistica==="difformita"?"selected":"")+'>Difformità note</option><option value="da_verificare" '+((item.prequalifica||{}).conformita_urbanistica==="da_verificare"?"selected":"")+'>Da verificare con tecnico</option></select>'
+      +'<label>Conformità catastale</label><select data-prequal-field="conformita_catastale"><option value="">Da verificare</option><option value="conforme" '+((item.prequalifica||{}).conformita_catastale==="conforme"?"selected":"")+'>Dichiarata conforme</option><option value="difformita" '+((item.prequalifica||{}).conformita_catastale==="difformita"?"selected":"")+'>Difformità note</option><option value="da_verificare" '+((item.prequalifica||{}).conformita_catastale==="da_verificare"?"selected":"")+'>Da verificare con tecnico</option></select>'
+      +'<label>Documenti disponibili</label><textarea data-prequal-field="documenti_disponibili" maxlength="2000" placeholder="Atto di provenienza, visura, planimetria, APE, documenti condominiali…">'+safe((item.prequalifica||{}).documenti_disponibili||"")+'</textarea>'
+      +'<label>Disponibilità e modalità per le visite</label><input data-prequal-field="disponibilita_visite" value="'+safe((item.prequalifica||{}).disponibilita_visite||"")+'" placeholder="Giorni, orari, preavviso necessario">'
+      +'<label>Urgenza e necessità del proprietario</label><textarea data-prequal-field="urgenza_vendita" maxlength="1500" placeholder="Scadenze, acquisto collegato, trasferimento, esigenze familiari…">'+safe((item.prequalifica||{}).urgenza_vendita||"")+'</textarea>'
+      +'<label>Altre informazioni da non perdere</label><textarea data-prequal-field="note" maxlength="3000" placeholder="Dettagli emersi durante l’appuntamento…">'+safe((item.prequalifica||{}).note||"")+'</textarea>'
+      +'</details>'
       +'<div class="seller-qualification-review" data-seller-qualification-review aria-live="polite"></div>'
       +'<div class="actions"><button class="gold" data-save-crm>Salva scheda</button></div>'
       +'<hr><b>Registra una nuova interazione</b>'
@@ -6475,7 +6511,7 @@ function renderListings(){
     details.querySelector('[data-crm-field="prossimo_contatto_il"]').value=item?.prossimo_contatto_il||"";
     details.addEventListener("toggle",()=>{if(details.open&&!details.dataset.loaded){details.dataset.loaded="1";loadInteractions(id,details);}});
     renderSellerQualificationReview(details,item);
-    details.querySelectorAll('[data-crm-field="vendita_motivazione"],[data-crm-field="tempistiche_vendita"],[data-crm-field="altre_agenzie"],[data-crm-field="prezzo_trattabile"],[data-crm-field="prossimo_contatto_il"]').forEach(field=>field.addEventListener("change",()=>renderSellerQualificationReview(details,item)));
+    details.querySelectorAll('[data-crm-field="vendita_motivazione"],[data-crm-field="tempistiche_vendita"],[data-crm-field="altre_agenzie"],[data-crm-field="prezzo_trattabile"],[data-crm-field="prossimo_contatto_il"],[data-prequal-field]').forEach(field=>field.addEventListener("change",()=>renderSellerQualificationReview(details,item)));
     details.querySelector("[data-save-crm]").addEventListener("click",()=>saveCrm(id,details));
     details.querySelector("[data-add-interaction]").addEventListener("click",()=>addInteraction(id,details));
   });
@@ -6946,7 +6982,19 @@ async function saveCrm(id,details){
     vendita_motivazione:value("vendita_motivazione")||null,
     tempistiche_vendita:value("tempistiche_vendita")||null,
     altre_agenzie:value("altre_agenzie")||"da_verificare",
-    prezzo_trattabile:value("prezzo_trattabile")||"da_verificare"
+    prezzo_trattabile:value("prezzo_trattabile")||"da_verificare",
+    prequalifica:{
+      prezzo_minimo:details.querySelector('[data-prequal-field="prezzo_minimo"]').value||null,
+      situazione_mutuo:details.querySelector('[data-prequal-field="situazione_mutuo"]').value||null,
+      importo_mutuo_residuo:details.querySelector('[data-prequal-field="importo_mutuo_residuo"]').value.trim()||null,
+      comproprietari:details.querySelector('[data-prequal-field="comproprietari"]').value.trim()||null,
+      conformita_urbanistica:details.querySelector('[data-prequal-field="conformita_urbanistica"]').value||null,
+      conformita_catastale:details.querySelector('[data-prequal-field="conformita_catastale"]').value||null,
+      documenti_disponibili:details.querySelector('[data-prequal-field="documenti_disponibili"]').value.trim()||null,
+      disponibilita_visite:details.querySelector('[data-prequal-field="disponibilita_visite"]').value.trim()||null,
+      urgenza_vendita:details.querySelector('[data-prequal-field="urgenza_vendita"]').value.trim()||null,
+      note:details.querySelector('[data-prequal-field="note"]').value.trim()||null
+    }
   };
   const {error}=await supabase.from("annunci").update(payload).eq("id",id).eq("owner_id",currentUser.id);
   if(error){msg("listMsg","Salvataggio scheda non riuscito: "+error.message,"error");return;}
