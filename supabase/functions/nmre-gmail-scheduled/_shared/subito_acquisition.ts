@@ -9,7 +9,7 @@
 //  - "errore": link mancante, pagina bloccata, vuota, errore di rete o HTTP → la notifica
 //    resta come candidato "da verificare" e, salvo il link mancante, viene ritentata.
 import { canonicalListingKey, bedrooms, bathrooms, extractAdditionalPropertyDetails, propertyType, municipality } from "./parser.ts";
-import { isTargetMunicipality } from "../../_shared/territory.ts";
+import { isTargetMunicipality, territoryClassification } from "../../_shared/territory.ts";
 import { DATA_EXTRACTION_VERSION, SELLER_CLASSIFICATION_VERSION } from "./retention.ts";
 import type { SellerResult } from "./retention.ts";
 import {
@@ -205,7 +205,11 @@ export function subitoItemRow(item: SubitoItem, ctx: SubitoRowContext, details: 
   const gmailId = String(ctx.email.id);
   const receivedAt = emailIso(ctx.email.date);
   const text = [item.title, item.description].filter(Boolean).join(" ");
-  const seller = itemSeller(item, ctx.classifySeller);
+  const parsedTown = municipality(String(item.location || ""));
+  const territory = territoryClassification(parsedTown);
+  const seller = parsedTown
+    ? itemSeller(item, ctx.classifySeller)
+    : { classification: "Da verificare" as const, confidence: 0, evidence: "Comune non riconosciuto: verifica territoriale manuale necessaria" };
   const title = item.title || "Annuncio Subito " + item.id;
   const notificationId = subitoNotificationId(gmailId, item.id);
   const campi = {
@@ -225,6 +229,7 @@ export function subitoItemRow(item: SubitoItem, ctx: SubitoRowContext, details: 
     bagni: campi.bagni,
     dati_estratti: {
       ...extractAdditionalPropertyDetails(text),
+      territorio: territory,
       riduzione_prezzo: null,
       campi_immobile: campi,
       subito: {
