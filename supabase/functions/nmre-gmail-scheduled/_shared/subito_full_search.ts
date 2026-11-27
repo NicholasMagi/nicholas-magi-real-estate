@@ -21,7 +21,8 @@
 //    uniche per annuncio e registro per email).
 import { readSubitoResultsPage, subitoDigestRow, subitoItemRow, SUBITO_MAX_ATTEMPTS } from "./subito_acquisition.ts";
 import type { SubitoAcquisition, SubitoAcquisitionDeps, SubitoDbClient, SubitoEmail, SubitoRowContext } from "./subito_acquisition.ts";
-import { subitoSearchPageUrl, SUBITO_REASON_TEXT } from "./subito.ts";
+import { rowReferencesSubitoAd, subitoIdLikePatterns, subitoSearchPageUrl, SUBITO_REASON_TEXT } from "./subito.ts";
+import { subitoNoAgencyExclusion } from "./subito_acquisition.ts";
 import type { SubitoDigest, SubitoItem, SubitoPage } from "./subito.ts";
 import type { SellerResult } from "./retention.ts";
 
@@ -192,7 +193,8 @@ export function professionalHint(text: string): boolean {
  */
 export function fullSearchSeller(item: SubitoItem, classify: (text: string) => SellerResult): SellerResult {
   const fromText = classify([item.title, item.description].filter(Boolean).join(" "));
-  if (fromText.classification === "Agenzia") return fromText;
+  // Ricerca già filtrata per privati: nessuna esclusione come «Agenzia», resta in coda.
+  if (fromText.classification === "Agenzia") return subitoNoAgencyExclusion(fromText);
   if (item.advertiserCompany === true) {
     return { classification: "Da verificare", confidence: 0, evidence: "Subito indica un inserzionista professionale: mai importato come privato, verifica manuale" };
   }
@@ -265,10 +267,9 @@ export function fullSearchItemRow(item: SubitoItem, ctx: SubitoRowContext, detai
     row.dati_estratti.subito.possibili_duplicati = details.possibleDuplicates.map(entry => ({ candidato_id: entry.id, subito_id: entry.subitoId }));
   }
   row.skip_auto_archive = true;
-  if (details.known) {
-    row.fill_missing = true;
-    row.sighting_only = true;
-  }
+  // Annuncio già presente: nessun dato modificato (history_only da subitoItemRow); lo
+  // storico registra solo un prezzo diverso dall'ultimo noto (sighting_only).
+  if (details.known) row.sighting_only = true;
   return row;
 }
 
@@ -418,15 +419,16 @@ export function supabaseFullSearchDeps(admin: SubitoDbClient, owner: string, bas
     async candidatesForAd(adId) {
       if (!/^\d{6,}$/.test(adId)) return [];
       const ids = new Set<string>();
+      const patterns = subitoIdLikePatterns(adId);
       for (const [column, method, pattern] of [
-        ["dedup_key", "eq", "subito:" + adId],
-        ["listing_key", "like", "subito.it/%-" + adId + ".htm"],
-        ["listing_key", "like", "subito.it/%/" + adId + ".htm"],
-        ["url", "like", "%subito.it/%-" + adId + ".htm%"]
-      ] as const) {
-        const { data, error } = await admin.from("annunci_candidati").select("id").eq("owner_id", owner)[method](column, pattern).limit(10);
+        ["dedup_key", "eq", "subito:" + adId] as const,
+        ...patterns.listingKey.map(p => ["listing_key", "like", p] as const),
+        ...patterns.url.map(p => ["url", "like", p] as const)
+      ]) {
+        const { data, error } = await admin.from("annunci_candidati").select("id,dedup_key,listing_key,url").eq("owner_id", owner)[method](column, pattern).limit(20);
         if (error) throw new Error("Confronto con le opportunità non riuscito");
-        for (const row of data || []) ids.add(String(row.id));
+        // Solo righe che si riferiscono davvero all'annuncio su subito.it (nessun dominio contraffatto).
+        for (const row of data || []) if (rowReferencesSubitoAd(row, adId)) ids.add(String(row.id));
       }
       return [...ids];
     },

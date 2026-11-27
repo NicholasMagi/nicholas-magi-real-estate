@@ -185,6 +185,7 @@ Deno.test("scenari reali: Opportunità, Scartati, Archivio manuale e con candida
   const db = fakeSupabase({ annunci_candidati: seed, annunci: archive } as Any);
   const snapshot = JSON.stringify(seed.map(row => [row.titolo, row.stato, (row as Any).prezzo ?? null, (row as Any).tipo_venditore ?? null, (row as Any).seller_evidence ?? null]));
   const archiveBefore = JSON.stringify(db.tables.annunci);
+  const candidatesBefore = JSON.stringify(db.tables.annunci_candidati.slice(0, 4));
   const result = await syncCycle(db, [six]);
   eq(result.outcomes, { "completo:finestra_temporale": 1 }, "novità dimostrata dalla finestra");
   eq(result.failures, [], "nessun errore");
@@ -199,8 +200,9 @@ Deno.test("scenari reali: Opportunità, Scartati, Archivio manuale e con candida
   eq(JSON.stringify(db.tables.annunci_candidati.slice(0, 4).map((row: Any) => [row.titolo, row.stato, row.prezzo ?? null, row.tipo_venditore ?? null, row.seller_evidence ?? null])), snapshot,
     "titoli, prezzi, note, stati e decisioni manuali invariati");
   eq(db.tables.annunci_candidati[2].dati_estratti.storico_stato[0].motivo, "Troppo lontano", "scarto manuale conservato");
-  eq(db.tables.annunci_candidati[2].dati_estratti.notifiche_dopo_scarto?.elenco?.length, 1, "scartato: nuova notifica solo evidenziata");
+  eq(db.tables.annunci_candidati[2].dati_estratti.notifiche_dopo_scarto, undefined, "scartato: nessun contrassegno, scheda non modificata");
   eq(JSON.stringify(db.tables.annunci), archiveBefore, "Archivio non modificato");
+  eq(JSON.stringify(db.tables.annunci_candidati.slice(0, 4)), candidatesBefore, "le 4 schede già presenti sono identiche campo per campo (compreso updated_at)");
   const notice = digestOf(db, "real-26-sei")!;
   eq(notice.dati_estratti.ricerca_subito.gia_in_archivio.map((entry: Any) => entry.id), ["669743222"], "annuncio dell'Archivio registrato nella notifica");
   eq(db.tables.annunci_candidati_notifiche.filter((n: Any) => String(n.source_email_id).startsWith("real-26-sei#")).length, 5, "notifiche tracciate per i 5 annunci con candidato");

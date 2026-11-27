@@ -5,12 +5,12 @@
 // salvataggio protetto e registro; database simulato con i vincoli di unicità. Nessuna rete.
 // Uso: deno test --allow-read=. supabase/functions/nmre-gmail-scheduled/subito_full_search_test.ts
 import { classifyMailbox, emailFromGmailMessage } from "./_shared/mailbox.ts";
-import { supabaseSubitoDeps } from "./_shared/subito_acquisition.ts";
+import { subitoItemRow, supabaseSubitoDeps } from "./_shared/subito_acquisition.ts";
 import {
   fetchWholeSubitoSearch, fullSearchSeller, professionalHint, subitoSellerFilter, planSubitoDuplicateMerge, saveFullSearchLogs, subitoFullSearchEnabled, subitoFullSearchRows,
   supabaseFullSearchDeps
 } from "./_shared/subito_full_search.ts";
-import { missingFieldsPatch, newSaveCounters, saveCandidateRow } from "./_shared/save_candidate.ts";
+import { newSaveCounters, saveCandidateRow } from "./_shared/save_candidate.ts";
 import { assertAllRowsSaved, IncompleteSyncError, processRowsIsolated } from "./_shared/row_isolation.ts";
 import { sellerClassificationDetails } from "./_shared/parser.ts";
 import { parseSubitoResultsPage, subitoSearchPageUrl } from "./_shared/subito.ts";
@@ -243,7 +243,7 @@ Deno.test("3-bis · limite di pagine per ciclo: lettura parziale dichiarata, com
   eq(digest(db).dati_estratti.ricerca_subito.nuovo_tentativo, false, "ricerca non più in attesa di recupero");
 });
 
-Deno.test("4 · annuncio già in Opportunità: nessuna seconda scheda, solo i campi vuoti completati, note e dati manuali intatti", async () => {
+Deno.test("4 · annuncio già in Opportunità: nessuna seconda scheda e NESSUN dato modificato, nemmeno i campi vuoti", async () => {
   const [known] = ids(0, 1);
   const db = fakeSupabase({
     annunci_candidati: [{
@@ -254,6 +254,7 @@ Deno.test("4 · annuncio già in Opportunità: nessuna seconda scheda, solo i ca
     }],
     annunci_candidati_notifiche: [{ owner_id: OWNER, candidate_id: "seed-1", source_email_id: "old", listing_price: 150000, notified_at: "2026-11-20T10:00:00Z" }]
   });
+  const before = JSON.stringify(db.tables.annunci_candidati.find((row: Any) => row.dedup_key === "subito:" + known));
   const web = site([[{ id: known, company: false, size: 80 }, ...ids(1, 2).map(id => ({ id, company: false }))]]);
   const { counters } = await cycle(db, [realEmail("e-1")], web.fetchPage);
   const rows = cards(db).filter((row: Any) => row.dedup_key === "subito:" + known);
@@ -261,13 +262,62 @@ Deno.test("4 · annuncio già in Opportunità: nessuna seconda scheda, solo i ca
   const row = rows[0];
   eq([row.titolo, row.stato, row.tipo_venditore, row.note, row.superficie_mq], ["Titolo scritto a mano", "contattato", "Privato", "Nota manuale da conservare", 95],
     "titolo, stato, classificazione, note e superficie (95, non 80) non sovrascritti");
-  eq(row.comune, "Ancona", "comune vuoto completato");
+  eq(row.comune, null, "campo vuoto NON completato");
+  eq(JSON.stringify(row), before, "scheda esistente identica, campo per campo (compreso updated_at)");
   eq(row.dati_estratti.subito.descrizione, "Descrizione inserita prima", "dato Subito già presente non sostituito");
   eq(row.dati_estratti.appunti, "x", "altri dati conservati");
   eq(db.tables.annunci_candidati_notifiche.filter((n: Any) => n.candidate_id === row.id).length, 1, "prezzo invariato: nessuna nuova notifica nello storico");
   eq(counters.sightingsWithoutChanges, 1, "ritrovamento senza novità");
   eq(cards(db).length, 3, "le altre due diventano nuove schede");
   eq(logs(db)[0].gia_in_opportunita, 1, "registro: un annuncio già in Opportunità");
+});
+
+Deno.test("4-ter · annuncio scartato ritrovato con un ribasso: MAI riaperto né modificato, nuovo prezzo solo nello storico", async () => {
+  const [known] = ids(0, 1);
+  const db = fakeSupabase({
+    annunci_candidati: [{ owner_id: OWNER, stato: "scartato", titolo: "Scartato a mano", comune: "Ancona", prezzo: 160000, dedup_key: "subito:" + known,
+      listing_key: "subito.it/appartamenti/appartamento-prova-ancona-" + known + ".htm", source_email_id: "old",
+      dati_estratti: { storico_stato: [{ data: "2026-11-20T10:00:00Z", origine: "utente", azione: "scartato", motivo: "Prezzo alto" }] } }],
+    annunci_candidati_notifiche: [{ owner_id: OWNER, candidate_id: "seed-1", source_email_id: "old", listing_price: 160000, notified_at: "2026-11-20T10:00:00Z" }]
+  });
+  const before = JSON.stringify(db.tables.annunci_candidati[0]);
+  const { counters } = await cycle(db, [realEmail("e-1")], site([[{ id: known, company: false, price: 140000 }]]).fetchPage);
+  eq(JSON.stringify(db.tables.annunci_candidati[0]), before, "scheda scartata identica: stato, storico e dati invariati");
+  eq([counters.reopenedOnPriceDrop, counters.notificationsAfterDiscard], [0, 0], "nessuna riapertura e nessun contrassegno");
+  const history = db.tables.annunci_candidati_notifiche.filter((n: Any) => n.candidate_id === "seed-1");
+  eq([history.length, history[1]?.listing_price, history[1]?.previous_price], [2, 140000, 160000], "nuovo prezzo e ribasso registrati nello storico");
+  eq(cards(db).length, 1, "nessuna nuova scheda per l'annuncio scartato");
+});
+
+Deno.test("4-quater · link senza titolo (/<categoria>/<id>.htm): stesso ID riconosciuto in Opportunità e in Archivio", async () => {
+  const [inCandidates, inArchive, fresh] = ids(0, 3);
+  const db = fakeSupabase({
+    annunci_candidati: [{ owner_id: OWNER, stato: "scartato", dedup_key: "gmail:x", source_email_id: "x",
+      listing_key: "subito.it/appartamenti/" + inCandidates + ".htm", dati_estratti: {} }],
+    annunci: [{ owner_id: OWNER, url: "https://www.subito.it/appartamenti/" + inArchive + ".htm", listing_key: null, deleted_at: "2026-11-01T00:00:00Z" }]
+  });
+  await cycle(db, [realEmail("e-1")], site([[inCandidates, inArchive, fresh].map(id => ({ id, company: false }))]).fetchPage);
+  eq(cards(db).map((row: Any) => row.dedup_key), ["subito:" + fresh], "solo l'annuncio davvero nuovo");
+  eq([logs(db)[0].gia_in_opportunita, logs(db)[0].gia_in_archivio], [1, 1], "riconosciuti in Opportunità (scartato) e in Archivio (cestino)");
+});
+
+Deno.test("4-quinquies · scheda Subito già presente senza chiave dell'immobile: nemmeno la chiave viene aggiunta", async () => {
+  const [known] = ids(0, 1);
+  const db = fakeSupabase({ annunci_candidati: [{ owner_id: OWNER, stato: "da_verificare", titolo: "Inserita prima", comune: null, listing_key: null,
+    dedup_key: "subito:" + known, source_email_id: "old", dati_estratti: {} }] });
+  const before = JSON.stringify(db.tables.annunci_candidati[0]);
+  await cycle(db, [realEmail("e-1")], site([[{ id: known, company: false }]]).fetchPage);
+  eq(db.tables.annunci_candidati.filter((row: Any) => row.dedup_key?.startsWith("subito:")).length, 1, "nessuna seconda scheda");
+  eq(JSON.stringify(db.tables.annunci_candidati[0]), before, "scheda identica: listing_key resta vuota");
+});
+
+Deno.test("ricerca salvata (percorso dell'email): segnali di agenzia nel testo → «Da verificare» in coda, mai «Agenzia»", () => {
+  const item = { id: "700000001", url: "https://www.subito.it/appartamenti/prova-700000001.htm", title: "Agenzia Rossi propone", description: null, price: null,
+    location: null, surfaceMq: null, rooms: null, images: [], publishedAt: null, advertiserCompany: false };
+  const row = subitoItemRow(item, { owner: OWNER, email: { id: "e-1", from: "Subito <noreply@subito.it>", subject: "x", date: "Thu, 26 Nov 2026 08:24:27 +0000" },
+    digest: emailEntries([realEmail("e-1")])[0].digest, nowIso: NOW,
+    classifySeller: () => ({ classification: "Agenzia" as const, confidence: 95, evidence: "Venditore indicato come agenzia" }) }, { pageSource: "next_data" });
+  eq([row.tipo_venditore, row.stato, /segnali di agenzia/.test(row.seller_evidence)], ["Da verificare", "da_verificare", true], "in coda, da verificare, con la spiegazione");
 });
 
 Deno.test("4-bis · annuncio ritrovato con un prezzo diverso: storico aggiornato, dati della scheda invariati", async () => {
@@ -459,6 +509,5 @@ Deno.test("unificazione sicura (piano, nessuna scrittura): campi vuoti completat
   eq(plan.fill, { comune: "Ancona", contact_id: "c-9" }, "campi vuoti completati, contatto conservato");
   eq(Object.keys(plan.conflicts).sort(), ["note", "titolo"], "valori diversi (note, titolo) conservati come alternative");
   eq([plan.moveNotifications, plan.deleteDuplicate], [true, false], "storico spostato, duplicato non cancellato");
-  eq(missingFieldsPatch({ comune: "Osimo", prezzo: null, titolo: "Annuncio Subito 700000001", dati_estratti: {} }, { comune: "Ancona", prezzo: 1, titolo: "Bilocale" }, NOW),
-    { prezzo: 1, titolo: "Bilocale", updated_at: NOW }, "completamento: solo campi vuoti e titolo provvisorio");
+
 });
