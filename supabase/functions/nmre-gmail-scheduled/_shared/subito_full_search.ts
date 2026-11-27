@@ -29,6 +29,14 @@ import type { SellerResult } from "./retention.ts";
 export const SUBITO_FULL_MAX_PAGES_PER_SEARCH = 10;
 /** Pagine lette al massimo in un ciclo, per tutte le ricerche (limite di tempo della funzione). */
 export const SUBITO_FULL_MAX_PAGES_PER_RUN = 12;
+/**
+ * Notifiche singole al massimo per sincronizzazione di una ricerca. Oltre (tipicamente la
+ * prima sincronizzazione di una ricerca ampia, o la ripresa dopo un blocco) TUTTE le schede
+ * vengono create comunque, contrassegnate con notifica_raggruppata (nessuna notifica per
+ * scheda, condizione del trigger nella migrazione 20261126210000), e una sola scheda
+ * riepilogativa della ricerca genera una notifica normale.
+ */
+export const SUBITO_FULL_MAX_SINGLE_NOTIFICATIONS = 10;
 /** Pausa tra una pagina e la successiva della stessa ricerca (richieste non ravvicinate). */
 export const SUBITO_FULL_PAGE_DELAY_MS = 1500;
 
@@ -42,8 +50,10 @@ Object.assign(SUBITO_REASON_TEXT, {
   ricerca_parziale_bloccata: "Ricerca letta solo in parte: una pagina successiva è protetta o non raggiungibile (non aggirata)",
   paginazione_non_verificabile: "Subito non ha confermato il numero della pagina successiva: lettura fermata senza supposizioni",
   paginazione_ripetuta: "La pagina successiva ripete annunci già letti: lettura fermata",
+  pagina_successiva_non_valida: "La pagina successiva non corrisponde alla ricerca (filtri diversi, per esempio sugli inserzionisti) o è vuota: lettura fermata",
   totale_non_dichiarato: "La pagina non dichiara quante pagine ha la ricerca: letti solo gli annunci mostrati",
-  assorbita: "Ricerca aggiornata dall'email più recente della stessa ricerca nello stesso ciclo"
+  assorbita: "Ricerca aggiornata dall'email più recente della stessa ricerca nello stesso ciclo",
+  notifica_raggruppata: "Molte nuove opportunità in una sola sincronizzazione: create tutte, con una sola notifica riepilogativa"
 });
 
 export type FullSearchFetch = {
@@ -97,6 +107,7 @@ export async function fetchWholeSubitoSearch(
     if (!url) return finish("parziale", "paginazione_non_verificabile");
     if (deps.sleep) await deps.sleep(SUBITO_FULL_PAGE_DELAY_MS);
     const next = await readSubitoResultsPage(url, digest.searchUrl, digest.searchKey, deps.fetchPage);
+    if (next.error === "pagina_vuota") return finish("parziale", "pagina_successiva_non_valida");
     if (next.error || !next.page) return finish("parziale", "ricerca_parziale_bloccata");
     if (next.page.source !== "next_data" || next.page.pageNumber !== number) return finish("parziale", "paginazione_non_verificabile");
     result.pagesRead++;
@@ -147,6 +158,22 @@ export async function classifyFullSearchItems(items: SubitoItem[], deps: FullSea
 }
 
 // ---------- Inserzionista ----------
+
+/**
+ * Filtro sugli inserzionisti letto dal link della ricerca (stessa regola dell'importatore
+ * da browser in index.html): solo contesto registrato, mai una classificazione da solo.
+ */
+export function subitoSellerFilter(searchUrl: string | null): { status: "privati" | "non_privati" | "non_rilevato"; evidence: string } {
+  let url: URL;
+  try { url = new URL(String(searchUrl || "")); } catch { return { status: "non_rilevato", evidence: "Link della ricerca non leggibile" }; }
+  const segments = url.pathname.toLowerCase().split("/").filter(Boolean);
+  const advt = (url.searchParams.get("advt") || "").split(",").map(value => value.trim()).filter(Boolean);
+  if (advt.includes("1")) return { status: "non_privati", evidence: "La ricerca comprende inserzionisti aziendali (advt=" + advt.join(",") + ")" };
+  if (segments.includes("da-aziende")) return { status: "non_privati", evidence: "La ricerca è limitata alle aziende (/da-aziende/)" };
+  if (segments.includes("da-privati")) return { status: "privati", evidence: "Filtro privati nel link della ricerca (/da-privati/)" };
+  if (advt.length && advt.every(value => value === "0" || value === "2")) return { status: "privati", evidence: "Filtro privati nel link della ricerca (advt=" + advt.join(",") + ")" };
+  return { status: "non_rilevato", evidence: "Nessun filtro sugli inserzionisti nel link della ricerca" };
+}
 
 const PROFESSIONAL_HINT = /\b(?:agenzi[ae]|agente immobiliare|provvigion[ei]|mediazione|intermediazione|studio immobiliare|societ[aà] immobiliare|real estate|tecnocasa|tempocasa|gabetti|re\/?max|professionecasa|engel\s*&\s*v[oö]lkers|iad italia)\b/gi;
 const NEGATED_HINT = /\b(?:no|niente|senza|astenersi|non\s+(?:si\s+)?accettano|esclus[ei]|non\s+tratto\s+con)\s+(?:le\s+|gli\s+|con\s+)?$/i;
@@ -203,6 +230,8 @@ export type FullSearchLog = {
   professionali: number;
   possibili_duplicati: number;
   duplicati_da_unificare: number;
+  /** true se le nuove schede non hanno notifiche singole ma una sola notifica riepilogativa. */
+  notifica_raggruppata: boolean;
   tentativi: number;
   nuovo_tentativo: boolean;
   dettagli: Record<string, unknown>;
@@ -252,7 +281,7 @@ export function fullSearchItemRow(item: SubitoItem, ctx: SubitoRowContext, detai
 export async function subitoFullSearchRows(
   entries: Array<{ email: SubitoEmail; digest: SubitoDigest }>,
   deps: FullSearchDeps,
-  ctx: { owner: string; classifySeller(text: string): SellerResult; now?: () => string; maxPagesPerRun?: number; maxPagesPerSearch?: number }
+  ctx: { owner: string; classifySeller(text: string): SellerResult; now?: () => string; maxPagesPerRun?: number; maxPagesPerSearch?: number; maxSingleNotifications?: number }
 ): Promise<FullSearchCycleResult> {
   const now = ctx.now || (() => new Date().toISOString());
   let budget = ctx.maxPagesPerRun ?? SUBITO_FULL_MAX_PAGES_PER_RUN;
@@ -275,7 +304,7 @@ export async function subitoFullSearchRows(
         url_ricerca: digest.searchUrl, email_ricevuta_il: emailIso(email.date), eseguita_il: rowContext.nowIso,
         esito: "completa", motivo: "ricerca_completa", motivo_testo: "", pagine_lette: 0, pagine_dichiarate: null,
         annunci_dichiarati_ricerca: null, annunci_trovati: 0, nuove_opportunita: 0, gia_in_opportunita: 0, gia_in_archivio: 0,
-        da_verificare: 0, professionali: 0, possibili_duplicati: 0, duplicati_da_unificare: 0, tentativi: attemptsOf(existing),
+        da_verificare: 0, professionali: 0, possibili_duplicati: 0, duplicati_da_unificare: 0, notifica_raggruppata: false, tentativi: attemptsOf(existing),
         nuovo_tentativo: false, dettagli: {}
       };
       if (digest.searchKey && latestBySearch.get(digest.searchKey) !== gmailId) {
@@ -330,7 +359,21 @@ export async function subitoFullSearchRows(
         if (entry.possibleDuplicates.length) log.possibili_duplicati++;
       }
       log.duplicati_da_unificare = toUnify.length;
+      // Troppe nuove schede in una sincronizzazione: tutte create, nessuna notifica singola,
+      // una sola notifica dalla scheda riepilogativa (creata qui sotto).
+      const grouped = inserted.length > (ctx.maxSingleNotifications ?? SUBITO_FULL_MAX_SINGLE_NOTIFICATIONS);
+      if (grouped) {
+        log.notifica_raggruppata = true;
+        const newIds = new Set(inserted.map(entry => entry.id));
+        for (const row of result.rows) {
+          if (row.subito_ad_id && newIds.has(row.subito_ad_id) && !row.sighting_only && row.dati_estratti?.subito?.acquisizione === "intera_ricerca"
+            && row.dati_fonte?.source_email_id === gmailId) row.dati_estratti.subito.notifica_raggruppata = true;
+        }
+      }
+      const sellerFilter = subitoSellerFilter(digest.searchUrl);
       log.dettagli = {
+        filtro_venditore: sellerFilter.status,
+        filtro_venditore_prova: sellerFilter.evidence,
         voci_non_leggibili: fetched.skipped,
         nuove: inserted.slice(0, 100),
         gia_in_archivio: archived.slice(0, 100).map(entry => ({ id: entry.id, annuncio_id: entry.annuncio_id, eliminato_dall_archivio: entry.eliminato })),
@@ -339,12 +382,21 @@ export async function subitoFullSearchRows(
       result.logs.push(log);
       // Riga della notifica: solo se serve un nuovo tentativo (ricerca in attesa di
       // recupero, visibile in Opportunità con il motivo) o se esisteva già (si chiude).
-      if (fetched.status !== "completa" || existing) {
-        result.rows.push(subitoDigestRow(rowContext, {
+      if (fetched.status !== "completa" || existing || grouped) {
+        const digestRow = subitoDigestRow(rowContext, {
           ...emptyAcquisition(),
           status: fetched.status === "completa" ? "completo" : fetched.status === "parziale" ? "da_verificare" : "errore",
-          reason: fetched.reason, archived, pageSource: fetched.source, pageCount: fetched.items.length, attempts, retry
-        }, inserted));
+          reason: fetched.status === "completa" && grouped ? "notifica_raggruppata" : fetched.reason,
+          archived, pageSource: fetched.source, pageCount: fetched.items.length, attempts, retry
+        }, inserted);
+        if (grouped) {
+          // Unica notifica della sincronizzazione: il titolo dice quante opportunità sono arrivate.
+          const label = digest.searchLabel || "ricerca salvata";
+          digestRow.titolo = ("Ricerca salvata Subito · " + label + " · " + inserted.length + " nuove opportunità"
+            + (fetched.status === "completa" ? "" : " (lettura da completare)")).slice(0, 250);
+          Object.assign(digestRow.dati_estratti.ricerca_subito, { notifica_raggruppata: true, nuove_opportunita: inserted.length, motivo_lettura: fetched.reason });
+        }
+        result.rows.push(digestRow);
       }
     } catch (error) {
       result.failures.push({ sourceEmailId: gmailId, reason: error instanceof Error ? error.message.slice(0, 160) : "errore sconosciuto" });

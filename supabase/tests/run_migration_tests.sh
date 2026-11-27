@@ -309,6 +309,10 @@ UNPROVEN='{"subito":{"id":"669796300","novita_non_dimostrata":true}}'
 expect "prima della migrazione: una scheda con novità non dimostrata notifica" 1 "$(notify_with "'Da verificare'" "$UNPROVEN")"
 psql_db -f "$QUIET" >/dev/null
 expect "dopo: scheda con novità non dimostrata senza notifica" 0 "$(notify_with "'Da verificare'" "$UNPROVEN")"
+GROUPED='{"subito":{"id":"700000001","acquisizione":"intera_ricerca","notifica_raggruppata":true}}'
+expect "dopo: scheda dell'intera ricerca con notifica raggruppata senza notifica" 0 "$(notify_with "'Privato'" "$GROUPED")"
+expect "dopo: riepilogo della prima sincronizzazione notifica (una per ricerca)" 1 "$(notify_with "'Da verificare'" '{"ricerca_subito":{"stato":"completo","motivo":"notifica_raggruppata"}}')"
+expect "dopo: scheda dell'intera ricerca senza raggruppamento notifica" 1 "$(notify_with "'Privato'" '{"subito":{"id":"700000002","acquisizione":"intera_ricerca"}}')"
 expect "dopo: scheda Subito con novità dimostrata notifica" 1 "$(notify_with "'Da verificare'" '{"subito":{"id":"669796301"}}')"
 expect "dopo: scheda riepilogativa dell'email notifica (una per email)" 1 "$(notify_with "'Da verificare'" '{"ricerca_subito":{"stato":"da_verificare"}}')"
 expect "dopo: privato da altri portali notifica" 1 "$(notify_with "'Privato'" '{}')"
@@ -324,6 +328,7 @@ expect "backup della definizione protetta salvato" 1 "$(psql_db -At -c "select c
 psql_db -f "$QUIET_RB" >/dev/null
 expect "rollback: definizione identica alla protezione delle agenzie" "$guarded_def" "$(psql_db -At -c "select pg_get_triggerdef(oid) from pg_trigger where tgname='nmre_notify_candidate_insert'")"
 expect "rollback: la scheda con novità non dimostrata torna a notificare" 1 "$(notify_with "'Da verificare'" "$UNPROVEN")"
+expect "rollback: la scheda con notifica raggruppata torna a notificare" 1 "$(notify_with "'Privato'" "$GROUPED")"
 expect "rollback: le agenzie restano protette" 0 "$(notify_with "'Agenzia'" '{}')"
 psql_db -c "alter table public.annunci_candidati disable trigger nmre_notify_candidate_insert" >/dev/null
 psql_db -c "delete from private.nmre_trigger_definition_backups where migration='20261126210000_quiet_unproven_subito_candidates'" >/dev/null

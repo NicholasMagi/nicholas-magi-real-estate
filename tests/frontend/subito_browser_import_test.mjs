@@ -114,7 +114,7 @@ const row = build(parsed.items[0], parsed.meta, "00000000-0000-4000-8000-0000000
 assert.equal(row.owner_id, "00000000-0000-4000-8000-000000000001");
 assert.equal(row.dedup_key, "subito:669796300");
 assert.equal(row.listing_key, "subito.it/appartamenti/piazza-diaz-ancona-669796300.htm");
-assert.equal(row.tipo_venditore, "Privato", "il filtro privati della ricerca preclassifica il venditore");
+assert.equal(row.tipo_venditore, "Privato", "Subito indica un privato per l'annuncio e il testo non lo contraddice");
 assert.equal(row.stato, "da_verificare");
 assert.equal(row.data_pubblicazione, null, "non inventa una data email");
 assert.equal(row.dati_fonte.received_at, null, "l'importazione browser non viene spacciata per una notifica Gmail");
@@ -122,17 +122,55 @@ assert.equal(row.dati_estratti.subito.novita_non_dimostrata, true);
 assert.equal(row.dati_estratti.subito.inserzionista_professionale, false);
 assert.equal(row.dati_estratti.subito.pubblicato_il, "2026-11-26T08:00:00.000Z");
 assert.equal(row.dati_estratti.subito.immagini.length, 1);
-assert.equal(row.seller_confidence, 95);
+assert.equal(row.seller_confidence, 90);
 assert.match(row.seller_evidence, /inserzionista privato/);
-assert.equal(row.dati_fonte.seller_filter_applied, true);
+assert.match(row.seller_evidence, /Coerente con il filtro privati/);
+assert.equal(row.dati_fonte.seller_filter_applied, true, "filtro privati letto dal link (/da-privati/)");
 assert.equal(row.dati_fonte.seller_filter, "privati");
+assert.match(row.dati_fonte.seller_filter_evidence, /da-privati/);
 assert.equal(row.dati_estratti.subito.filtro_venditore, "privati");
+assert.equal(row.dati_estratti.subito.venditore_preclassificato_da_filtro, false, "il filtro non classifica mai da solo");
+assert.equal(row.dati_estratti.subito.classificazione_venditore, "dato_subito");
 const noIndividualFlag = build(parsed.items[1], parsed.meta, "00000000-0000-4000-8000-000000000001", "batch123");
-assert.equal(noIndividualFlag.tipo_venditore, "Privato", "si usa il filtro utente anche quando la scheda non espone il tipo");
-assert.equal(noIndividualFlag.seller_confidence, 85);
+assert.equal(noIndividualFlag.tipo_venditore, "Da verificare", "tipo non indicato dalla scheda: non verificabile, anche con il filtro privati");
+assert.equal(noIndividualFlag.seller_confidence, 0);
+assert.equal(noIndividualFlag.dati_estratti.subito.classificazione_venditore, "non_verificabile");
+assert.match(noIndividualFlag.seller_evidence, /non basta da solo/);
+// Assenza della dicitura «Agenzia» non basta: testo con riferimenti professionali → Da verificare.
+const professionalText = build({ ...parsed.items[0], description: "Per info contattare l'agenzia, provvigione 3%" }, parsed.meta, "00000000-0000-4000-8000-000000000001", "batch123");
+assert.equal(professionalText.tipo_venditore, "Da verificare", "privato secondo Subito ma testo professionale: Da verificare");
+assert.equal(professionalText.dati_estratti.subito.classificazione_venditore, "testo_professionale");
+const negated = build({ ...parsed.items[0], description: "Vendo direttamente, no agenzie" }, parsed.meta, "00000000-0000-4000-8000-000000000001", "batch123");
+assert.equal(negated.tipo_venditore, "Privato", "«no agenzie» non è un riferimento professionale");
+// Filtro della ricerca controllato, non presunto.
+for (const [url, status] of [
+  ["https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/da-privati/?order=datedesc", "privati"],
+  ["https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2", "privati"],
+  ["https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0", "privati"],
+  ["https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C1", "non_privati"],
+  ["https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/da-aziende/", "non_privati"],
+  ["https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/", "non_rilevato"]
+]) {
+  const meta = { ...parsed.meta, searchUrl: url };
+  const built = build(parsed.items[0], meta, "00000000-0000-4000-8000-000000000001", "batch123");
+  assert.equal(built.dati_fonte.seller_filter, status, "filtro di " + url);
+  assert.equal(built.dati_fonte.seller_filter_applied, status === "privati", "filtro applicato solo se privati: " + url);
+  assert.equal(built.tipo_venditore, "Privato", "il dato di Subito sull'annuncio resta valido: " + url);
+  const unknown = build(parsed.items[1], meta, "00000000-0000-4000-8000-000000000001", "batch123");
+  assert.equal(unknown.tipo_venditore, "Da verificare", "senza dato sull'annuncio mai privato: " + url);
+}
+// Stessa regola dei riferimenti professionali nell'app e nel server.
+const serverSource = readFileSync("supabase/functions/nmre-gmail-scheduled/_shared/subito_full_search.ts", "utf8");
+const serverHint = serverSource.match(/const PROFESSIONAL_HINT = (\/.+\/gi);/)[1];
+const appHint = html.match(/const NMRE_SUBITO_PROFESSIONAL_HINT=(\/.+\/gi);/)[1];
+assert.equal(appHint, serverHint, "regola dei riferimenti professionali identica nell'app e nel server");
+const serverNegated = serverSource.match(/const NEGATED_HINT = (\/.+\/i);/)[1];
+const appNegated = html.match(/const NMRE_SUBITO_NEGATED_HINT=(\/.+\/i);/)[1];
+assert.equal(appNegated, serverNegated, "regola delle negazioni identica nell'app e nel server");
 const professionalConflict = build({ ...parsed.items[0], advertiser_company: true }, parsed.meta, "00000000-0000-4000-8000-000000000001", "batch123");
 assert.equal(professionalConflict.tipo_venditore, "Da verificare", "una dichiarazione esplicita di inserzionista professionale prevale sul filtro");
 assert.equal(professionalConflict.seller_confidence, 0);
 assert.equal(row.email_subject, "Importazione manuale dalla pagina Subito");
 
-console.log("Importazione Subito da browser: parsing, validazioni, deduplica e classificazione del filtro privati verificate.");
+assert.ok(!/preclassificato come «Privato» in base al filtro|preclassifica il venditore come «Privato»/.test(html), "nessun testo dell'app promette la classificazione dal solo filtro");
+console.log("Importazione Subito da browser: parsing, validazioni, filtro della ricerca controllato e classificazione prudente verificati.");

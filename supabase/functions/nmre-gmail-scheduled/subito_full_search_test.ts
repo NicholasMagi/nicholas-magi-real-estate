@@ -7,7 +7,7 @@
 import { classifyMailbox, emailFromGmailMessage } from "./_shared/mailbox.ts";
 import { supabaseSubitoDeps } from "./_shared/subito_acquisition.ts";
 import {
-  fetchWholeSubitoSearch, fullSearchSeller, professionalHint, planSubitoDuplicateMerge, saveFullSearchLogs, subitoFullSearchEnabled, subitoFullSearchRows,
+  fetchWholeSubitoSearch, fullSearchSeller, professionalHint, subitoSellerFilter, planSubitoDuplicateMerge, saveFullSearchLogs, subitoFullSearchEnabled, subitoFullSearchRows,
   supabaseFullSearchDeps
 } from "./_shared/subito_full_search.ts";
 import { missingFieldsPatch, newSaveCounters, saveCandidateRow } from "./_shared/save_candidate.ts";
@@ -140,20 +140,64 @@ Deno.test("1 · email di una ricerca conosciuta: ricerca riconosciuta, filtri (p
   eq(logs(db).length, 1, "una riga di registro");
   eq(logs(db)[0].ricerca_chiave, SEARCH_KEY, "ricerca riconosciuta");
   eq(logs(db)[0].ricerca_nome, "Appartamenti a Ancona e provincia", "nome della ricerca");
+  eq(logs(db)[0].dettagli.filtro_venditore, "privati", "filtro privati riconosciuto nel link e registrato");
 });
 
-Deno.test("2 · più annunci di quelli citati nell'email: entrano tutti, senza selezione manuale", async () => {
+Deno.test("1-bis · filtro privati controllato su ogni pagina: una pagina con filtri diversi viene rifiutata, nessuna classificazione dal solo filtro", async () => {
   const db = fakeSupabase();
-  const web = site([ids(0, 30).map(id => ({ id, company: false }))]);
+  const lost = pageHtml(ids(30, 30).map(id => ({ id })), { page: 2, totalPages: 2 }).replace(/"advt":"0,2"/g, '"advt":"0,1"');
+  const web = site([ids(0, 30), ids(30, 30)].map(list => list.map(id => ({ id }))), { 2: { html: lost } });
   await cycle(db, [realEmail("e-1")], web.fetchPage);
-  eq(cards(db).length, 30, "30 schede (l'email ne dichiarava 3)");
+  eq([logs(db)[0].esito, logs(db)[0].motivo], ["parziale", "pagina_successiva_non_valida"], "pagina con il filtro cambiato: lettura fermata");
+  eq(cards(db).length, 30, "nessun annuncio della ricerca diversa");
+  eq(cards(db).every((row: Any) => row.tipo_venditore === "Da verificare"), true, "filtro privati presente ma tipo non indicato dalle schede: tutte Da verificare");
+  for (const [url, status] of [
+    ["https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/da-privati/", "privati"],
+    ["https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C2", "privati"],
+    ["https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/?advt=0%2C1", "non_privati"],
+    ["https://www.subito.it/annunci-marche/vendita/appartamenti/ancona/", "non_rilevato"]
+  ] as const) eq(subitoSellerFilter(url).status, status, "filtro di " + url);
+});
+
+Deno.test("2 · più annunci di quelli citati nell'email: entrano tutti, senza selezione manuale, con la normale notifica", async () => {
+  const db = fakeSupabase();
+  const web = site([ids(0, 10).map(id => ({ id, company: false }))]);
+  await cycle(db, [realEmail("e-1")], web.fetchPage);
+  eq(cards(db).length, 10, "10 schede (l'email ne dichiarava 3)");
   eq(cards(db).every((row: Any) => row.stato === "da_verificare"), true, "tutte in Nuove opportunità");
-  eq(cards(db).every((row: Any) => !row.dati_estratti.subito.novita_non_dimostrata), true,
-    "nessun contrassegno di novità non dimostrata: si applica la normale notifica di nuova opportunità");
-  eq(logs(db)[0].nuove_opportunita, 30, "registro: 30 nuove");
-  eq(logs(db)[0].annunci_trovati, 30, "registro: 30 trovati");
-  eq(digest(db), undefined, "nessuna scheda riepilogativa quando la ricerca è completa");
+  eq(cards(db).every((row: Any) => !row.dati_estratti.subito.novita_non_dimostrata && !row.dati_estratti.subito.notifica_raggruppata), true,
+    "nessun contrassegno: fino a 10 nuove schede ognuna ha la normale notifica di nuova opportunità");
+  eq([logs(db)[0].nuove_opportunita, logs(db)[0].annunci_trovati, logs(db)[0].notifica_raggruppata], [10, 10, false], "registro");
+  eq(digest(db), undefined, "nessuna scheda riepilogativa quando la ricerca è completa e le notifiche sono singole");
   eq(db.state.rpcCalls.filter(call => call.name === "nmre_auto_archive_private_candidate").length, 0, "nessuna archiviazione automatica");
+});
+
+Deno.test("2-bis · prima sincronizzazione di una ricerca ampia: tutte le schede create, una sola notifica riepilogativa", async () => {
+  const db = fakeSupabase();
+  const pages = Array.from({ length: 9 }, (_, page) => ids(page * 30, page === 8 ? 23 : 30).map(id => ({ id, company: false })));
+  await cycle(db, [realEmail("e-1")], site(pages).fetchPage);
+  eq(cards(db).length, 263, "263 schede: nessuna opportunità persa");
+  eq(cards(db).every((row: Any) => row.dati_estratti.subito.notifica_raggruppata === true && row.stato === "da_verificare"), true,
+    "tutte in Nuove opportunità, senza notifica singola (condizione del trigger)");
+  const summary = digest(db);
+  eq(summary.titolo, "Ricerca salvata Subito · Appartamenti a Ancona e provincia · 263 nuove opportunità", "titolo dell'unica notifica");
+  eq([summary.stato, summary.tipo_venditore, summary.dati_estratti.subito], ["da_verificare", "Da verificare", undefined],
+    "la scheda riepilogativa è una normale opportunità senza contrassegno: genera la sua notifica");
+  eq([summary.dati_estratti.ricerca_subito.notifica_raggruppata, summary.dati_estratti.ricerca_subito.nuove_opportunita], [true, 263], "riepilogo");
+  eq([logs(db)[0].notifica_raggruppata, logs(db)[0].nuove_opportunita], [true, 263], "registro");
+  const notifying = db.tables.annunci_candidati.filter((row: Any) => row.stato === "da_verificare" && row.tipo_venditore !== "Agenzia"
+    && row.dati_estratti?.subito?.notifica_raggruppata !== true && row.dati_estratti?.subito?.novita_non_dimostrata !== true);
+  eq(notifying.length, 1, "con la condizione del trigger: una sola notifica invece di 263");
+  // Sincronizzazione successiva con 3 nuovi annunci: notifiche singole normali, nessun nuovo riepilogo.
+  await cycle(db, [realEmail("e-2", "Fri, 27 Nov 2026 08:24:27 +0000")], site([[...ids(900, 3), ...ids(0, 27)].map(id => ({ id, company: false }))]).fetchPage);
+  const fresh = cards(db).filter((row: Any) => ids(900, 3).includes(row.dedup_key.slice(7)));
+  eq(fresh.length, 3, "3 nuove schede");
+  eq(fresh.every((row: Any) => !row.dati_estratti.subito.notifica_raggruppata), true, "notifiche singole per le nuove");
+  eq(digest(db, "e-2"), undefined, "nessun riepilogo per poche novità");
+  // Rielaborazione della prima email: nessuna nuova scheda e nessuna nuova notifica riepilogativa.
+  const before = db.tables.annunci_candidati.length;
+  await cycle(db, [realEmail("e-1")], site(pages).fetchPage);
+  eq(db.tables.annunci_candidati.length, before, "nessun doppione, nessun nuovo riepilogo");
 });
 
 Deno.test("3 · ricerca con paginazione: tutte le pagine dichiarate, numero di pagina confermato", async () => {
@@ -337,7 +381,8 @@ Deno.test("11 · email rielaborata più volte e due email della stessa ricerca: 
   const web = site([ids(0, 30), ids(30, 4)].map(list => list.map(id => ({ id, company: false }))));
   for (let run = 0; run < 3; run++) await cycle(db, [realEmail("e-1")], web.fetchPage);
   eq(cards(db).length, 34, "34 schede dopo tre esecuzioni");
-  eq(db.tables.annunci_candidati_notifiche.length, 34, "una notifica per annuncio, nessuna ripetuta");
+  eq(db.tables.annunci_candidati_notifiche.filter((n: Any) => String(n.source_email_id).includes("#subito-")).length, 34, "una voce di storico per annuncio, nessuna ripetuta");
+  eq(db.tables.annunci_candidati_notifiche.filter((n: Any) => n.source_email_id === "e-1").length, 1, "una sola voce per la scheda riepilogativa (notifica raggruppata)");
   eq(logs(db).length, 1, "una riga di registro per l'email");
   eq([logs(db)[0].nuove_opportunita, logs(db)[0].gia_in_opportunita], [0, 34], "ultima esecuzione: nessuna nuova, 34 già presenti");
   const db2 = fakeSupabase();

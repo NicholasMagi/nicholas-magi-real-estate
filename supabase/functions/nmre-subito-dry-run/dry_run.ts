@@ -16,7 +16,7 @@ import type { SubitoItem } from "../nmre-gmail-scheduled/_shared/subito.ts";
 import { sellerClassificationDetails } from "../nmre-gmail-scheduled/_shared/parser.ts";
 import type { ReadOnlyDb, ReadOnlyGmail } from "./readonly.ts";
 
-export type DryRunRequest = { message_id?: string; subject: string; received_on: string };
+export type DryRunRequest = { message_id?: string; subject: string; received_on: string; modalita?: "singola_email" | "intera_ricerca" };
 
 const MAX_LISTED = 10;
 
@@ -43,7 +43,9 @@ export function validateRequest(body: any): { ok: true; request: DryRunRequest }
     return { ok: false, reason: "Indicare il giorno di ricezione nel formato AAAA-MM-GG (received_on)." };
   }
   if (id !== undefined && !/^[0-9a-zA-Z]{8,32}$/.test(id)) return { ok: false, reason: "message_id non valido." };
-  return { ok: true, request: { subject, received_on: day, message_id: id } };
+  const mode = body?.modalita === undefined || body?.modalita === null || body?.modalita === "" ? "singola_email" : String(body.modalita);
+  if (mode !== "singola_email" && mode !== "intera_ricerca") return { ok: false, reason: "modalita non valida: «singola_email» o «intera_ricerca»." };
+  return { ok: true, request: { subject, received_on: day, message_id: id, modalita: mode } };
 }
 
 export type EmailCandidate = { id: string; subject: string; received: string; da_subito: boolean; corrisponde: boolean };

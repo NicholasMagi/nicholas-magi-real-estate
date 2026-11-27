@@ -15,10 +15,17 @@
 -- email). Con questa migrazione quelle schede non generano notifiche: resta la
 -- notifica della scheda riepilogativa dell'email (una per email).
 --
+-- Stessa regola per le schede con dati_estratti.subito.notifica_raggruppata = true:
+-- nell'acquisizione dell'intera ricerca (NMRE_SUBITO_FULL_SEARCH), la prima
+-- sincronizzazione di una ricerca, o un ciclo con molte nuove schede, crea TUTTE le
+-- schede ma una sola notifica (quella della scheda riepilogativa della ricerca),
+-- invece di centinaia di notifiche contemporanee.
+--
 -- Scelta progettuale (come 20261126004257): la funzione del trigger NON viene
 -- riscritta. Si estende solo la condizione WHEN già protetta per le agenzie:
 --   WHEN (new.tipo_venditore IS DISTINCT FROM 'Agenzia'
---         AND coalesce(new.dati_estratti #>> '{subito,novita_non_dimostrata}', 'false') <> 'true')
+--         AND coalesce(new.dati_estratti #>> '{subito,novita_non_dimostrata}', 'false') <> 'true'
+--         AND coalesce(new.dati_estratti #>> '{subito,notifica_raggruppata}', 'false') <> 'true')
 -- Per tutti gli altri candidati il comportamento resta identico.
 --
 -- Sicurezze: definizione attuale salvata in private.nmre_trigger_definition_backups
@@ -61,8 +68,8 @@ begin
    where t.tgrelid = v_table and t.tgfoid = v_function and not t.tgisinternal;
   v_definition := pg_get_triggerdef(v_trigger.oid);
 
-  if v_definition ilike '%novita_non_dimostrata%' then
-    raise notice 'Trigger % già escluso per le schede con novità non dimostrata: nessuna modifica', v_trigger.tgname;
+  if v_definition ilike '%novita_non_dimostrata%' and v_definition ilike '%notifica_raggruppata%' then
+    raise notice 'Trigger % già escluso per le schede con novità non dimostrata o notifica raggruppata: nessuna modifica', v_trigger.tgname;
     return;
   end if;
 
@@ -83,9 +90,10 @@ begin
   execute format(
     'create trigger %I after insert on public.annunci_candidati for each row '
     'when (new.tipo_venditore is distinct from %L '
+    'and coalesce(new.dati_estratti #>> %L, %L) <> %L '
     'and coalesce(new.dati_estratti #>> %L, %L) <> %L) '
     'execute function private.nmre_notify_candidate_insert()',
-    v_trigger.tgname, 'Agenzia', '{subito,novita_non_dimostrata}', 'false', 'true');
+    v_trigger.tgname, 'Agenzia', '{subito,novita_non_dimostrata}', 'false', 'true', '{subito,notifica_raggruppata}', 'false', 'true');
 
   if v_trigger.tgenabled = 'D' then
     execute format('alter table public.annunci_candidati disable trigger %I', v_trigger.tgname);
@@ -95,7 +103,7 @@ begin
     execute format('alter table public.annunci_candidati enable replica trigger %I', v_trigger.tgname);
   end if;
 
-  if pg_get_triggerdef((select oid from pg_trigger where tgrelid = v_table and tgname = v_trigger.tgname)) not ilike '%novita_non_dimostrata%' then
+  if pg_get_triggerdef((select oid from pg_trigger where tgrelid = v_table and tgname = v_trigger.tgname)) not ilike '%notifica_raggruppata%' then
     raise exception 'Verifica finale non superata: condizione non applicata';
   end if;
   raise notice 'Trigger % aggiornato: le schede Subito con novità non dimostrata non generano notifiche', v_trigger.tgname;

@@ -2,7 +2,7 @@
 const dir = new URL("./", import.meta.url);
 const read = (name: string) => Deno.readTextFileSync(new URL(name, dir));
 const strip = (source: string) => source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
-const FILES = ["index.ts", "dry_run.ts", "readonly.ts", "gmail_auth.ts"];
+const FILES = ["index.ts", "dry_run.ts", "readonly.ts", "gmail_auth.ts", "full_search_dry_run.ts"];
 
 function check(ok: boolean, message: string) { if (!ok) throw new Error(message); }
 
@@ -12,7 +12,7 @@ Deno.test("nessuna operazione di scrittura sul database nel codice della prova",
     check(!/\.(insert|update|upsert|delete)\s*\(/.test(code), file + ": operazione di scrittura presente");
     check(!/nmre_save_|nmre_try_acquire|nmre_release|nmre_get_gmail_sync_state|nmre_notifications|annunci_candidati_notifiche/.test(code),
       file + ": RPC o tabella di scrittura, lock, cursore o notifiche citata nel codice");
-    check(!/saveCandidateRow|guardedCandidateUpdate|processRowsIsolated|subitoRowsForEmails|keptForReviewPatch/.test(code),
+    check(!/saveCandidateRow|guardedCandidateUpdate|processRowsIsolated|subitoRowsForEmails|subitoFullSearchRows|saveFullSearchLogs|nmre_subito_ricerche_sync|keptForReviewPatch/.test(code),
       file + ": funzione di salvataggio di produzione importata");
   }
 });
@@ -26,7 +26,7 @@ Deno.test("il client amministrativo è usato solo attraverso readOnlyDb", () => 
 });
 
 Deno.test("Gmail solo tramite readOnlyGmail: nessuna cronologia, watch o modifica", () => {
-  const code = strip(read("index.ts") + read("dry_run.ts"));
+  const code = strip(read("index.ts") + read("dry_run.ts") + read("full_search_dry_run.ts"));
   check(!/gmail\.googleapis\.com/.test(code), "URL Gmail scritto fuori dall'involucro di sola lettura");
   check(!/history|\/watch|\/modify|\/trash|labelIds\s*:/.test(code.replace(/historyId/g, "")), "cronologia, watch o modifica delle etichette");
 });

@@ -7,7 +7,7 @@ Supabase legge solo `supabase/migrations/`.
 | File | Contenuto | Stato |
 |---|---|---|
 | `20261125201000_gmail_dubious_alerts.sql` | Fase 2 · tabella `nmre_gmail_avvisi_dubbi` (avvisi dubbi) | **Non approvata, non applicata** |
-| `20261126210000_quiet_unproven_subito_candidates.sql` | Trigger dei nuovi candidati: nessuna notifica per le schede Subito con novità non dimostrata (prerequisito di `NMRE_SUBITO_ITEM_CANDIDATES=true`) | **Non approvata, non applicata** |
+| `20261126210000_quiet_unproven_subito_candidates.sql` | Trigger dei nuovi candidati: nessuna notifica per le schede Subito con novità non dimostrata o con notifica raggruppata (prerequisito di `NMRE_SUBITO_ITEM_CANDIDATES=true` e di `NMRE_SUBITO_FULL_SEARCH=true`) | **Non approvata, non applicata** |
 | `20261127020000_subito_search_sync_log.sql` | Registro delle sincronizzazioni delle ricerche Subito (nuova tabella `nmre_subito_ricerche_sync`, nessuna tabella esistente modificata), prerequisito di `NMRE_SUBITO_FULL_SEARCH=true` | **Non approvata, non applicata** |
 | `20261126200000_gmail_tokens_rpc_stable.sql` | `public.nmre_get_gmail_tokens()` dichiarata STABLE (solo volatilità), prerequisito della prova `nmre-subito-dry-run` | **Non approvata, non applicata** |
 
@@ -36,7 +36,9 @@ Quando la migrazione STABLE dei token sarà approvata:
 3. rollback: `supabase/rollback/20261126200000_gmail_tokens_rpc_stable.rollback.sql`.
 
 Quando l'acquisizione dell'intera ricerca Subito sarà approvata (dopo la prova reale):
-1. applicare dal SQL Editor `20261127020000_subito_search_sync_log.sql` (solo quel file);
-2. distribuire `nmre-gmail-scheduled` e solo dopo impostare `NMRE_SUBITO_FULL_SEARCH=true`;
-3. rollback: prima rimuovere `NMRE_SUBITO_FULL_SEARCH`, poi eseguire
+1. applicare dal SQL Editor `20261126210000_quiet_unproven_subito_candidates.sql` (notifica unica per le
+   sincronizzazioni con molte nuove schede: senza questa condizione ogni scheda genererebbe una notifica);
+2. applicare dal SQL Editor `20261127020000_subito_search_sync_log.sql` (solo quel file);
+3. distribuire `nmre-gmail-scheduled` e solo dopo impostare `NMRE_SUBITO_FULL_SEARCH=true`;
+4. rollback: prima rimuovere `NMRE_SUBITO_FULL_SEARCH`, poi eseguire
    `supabase/rollback/20261127020000_subito_search_sync_log.rollback.sql` (il registro resta).

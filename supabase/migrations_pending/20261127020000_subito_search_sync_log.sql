@@ -37,6 +37,7 @@ create table if not exists public.nmre_subito_ricerche_sync (
   professionali integer not null default 0 check (professionali >= 0),
   possibili_duplicati integer not null default 0 check (possibili_duplicati >= 0),
   duplicati_da_unificare integer not null default 0 check (duplicati_da_unificare >= 0),
+  notifica_raggruppata boolean not null default false,
   tentativi integer not null default 0 check (tentativi >= 0),
   nuovo_tentativo boolean not null default false,
   dettagli jsonb not null default '{}'::jsonb,

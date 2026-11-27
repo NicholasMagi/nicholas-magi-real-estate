@@ -19,6 +19,8 @@ import type { ReadLog } from "./readonly.ts";
 import { accessTokenInMemory, decryptTokens, readTokenRow } from "./gmail_auth.ts";
 import { failureReport, reportText, selectEmail, subitoDryRun, validateRequest } from "./dry_run.ts";
 import type { DryRunReport } from "./dry_run.ts";
+import { fullSearchReportText, subitoFullSearchDryRun } from "./full_search_dry_run.ts";
+import type { FullSearchDryRunReport } from "./full_search_dry_run.ts";
 
 const ACCOUNT = "nicholasmagirealestate@gmail.com";
 
@@ -35,10 +37,11 @@ async function fetchSubitoPage(url: string): Promise<{ status: number; finalUrl:
   return { status: response.status, finalUrl: response.url || url, html };
 }
 
-function respond(report: DryRunReport, guarantees: Record<string, unknown>, status = 200) {
+function respond(report: DryRunReport | FullSearchDryRunReport, guarantees: Record<string, unknown>, status = 200) {
   // Log: solo esito e conteggi.
   console.log("nmre-subito-dry-run", JSON.stringify({ esito: report.esito, annunci: report.annunci.length, riepilogo: report.riepilogo }));
-  return Response.json({ ...report, garanzie: guarantees, rapporto: reportText(report) }, { status });
+  const text = "modalita" in report ? fullSearchReportText(report) : reportText(report);
+  return Response.json({ ...report, garanzie: guarantees, rapporto: text }, { status });
 }
 
 export default {
@@ -86,6 +89,15 @@ export default {
       const selection = await selectEmail(gmail, validation.request);
       if (!selection.ok) return respond(failureReport("email_non_individuata", selection.reason, selection.candidates), guarantees());
 
+      if (validation.request.modalita === "intera_ricerca") {
+        // Tutte le pagine della ricerca (limite di produzione), con la stessa pausa tra le pagine.
+        const full = await subitoFullSearchDryRun({
+          message: selection.message, db, owner,
+          fetchPage: (url) => { pageReads++; return fetchSubitoPage(url); },
+          sleep: ms => new Promise(resolve => setTimeout(resolve, ms))
+        });
+        return respond(full, guarantees());
+      }
       const report = await subitoDryRun({
         message: selection.message, db, owner,
         fetchPage: (url) => { pageReads++; return fetchSubitoPage(url); },

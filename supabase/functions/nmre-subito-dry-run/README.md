@@ -152,6 +152,48 @@ report;
 | `token_non_leggibili_in_sola_lettura` | La funzione dei token non è (ancora) STABLE per PostgREST | Ricontrollare il passo 3; attendere un minuto per il ricaricamento dello schema |
 | `confronto_non_riuscito` | Una lettura di Opportunità o Archivio non è riuscita | Nessuna proposta valida: riprovare |
 
+### Passo 7-bis · Prova dell'intera ricerca (modalità `intera_ricerca`, senza scritture)
+Richiede la funzione distribuita dal ramo della PR #80 (`ale/nmre-release-integration`), che contiene
+questa modalità. Stessa Console del passo 6, con un solo campo in più nel corpo:
+
+```js
+const authKey = Object.keys(localStorage).find(k => /^sb-.*-auth-token$/.test(k));
+const session = JSON.parse(localStorage.getItem(authKey));
+const base = localStorage.getItem("nmre-supabase-url");
+const apikey = localStorage.getItem("nmre-supabase-publishable-key");
+const res = await fetch(base.replace(/\/$/, "") + "/functions/v1/nmre-subito-dry-run", {
+  method: "POST",
+  headers: { Authorization: "Bearer " + session.access_token, apikey, "Content-Type": "application/json" },
+  body: JSON.stringify({ subject: "Appartamenti a Ancona e provincia ha 3 nuovi annunci per te", received_on: "2026-11-26", modalita: "intera_ricerca" })
+});
+const report = await res.json();
+console.log("HTTP", res.status, "esito:", report.esito);
+console.log(report.rapporto);
+console.assert(report.garanzie?.scritture_database === 0, "ATTENZIONE: scritture_database diverso da 0");
+report;
+```
+
+La funzione legge al massimo 10 pagine, con una pausa di 1,5 s tra l'una e l'altra.
+
+**Attesi:**
+- `garanzie.scritture_database = 0`;
+- `garanzie.pagine_subito_lette` uguale a `lettura.pagine_lette` più le eventuali richieste non riuscite;
+- `lettura.richieste` con l'esito HTTP di ogni pagina.
+
+**Come leggere l'esito:**
+
+| Esito | Significato |
+|---|---|
+| `ricerca_letta_completa` | Tutte le pagine dichiarate da Subito lette: **verifica riuscita** |
+| `ricerca_letta_in_parte` | Lettura fermata. `lettura.motivo` dice perché: pagina successiva bloccata, numero di pagina non confermato o limite di pagine |
+| `ricerca_non_disponibile` | La prima pagina è bloccata (per esempio HTTP 403). L'acquisizione automatica non può funzionare da Supabase |
+
+Il rapporto indica anche:
+- quante schede verrebbero create;
+- quante sono già nelle Opportunità o nell'Archivio;
+- la classificazione degli inserzionisti;
+- le notifiche previste, singole o una riepilogativa.
+
 ### Passo 8 · Dopo la prova
 Facoltativo: rimozione della funzione di prova.
 
