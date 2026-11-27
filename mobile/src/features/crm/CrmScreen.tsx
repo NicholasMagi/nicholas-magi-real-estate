@@ -438,7 +438,7 @@ export function CrmScreen() {
           {interactions.length === 0 ? <Text style={styles.body}>Nessuna interazione registrata.</Text> : interactions.map(interaction => (
             <View key={interaction.id} style={styles.interactionItem}>
               <View style={styles.contactsHeader}>
-                <Text style={styles.contactName}>{interaction.interaction_type.replaceAll("_", " ")}</Text>
+                <Text style={styles.contactName}>{interaction.interaction_type === "altro" ? "Nota" : interaction.interaction_type.replaceAll("_", " ")}</Text>
                 <Text style={styles.contactStatus}>{new Date(interaction.created_at).toLocaleString("it-IT")}</Text>
               </View>
               {interaction.property_id ? <Text style={styles.contactMeta}>Immobile: {linkedProperties.find(property => property.id === interaction.property_id)?.title ?? "Immobile collegato"}</Text> : null}
