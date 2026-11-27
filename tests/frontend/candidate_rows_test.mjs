@@ -36,4 +36,19 @@ for (const id of ["candidateSearch", "candidateTownFilter", "candidateTypeFilter
 }
 assert.match(html, /\.candidate-row-head\{display:none\}/, "su schermo stretto la riga diventa una scheda breve, senza intestazione");
 assert.match(html, /@media\(max-width:1200px\)\{#candidateList\{padding-bottom:calc\(84px \+ env\(safe-area-inset-bottom,0px\)\)\}\}/, "su mobile e tablet resta spazio sotto l’ultima riga per non coprirla con il launcher fisso");
-console.log("Nuove opportunità: riga compatta unica, azioni, filtri e scarto verificati.");
+// Protezione delle schede già lavorate: aggiornamento ottimistico e per proprietario.
+const guardedUpdate = html.slice(html.indexOf("async function nmreUpdateCandidateWithHistory"), html.indexOf("const NMRE_CONFLICT_MESSAGE"));
+assert.match(guardedUpdate, /\.eq\("owner_id",currentUser\.id\)/, "la modifica è limitata al proprietario autenticato");
+assert.match(guardedUpdate, /\.select\("id,dati_estratti,updated_at"\)/, "rilegge i dati correnti prima di aggiornare");
+assert.match(guardedUpdate, /query\.eq\("updated_at",current\.updated_at\)/, "non sovrascrive una scheda modificata nel frattempo");
+assert.match(guardedUpdate, /nmreAppendStatusHistory\(base,entry\)/, "conserva lo storico e aggiunge la decisione");
+assert.match(guardedUpdate, /conflict:!error&&updated===0/, "se il controllo ottimistico fallisce segnala conflitto");
+const confirm = html.slice(html.indexOf("async function confirmCandidate"), html.indexOf("async function discardCandidate"));
+assert.match(confirm, /if\(seller!==\"Privato\"\)/, "l'archiviazione è vietata senza verifica manuale del privato");
+assert.match(confirm, /supabase\.rpc\(\"nmre_confirm_annuncio_candidato\"/, "l'archiviazione passa dalla funzione RPC dedicata");
+const sellerSave = html.slice(html.indexOf("async function saveCandidateSeller"), html.indexOf("async function confirmCandidate"));
+assert.match(sellerSave, /if\(error\|\|sellerUpdated!==1\)/, "il registro venditori si aggiorna solo dopo il salvataggio accettato");
+assert.ok(sellerSave.indexOf("if(error||sellerUpdated!==1)") < sellerSave.indexOf(".upsert(registryRows"), "nessun identificativo viene registrato se la scheda è in conflitto");
+assert.match(sellerSave, /nmreUpdateCandidateWithHistory\(/, "la classificazione manuale usa aggiornamento protetto");
+assert.match(sellerSave, /if\(isAgency\)return|stato:isAgency\?\"scartato\"/, "la classificazione agenzia viene esclusa dalla coda");
+console.log("Nuove opportunità: riga compatta unica, azioni, filtri, scarto e protezioni dei dati verificati.");
