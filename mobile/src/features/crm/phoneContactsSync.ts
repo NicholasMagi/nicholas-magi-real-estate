@@ -73,7 +73,10 @@ export async function clearContactReviewFlag(ownerId: string, contactId: string)
 
 async function mergeContactRecords(ownerId: string, primary: CrmContact, duplicate: CrmContact): Promise<void> {
   if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
-  const mergedNotes = [...new Set([primary.notes, duplicate.notes].map(value => value?.trim()).filter((value): value is string => Boolean(value)))].join("\n");
+  const extraPhones = primary.phone && duplicate.phone && normalizePhoneNumber(primary.phone) !== normalizePhoneNumber(duplicate.phone) ? "Telefono aggiuntivo: " + duplicate.phone : "";
+  const extraEmails = primary.email && duplicate.email && normalizeEmail(primary.email) !== normalizeEmail(duplicate.email) ? "Email aggiuntiva: " + duplicate.email : "";
+  const mergedNotes = [...new Set([primary.notes, duplicate.notes, extraPhones, extraEmails].map(value => value?.trim()).filter((value): value is string => Boolean(value)))].join("
+");
   const patch: Record<string, string | null> = {
     full_name: primary.full_name || duplicate.full_name,
     phone: primary.phone || duplicate.phone,
@@ -200,7 +203,6 @@ async function importDeviceContacts(
     if (page.length < 100) break;
   }
   const mergedDuplicates = await mergeCertainDuplicateContacts(ownerId, contacts);
-  const mergedDuplicates = await mergeCertainDuplicateContacts(ownerId, contacts);
   const byPhone = new Map<string, CrmContact[]>();
   const byEmail = indexBy(contacts, item => item.email ? normalizeEmail(item.email) : null);
   const byName = indexBy(contacts, item => item.full_name ? normalizeName(item.full_name) : null);
@@ -233,6 +235,11 @@ async function importDeviceContacts(
     const email = item.emails.map(normalizeEmail).find(Boolean) ?? null;
     const nameKey = item.fullName ? normalizeName(item.fullName) : "";
     if (phoneNumbers.some(phone => (devicePhoneCounts.get(phone) ?? 0) > 1)) {
+      for (const phone of phoneNumbers) {
+        if ((devicePhoneCounts.get(phone) ?? 0) > 1) {
+          for (const contact of byPhone.get(phone) ?? []) await flagContactForReview(ownerId, contact, "Numero condiviso da più voci della rubrica del telefono.");
+        }
+      }
       ambiguous += 1;
       continue;
     }
