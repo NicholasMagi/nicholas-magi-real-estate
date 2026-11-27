@@ -6089,7 +6089,7 @@ function renderCandidates(){
       +rowCell("data","Data",notificationDate,"Data n/d")
       +'<div class="candidate-row-cell" data-col="venditore"><span class="candidate-row-label">Venditore</span><span class="candidate-row-seller candidate-row-seller-'+sellerKind+'">'+safe(c.tipo_venditore||"Da verificare")+'</span></div>'
       +'<div class="candidate-row-actions">'
-      +(url?'<a class="candidate-row-open" href="'+safe(url)+'" target="_blank" rel="noopener noreferrer" data-open-listing="'+safe(c.id)+'" title="'+safe(rowSearch?"Apri la ricerca su Subito":"Apri l’annuncio originale")+'">Apri</a>':'<span class="candidate-link-warning">Link n/d</span>')
+      +(url?'<a class="candidate-row-open" href="'+safe(url)+'" target="_blank" rel="noopener noreferrer" data-open-listing="'+safe(c.id)+'" title="Apri l’annuncio originale">Apri</a>':'<span class="candidate-link-warning">Link n/d</span>')
       +(rowSearchUrl?'<button type="button" class="secondary" data-subito-import-link="'+safe(rowSearchUrl)+'" data-subito-import-label="'+safe(String(c.email_subject||"").replace(/\s+ha\s+\d+\s+nuov[oi]\s+annunc[io].*$/i,"").slice(0,160))+'" data-subito-import-candidate="'+safe(c.id)+'">Importa</button>':"")
       +'<button class="secondary" type="button" data-open-candidate-details="'+safe(c.id)+'" aria-expanded="false">Dettagli</button>'
       +'<button class="gold" type="button" data-confirm="'+safe(c.id)+'">Archivia</button>'
