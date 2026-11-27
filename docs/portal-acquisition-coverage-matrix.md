@@ -6,7 +6,7 @@ Purpose: document what NMRE can actually ingest today, distinguish tested integr
 
 ## Executive findings
 
-- Gmail ingestion is a shared pipeline. The nine domains below are recognized as possible sources, but this does **not** mean that nine portal-specific connectors have been implemented or tested.
+- Gmail ingestion is a shared pipeline. The nine recognized hostnames below span eight portal brands and are possible sources, but this does **not** mean that nine portal-specific connectors have been implemented or tested.
 - Only Subito has a dedicated saved-search digest parser and a dedicated result-page acquisition path.
 - Immobiliare.it Insights has a dedicated API adapter in `nmre-insights-sync`. It is credential-gated and requires written provider approval for lead-generation/acquisition use before imports are enabled.
 - Idealista documents a Search API and requires an access request. NMRE has no active Idealista API adapter.
@@ -26,7 +26,6 @@ Purpose: document what NMRE can actually ingest today, distinguish tested integr
 | Gate-away | Gmail generic alert parser | Generic text signals only | Municipality may be parsed from email text; no portal-specific territory adapter | Ask provider about authorized alerts/feed/API and commercial reuse. |
 | Trovacasa | Gmail generic alert parser | Generic text signals only | Municipality may be parsed from email text; no portal-specific territory adapter | Ask provider about authorized alerts/feed/API and commercial reuse. |
 | Wikicasa | Gmail generic alert parser | Generic text signals only | Municipality may be parsed from email text; no portal-specific territory adapter | Ask provider about authorized alerts/feed/API and commercial reuse. |
-| (Other supported source) | No additional portal-specific adapter identified in the current nine-domain allowlist | Not applicable | Not applicable | Add a portal only after confirming its domain, alert format and terms. |
 
 ## Code evidence
 
