@@ -1,5 +1,5 @@
 export function normalizePhoneNumber(value: string): string | null {
-  let digits = value.replace(/\\D/g, "");
+  let digits = value.replace(/\D/g, "");
   if (digits.startsWith("00")) digits = digits.slice(2);
   // Italian +39 and local formats should resolve to the same national number.
   if (digits.startsWith("39") && digits.length >= 11) digits = digits.slice(2);
@@ -23,7 +23,7 @@ function collectStrings(value: unknown, depth = 0): string[] {
 
 export function extractPhoneNumbers(value: unknown): string[] {
   const text = collectStrings(value).join(" ");
-  const matches = text.match(/(?:\\+|00)?\\d[\\d\\s()./-]{6,}\\d/g) ?? [];
+  const matches = text.match(/(?:\+|00)?\d[\d\\s()./-]{6,}\d/g) ?? [];
   return unique(matches
     .map(item => normalizePhoneNumber(item))
     .filter((item): item is string => item !== null));
