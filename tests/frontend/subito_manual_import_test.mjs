@@ -11,7 +11,11 @@ function grab(name) {
   let start = html.indexOf("function " + name + "(");
   if (start < 0) throw new Error("Funzione non trovata: " + name);
   let depth = 0;
-  const bodyStart = html.indexOf("){", start) + 1;
+  const compactEnd = html.indexOf("){", start);
+  const spacedEnd = html.indexOf(") {", start);
+  const signatureEnd = spacedEnd >= 0 && (compactEnd < 0 || spacedEnd < compactEnd) ? spacedEnd : compactEnd;
+  if (signatureEnd < 0) throw new Error("Firma non riconosciuta: " + name);
+  const bodyStart = signatureEnd + (signatureEnd === spacedEnd ? 2 : 1);
   for (let index = bodyStart; index < html.length; index++) {
     if (html[index] === "{") depth++;
     else if (html[index] === "}" && --depth === 0) return html.slice(start, index + 1);
