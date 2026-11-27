@@ -13,7 +13,7 @@ const CONTACT_FIELDS = [
 
 const CONTACT_PAGE_SIZE = 100;
 const LISTING_PAGE_SIZE = 100;
-const MAX_LISTINGS_TO_MATCH = 1000;
+const MAX_LISTINGS_TO_MATCH = 5000;
 
 type DeviceContact = {
   fullName: string | null;
