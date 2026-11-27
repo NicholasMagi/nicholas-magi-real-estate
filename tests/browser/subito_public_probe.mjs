@@ -38,10 +38,13 @@ async function snapshot(page, response) {
       url: location.href,
       bodyChars: body.length,
       bodyStart: body.slice(0, 850).replace(/\s+/g, " "),
+      bodyEnd: body.slice(-1200).replace(/\s+/g, " "),
+      searchState: (() => { try { const d = JSON.parse(document.querySelector("#__NEXT_DATA__")?.textContent || "null"); const st = d?.props?.pageProps?.initialState; return st ? { page: st.search?.page ?? null, searchKeys: Object.keys(st.search || {}), totalItems: st.search?.total ?? st.search?.totalCount ?? null, pageItems: st.items?.originalList?.length ?? null } : null; } catch { return null; } })(),
       listingLinkCount: listingLinks.length,
       listingLinkSamples: listingLinks.slice(0, 5).map((a) => ({ text: a.text, href: a.href })),
       nextLinks: nextLinks.slice(0, 8),
       pageLinkSamples: anchors.filter((a) => /pagination|paginazione|page/i.test(a.parent)).slice(0, 12),
+      buttons: [...document.querySelectorAll("button")].map((b) => ({ text: (b.innerText || "").trim().replace(/\s+/g, " ").slice(0, 80), aria: b.getAttribute("aria-label") || "", title: b.getAttribute("title") || "", parent: (b.parentElement?.className || "").toString().slice(0, 100) })).slice(-30),
     };
   }, { status: response?.status() ?? null });
 }
@@ -72,10 +75,16 @@ try {
     let first = await snapshot(page, response);
     first.challengeDetected = challengeLike(first.title, first.bodyStart, first.url);
     report.pages.push(first);
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await wait(1800);
+    const bottom = await snapshot(page, response);
+    bottom.challengeDetected = challengeLike(bottom.title, bottom.bodyEnd, bottom.url);
+    report.bottomOfFirstPage = bottom;
+    await page.screenshot({ path: `${OUT}/page-1-bottom.png`, fullPage: false }).catch(() => {});
     await page.screenshot({ path: `${OUT}/page-1.png`, fullPage: false }).catch(() => {});
 
     if (first.status === 200 && !first.challengeDetected && first.listingLinkCount > 0) {
-      const next = first.nextLinks.find((a) => {
+      const next = bottom.nextLinks.find((a) => {
         try {
           const u = new URL(a.href);
           return u.origin === "https://www.subito.it" && u.href !== first.url;
