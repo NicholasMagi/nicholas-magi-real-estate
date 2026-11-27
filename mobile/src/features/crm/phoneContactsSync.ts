@@ -278,7 +278,8 @@ async function linkListingsByPhone(
         for (const id of phoneToContactIds.get(phone) ?? []) matches.add(id);
       }
       if (matches.size !== 1) continue;
-      const contactId = [...matches][0];
+      const contactId = matches.values().next().value as string | undefined;
+      if (!contactId) continue;
       const { data: updated, error: updateError } = await supabase
         .from("annunci")
         .update({ contact_id: contactId })
@@ -322,4 +323,26 @@ export async function requestPhoneContactsPermission() {
 
 export function addPhoneContactsChangeListener(listener: () => void) {
   return ContactsLegacy.addContactsChangeListener(listener);
+}
+
+export type CrmContactSummary = {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  contact_type: string | null;
+  status: string | null;
+};
+
+export async function loadCrmContacts(ownerId: string): Promise<CrmContactSummary[]> {
+  if (!ownerId) throw new Error("Sessione utente non disponibile.");
+  if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
+  const { data, error } = await supabase
+    .from("nmre_contacts")
+    .select("id,full_name,phone,email,contact_type,status")
+    .eq("owner_id", ownerId)
+    .order("full_name", { ascending: true })
+    .limit(100);
+  if (error) throw new Error("Non è stato possibile caricare i contatti CRM.");
+  return (data ?? []) as CrmContactSummary[];
 }
