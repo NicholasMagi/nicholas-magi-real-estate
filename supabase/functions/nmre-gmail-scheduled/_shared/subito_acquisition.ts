@@ -71,9 +71,25 @@ export async function acquireSubitoDigest(
   email: SubitoEmail,
   digest: SubitoDigest,
   deps: SubitoAcquisitionDeps,
-  options: { batchPreviousIso?: string | null; deferred?: boolean } = {}
+  options: { batchPreviousIso?: string | null; deferred?: boolean; acquisitionEnabled?: boolean } = {}
 ): Promise<SubitoAcquisition> {
   const existing = await deps.existingDigest(String(email.id));
+  // L'estrazione automatizzata delle pagine risultati resta disattivata finché
+  // il portale non autorizza per iscritto questo specifico utilizzo.
+  if (options.acquisitionEnabled === false) {
+    return {
+      status: "errore",
+      reason: "autorizzazione_richiesta",
+      items: [],
+      decision: null,
+      archived: [],
+      pageSource: null,
+      pageCount: 0,
+      attempts: previousAttempts(existing),
+      retry: false,
+      keepDigestRecord: true
+    };
+  }
   // Rinvio per limite di letture nel ciclo: non conta come tentativo.
   if (options.deferred) {
     const attemptsSoFar = previousAttempts(existing);
@@ -420,7 +436,14 @@ export type SubitoCycleResult = {
 export async function subitoRowsForEmails(
   entries: Array<{ email: SubitoEmail; digest: SubitoDigest }>,
   deps: SubitoAcquisitionDeps,
-  ctx: { owner: string; classifySeller(text: string): SellerResult; now?: () => string; maxPages?: number }
+  ctx: {
+    owner: string;
+    classifySeller(text: string): SellerResult;
+    now?: () => string;
+    maxPages?: number;
+    /** Must be explicitly true after written provider authorization. Defaults to false. */
+    allowAutomatedPageFetch?: boolean;
+  }
 ): Promise<SubitoCycleResult> {
   const now = ctx.now || (() => new Date().toISOString());
   const maxPages = ctx.maxPages ?? SUBITO_MAX_PAGES_PER_RUN;
@@ -435,7 +458,8 @@ export async function subitoRowsForEmails(
       if (needsPage && !deferred) pagesRead++;
       const acquisition = await acquireSubitoDigest(email, digest, deps, {
         batchPreviousIso: digest.searchKey ? lastBySearch.get(digest.searchKey) ?? null : null,
-        deferred
+        deferred,
+        acquisitionEnabled: ctx.allowAutomatedPageFetch === true
       });
       const key = acquisition.status + ":" + acquisition.reason;
       result.outcomes[key] = (result.outcomes[key] || 0) + 1;
