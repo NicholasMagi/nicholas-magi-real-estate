@@ -444,21 +444,32 @@ export async function loadContactRelations(
   if (interactionsResult.error) throw new Error("Non è stato possibile caricare lo storico delle interazioni.");
 
   const links = (linksResult.data ?? []) as { property_id: string; relation_role: string }[];
-  const propertyIds = links.map(link => link.property_id);
-  let properties: CrmLinkedProperty[] = [];
-  if (propertyIds.length) {
+  const roleById = new Map(links.map(link => [link.property_id, link.relation_role]));
+  // Include legacy/direct contact_id relations as well as the normalized link table.
+  const { data: directlyLinked, error: directError } = await supabase
+    .from("nmre_properties")
+    .select("id,title,municipality,status,asking_price")
+    .eq("owner_id", ownerId)
+    .eq("contact_id", contactId);
+  if (directError) throw new Error("Non è stato possibile leggere gli immobili collegati al contatto.");
+  const linkedIds = new Set(links.map(link => link.property_id));
+  const directRows = (directlyLinked ?? []) as Omit<CrmLinkedProperty, "relation_role">[];
+  const directIds = directRows.map(property => property.id);
+  const linkOnlyIds = [...linkedIds].filter(id => !directIds.includes(id));
+  let linkOnlyRows: Omit<CrmLinkedProperty, "relation_role">[] = [];
+  if (linkOnlyIds.length) {
     const { data, error } = await supabase
       .from("nmre_properties")
       .select("id,title,municipality,status,asking_price")
       .eq("owner_id", ownerId)
-      .in("id", propertyIds);
+      .in("id", linkOnlyIds);
     if (error) throw new Error("Non è stato possibile leggere i dati degli immobili associati.");
-    const roleById = new Map(links.map(link => [link.property_id, link.relation_role]));
-    properties = (data ?? []).map(property => ({
-      ...property,
-      relation_role: roleById.get(property.id) ?? "altro"
-    })) as CrmLinkedProperty[];
+    linkOnlyRows = (data ?? []) as Omit<CrmLinkedProperty, "relation_role">[];
   }
+  const properties: CrmLinkedProperty[] = [...directRows, ...linkOnlyRows].map(property => ({
+    ...property,
+    relation_role: roleById.get(property.id) ?? "proprietario"
+  }));
 
   return {
     properties,
@@ -510,13 +521,21 @@ export async function unlinkPropertyFromContact(
 ): Promise<void> {
   if (!ownerId || !contactId || !propertyId) throw new Error("Associazione non valida.");
   if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
-  const { error } = await supabase
-    .from("nmre_property_contacts")
-    .delete()
-    .eq("owner_id", ownerId)
-    .eq("contact_id", contactId)
-    .eq("property_id", propertyId);
-  if (error) throw new Error("Non è stato possibile rimuovere l'associazione.");
+  const [linkDelete, propertyUpdate] = await Promise.all([
+    supabase
+      .from("nmre_property_contacts")
+      .delete()
+      .eq("owner_id", ownerId)
+      .eq("contact_id", contactId)
+      .eq("property_id", propertyId),
+    supabase
+      .from("nmre_properties")
+      .update({ contact_id: null })
+      .eq("owner_id", ownerId)
+      .eq("id", propertyId)
+      .eq("contact_id", contactId)
+  ]);
+  if (linkDelete.error || propertyUpdate.error) throw new Error("Non è stato possibile rimuovere l'associazione.");
 }
 
 export async function addContactInteraction(
