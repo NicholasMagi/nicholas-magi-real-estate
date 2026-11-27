@@ -4,7 +4,7 @@ import {
   extractPhoneNumbers,
   normalizePhoneNumber,
   uniqueContactMatch
-} from "../src/features/crm/phoneContactsSync.ts";
+} from "../src/features/crm/phoneContactMatching.ts";
 
 test("Italian international and national phone formats normalize equally", () => {
   assert.equal(normalizePhoneNumber("+39 333 123 4567"), "3331234567");
