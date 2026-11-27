@@ -3914,8 +3914,9 @@ function nmreCrmRenderContacts(){
    ...(nmreCrmAppointments||[]).filter(row=>String(row.contact_id)===String(x.id)&&row.starts_at&&Date.parse(row.starts_at)>=now).map(row=>({date:String(row.starts_at).slice(0,10),label:"Appuntamento"}))
   ].sort((a,b)=>a.date.localeCompare(b.date));
   const nextActivity=nextDates[0]||null;
-  const phoneDigits=String(x.phone||"").replace(/\\D/g,"");
+  const phoneDigits=String(x.phone||"").replace(/\D/g,"");
   const phoneValid=phoneDigits.length>=8&&phoneDigits.length<=15;
+  const whatsappDigits=(phoneDigits.length===9||phoneDigits.length===10)&&!phoneDigits.startsWith("39")?"39"+phoneDigits:phoneDigits;
   const activitySummary=nextActivity
    ? '<span class="nmre-contact-next"><strong>'+safe(nextActivity.label)+' previsto</strong> · '+safe(new Date(nextActivity.date+"T00:00:00").toLocaleDateString("it-IT"))+'</span>'
    : '<span class="nmre-contact-next nmre-contact-next-empty">Nessun richiamo programmato</span>';
@@ -3956,7 +3957,7 @@ function nmreCrmRenderContacts(){
    '<div class="wide"><button class="gold" type="submit">Salva collegamento</button><span class="status" data-contact-property-msg></span></div></form></details></details>';
   return '<article class="nmre-crm-item"><div class="nmre-crm-contact-main"><h4>'+safe(x.full_name)+'</h4><p>'+safe(nmreCrmLabels.contact[x.contact_type]||x.contact_type)+' · '+safe(x.municipality||"Comune non indicato")+(x.address?" · "+safe(x.address):"")+'</p><p>'+safe(x.phone||"")+(x.phone&&x.email?" · ":"")+safe(x.email||"")+'</p>'+(x.notes?'<p>'+safe(x.notes)+'</p>':"")+
    '<div class="nmre-contact-workspace"><div class="nmre-contact-quick-actions">'+
-    (phoneValid?'<a class="nmre-contact-action" href="tel:'+safe(x.phone)+'">Chiama</a><a class="nmre-contact-action nmre-contact-action-whatsapp" href="https://wa.me/'+phoneDigits+'" target="_blank" rel="noopener noreferrer">WhatsApp</a>':'<span class="nmre-contact-no-phone">Numero non disponibile</span>')+
+    (phoneValid?'<a class="nmre-contact-action" href="tel:'+safe(x.phone)+'">Chiama</a><a class="nmre-contact-action nmre-contact-action-whatsapp" href="https://wa.me/'+whatsappDigits+'" target="_blank" rel="noopener noreferrer">WhatsApp</a>':'<span class="nmre-contact-no-phone">Numero non disponibile</span>')+
     '<button class="secondary nmre-contact-action" type="button" data-contact-history-open="'+safe(x.id)+'">Registra attività</button></div>'+
     '<div class="nmre-contact-followup">'+activitySummary+latestSummary+'</div></div>'+
    propertyManager+editForm+
