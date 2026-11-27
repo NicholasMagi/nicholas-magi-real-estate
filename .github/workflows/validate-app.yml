@@ -43,7 +43,7 @@ jobs:
         run: deno test --allow-read=. supabase/functions/nmre-gmail-scheduled/frontend_coherence_test.ts supabase/functions/nmre-gmail-scheduled/cursor_guard_test.ts
 
       - name: Test Subito saved-search emails (recognition, results page, new listings, dedup, errors, card links)
-        run: deno test --allow-read=. supabase/functions/nmre-gmail-scheduled/subito_test.ts supabase/functions/nmre-gmail-scheduled/subito_frontend_test.ts supabase/functions/nmre-gmail-scheduled/subito_real_test.ts
+        run: deno test --allow-read=. supabase/functions/nmre-gmail-scheduled/subito_test.ts supabase/functions/nmre-gmail-scheduled/subito_frontend_test.ts supabase/functions/nmre-gmail-scheduled/subito_real_test.ts supabase/functions/nmre-gmail-scheduled/subito_item_candidates_test.ts
 
       - name: Test recovery panel functions in index.html
         run: node tests/frontend/recovery_test.mjs
@@ -56,6 +56,15 @@ jobs:
 
       - name: Test automatic contact matching and safe property linking
         run: node tests/frontend/contact_autolink_test.mjs
+
+      - name: Test Gmail sync health alert
+        run: node tests/frontend/sync_alert_test.mjs
+      - name: Test phone address book import (vCard, Contact Picker) and duplicate detection
+        run: node tests/frontend/contacts_import_test.mjs
+      - name: Test Opportunità and Archivio search (fields, linked contact, phone numbers)
+        run: node tests/frontend/search_test.mjs
+      - name: Test single canonical service worker version
+        run: node tests/frontend/sw_version_test.mjs
 
       - name: Check migration layout (phase 2 not applicable, production versions)
         run: |
@@ -150,6 +159,25 @@ jobs:
               raise SystemExit("Unexpected functions with verify_jwt disabled: " + ", ".join(unexpected))
           print("Supabase config TOML is valid; only nmre-gmail-scheduled disables platform JWT verification.")
           PY
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Playwright and Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.63.0
+          npx playwright install --with-deps chromium
+
+      - name: Browser tests (navigation, buttons, dashboard counts, search, recovery panel, Subito cards)
+        run: bash tests/browser/run_all.sh
+
   migrations:
     runs-on: ubuntu-latest
     services:
@@ -179,7 +207,7 @@ jobs:
   deploy-pages:
     name: Deploy GitHub Pages (after CI)
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    needs: [validate, migrations]
+    needs: [validate, migrations, browser]
     runs-on: ubuntu-latest
     permissions:
       actions: read
