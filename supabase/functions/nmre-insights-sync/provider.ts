@@ -1,4 +1,4 @@
-import { TARGET_MUNICIPALITIES } from "../_shared/territory.ts";
+import { TARGET_MUNICIPALITIES, normalizeMunicipality } from "../_shared/territory.ts";
 
 export const ALLOWED_MUNICIPALITIES = TARGET_MUNICIPALITIES;
 
@@ -14,11 +14,7 @@ export const NMRE_BOUNDING_BOX = {
 };
 
 function normalize(value: unknown): string {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLocaleLowerCase("it");
+  return normalizeMunicipality(value);
 }
 
 export function formatInsightsDate(date: Date): string {
