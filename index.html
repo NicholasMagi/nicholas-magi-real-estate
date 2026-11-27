@@ -6648,6 +6648,11 @@ async function saveManualSubitoCandidate(event) {
     msg(statusId, "Inserisca un link HTTPS valido.", "error");
     return;
   }
+  const listingKey = canonicalCandidateUrl(url);
+  if (!listingKey || !/^subito\\.it\\//i.test(listingKey)) {
+    msg(statusId, "Il link deve aprire un singolo annuncio Subito.", "error");
+    return;
+  }
   const manual = {
     url,
     titolo: value("candidateManualTitle"),
@@ -6661,28 +6666,14 @@ async function saveManualSubitoCandidate(event) {
   };
   const originalLabel = button.textContent;
   button.disabled = true;
-  button.textContent = "Analisi e importazione…";
-  msg(statusId, "NMRE sta verificando il link e controllando i duplicati.");
+  button.textContent = "Controllo e importazione…";
+  msg(statusId, "NMRE controlla prima che l’annuncio non sia già acquisito.");
   try {
-    let suggestions = {};
-    let enrichmentEvidence = "";
-    let enrichmentWarning = "";
-    try {
-      const { data, error } = await supabase.functions.invoke("nmre-candidate-enrich", { body: { url } });
-      if (error) throw new Error(error.message || "Analisi pubblica non disponibile.");
-      if (!data?.success) throw new Error(data?.error || "Il portale non ha restituito dati analizzabili.");
-      suggestions = data.suggestions && typeof data.suggestions === "object" ? data.suggestions : {};
-      enrichmentEvidence = String(data.evidence || "");
-    } catch (error) {
-      enrichmentWarning = error?.message || "Analisi automatica non disponibile.";
-    }
-
-    const record = nmreManualSubitoCandidateRecord({ ...manual, suggestions, enrichmentEvidence }, currentUser.id);
     const { data: existingCandidate, error: candidateLookupError } = await supabase
       .from("annunci_candidati")
       .select("id,titolo")
       .eq("owner_id", currentUser.id)
-      .eq("listing_key", record.listing_key)
+      .eq("listing_key", listingKey)
       .maybeSingle();
     if (candidateLookupError) throw candidateLookupError;
     if (existingCandidate) {
@@ -6694,7 +6685,7 @@ async function saveManualSubitoCandidate(event) {
       .from("annunci")
       .select("id,titolo")
       .eq("owner_id", currentUser.id)
-      .eq("listing_key", record.listing_key)
+      .eq("listing_key", listingKey)
       .maybeSingle();
     if (archiveLookupError) throw archiveLookupError;
     if (archived) {
@@ -6702,6 +6693,21 @@ async function saveManualSubitoCandidate(event) {
       return;
     }
 
+    let suggestions = {};
+    let enrichmentEvidence = "";
+    let enrichmentWarning = "";
+    button.textContent = "Lettura dei dati pubblici…";
+    try {
+      const { data, error } = await supabase.functions.invoke("nmre-candidate-enrich", { body: { url } });
+      if (error) throw new Error(error.message || "Analisi pubblica non disponibile.");
+      if (!data?.success) throw new Error(data?.error || "Il portale non ha restituito dati analizzabili.");
+      suggestions = data.suggestions && typeof data.suggestions === "object" ? data.suggestions : {};
+      enrichmentEvidence = String(data.evidence || "");
+    } catch (error) {
+      enrichmentWarning = error?.message || "Analisi automatica non disponibile.";
+    }
+
+    const record = nmreManualSubitoCandidateRecord({ ...manual, suggestions, enrichmentEvidence }, currentUser.id);
     const { data: saved, error: insertError } = await supabase
       .from("annunci_candidati")
       .insert(record)
@@ -6715,13 +6721,11 @@ async function saveManualSubitoCandidate(event) {
       throw insertError;
     }
     form.reset();
-    $("candidateManualPanel").hidden = true;
-    $("candidateManualToggle").setAttribute("aria-expanded", "false");
     await loadCandidates({ force: true });
     const suffix = enrichmentWarning
       ? " Importato con i dati inseriti manualmente; lettura automatica non disponibile: " + enrichmentWarning
       : " Dati pubblici recuperati, da verificare prima del contatto.";
-    msg("candidateMsg", "Annuncio Subito aggiunto alle Nuove opportunità" + (saved?.id ? " (" + saved.id.slice(0, 8) + ")" : "") + "." + suffix, "success");
+    msg(statusId, "Annuncio aggiunto alle Nuove opportunità" + (saved?.id ? " (" + saved.id.slice(0, 8) + ")" : "") + "." + suffix, "success");
   } catch (error) {
     msg(statusId, error?.message || "Importazione non riuscita. Nessun annuncio è stato aggiunto.", "error");
   } finally {
