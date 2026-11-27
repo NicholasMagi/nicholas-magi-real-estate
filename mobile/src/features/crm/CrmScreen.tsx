@@ -48,7 +48,6 @@ export function CrmScreen() {
         return;
       }
       setPermission(permissionResult.accessPrivileges === "limited" ? "limited" : "granted");
-        return;
       const next = await syncPhoneContacts(userId);
       setResult(next);
       setContacts(await loadCrmContacts(userId));
@@ -155,7 +154,7 @@ export function CrmScreen() {
             <Text style={styles.body}>
               {permission === "limited"
                 ? "Il telefono consente l'accesso solo ai contatti selezionati. NMRE sincronizza questo gruppo; per importare l'intera rubrica, abiliti l'accesso completo nelle impostazioni del dispositivo."
-                : "NMRE importa i nuovi contatti e completa solo i campi CRM vuoti quando apre questa schermata, quando l&apos;app torna attiva e quando il telefono segnala modifiche."}
+                : "NMRE importa i nuovi contatti e completa solo i campi CRM vuoti quando apre questa schermata, quando l'app torna attiva e quando il telefono segnala modifiche."}
             </Text>
             <Pressable style={[styles.button, syncing && styles.buttonDisabled]} onPress={() => void runSync()} disabled={syncing}>
               <Text style={styles.buttonText}>{syncing ? "Sincronizzazione…" : permission === "limited" ? "Sincronizza contatti selezionati" : "Sincronizza adesso"}</Text>
