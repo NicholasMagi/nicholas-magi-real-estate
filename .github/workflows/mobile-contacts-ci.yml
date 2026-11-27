@@ -4,6 +4,8 @@ on:
   pull_request:
     branches:
       - feat/mobile-phone-contacts-sync
+      - feat/mobile-crm-contact-details
+      - feat/mobile-crm-interaction-history
     paths:
       - "mobile/**"
       - ".github/workflows/mobile-contacts-ci.yml"
@@ -11,10 +13,12 @@ on:
     branches:
       - feat/mobile-phone-contacts-sync
       - feat/mobile-crm-contact-details
+      - feat/mobile-crm-interaction-history
     paths:
       - "mobile/**"
       - ".github/workflows/mobile-contacts-ci.yml"
 
+# Feature-branch validation includes the CRM interaction-history changes and latest JSX fixes.
 permissions:
   contents: read
 

@@ -54,6 +54,10 @@ export function CrmScreen() {
   const [interactions, setInteractions] = useState<CrmInteraction[]>([]);
   const [availableProperties, setAvailableProperties] = useState<{ id: string; title: string; municipality: string; status: string }[]>([]);
   const [interactionNote, setInteractionNote] = useState("");
+  const [interactionType, setInteractionType] = useState("telefonata");
+  const [interactionOutcome, setInteractionOutcome] = useState("");
+  const [nextContactDate, setNextContactDate] = useState("");
+  const [interactionPropertyId, setInteractionPropertyId] = useState("");
   const [loadingRelations, setLoadingRelations] = useState(false);
   const [savingInteraction, setSavingInteraction] = useState(false);
   const syncInProgress = useRef(false);
@@ -158,6 +162,11 @@ export function CrmScreen() {
     setEditPhone(contact.phone ?? "");
     setEditEmail(contact.email ?? "");
     setEditRole(contact.contact_type ?? "altro");
+    setInteractionNote("");
+    setInteractionType("telefonata");
+    setInteractionOutcome("");
+    setNextContactDate("");
+    setInteractionPropertyId("");
     void refreshRelations(contact.id);
   };
 
@@ -185,13 +194,23 @@ export function CrmScreen() {
 
   const saveInteraction = async () => {
     if (!userId || !selectedContactId || !interactionNote.trim()) return;
+    if (nextContactDate && !/^\d{4}-\d{2}-\d{2}$/.test(nextContactDate)) {
+      setMessage("Inserisca la data del richiamo nel formato AAAA-MM-GG.");
+      return;
+    }
     setSavingInteraction(true);
     try {
       await addContactInteraction(userId, selectedContactId, {
-        interaction_type: "telefonata",
-        notes: interactionNote
+        interaction_type: interactionType,
+        notes: interactionNote,
+        outcome: interactionOutcome,
+        next_contact_at: nextContactDate || null,
+        property_id: interactionPropertyId || null
       });
       setInteractionNote("");
+      setInteractionOutcome("");
+      setNextContactDate("");
+      setInteractionPropertyId("");
       await refreshRelations(selectedContactId);
       setMessage("Interazione registrata nello storico.");
     } catch (error) {
@@ -376,22 +395,53 @@ export function CrmScreen() {
           ))}
           <View style={styles.sectionDivider} />
           <Text style={styles.cardTitle}>Storico interazioni</Text>
+          <Text style={styles.fieldLabel}>Tipo di interazione</Text>
+          <View style={styles.choiceRow}>
+            {([
+              ["telefonata", "Chiamata"],
+              ["whatsapp", "WhatsApp"],
+              ["appuntamento", "Appuntamento"],
+              ["email", "Email"],
+              ["altro", "Nota"]
+            ] as [string, string][]).map(([value, label]) => (
+              <Pressable key={value} style={[styles.choice, interactionType === value && styles.choiceSelected]} onPress={() => setInteractionType(value)}>
+                <Text style={[styles.choiceText, interactionType === value && styles.choiceTextSelected]}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.fieldLabel}>A quale immobile si riferisce?</Text>
+          <View style={styles.choiceRow}>
+            <Pressable style={[styles.choice, !interactionPropertyId && styles.choiceSelected]} onPress={() => setInteractionPropertyId("")}>
+              <Text style={[styles.choiceText, !interactionPropertyId && styles.choiceTextSelected]}>Generale</Text>
+            </Pressable>
+            {linkedProperties.map(property => (
+              <Pressable key={property.id} style={[styles.choice, interactionPropertyId === property.id && styles.choiceSelected]} onPress={() => setInteractionPropertyId(property.id)}>
+                <Text style={[styles.choiceText, interactionPropertyId === property.id && styles.choiceTextSelected]}>{property.title}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.fieldLabel}>Cosa vi siete detti?</Text>
           <TextInput
             style={[styles.searchInput, styles.multilineInput]}
             value={interactionNote}
             onChangeText={setInteractionNote}
-            placeholder="Annoti telefonata, appuntamento o altro contatto…"
+            placeholder="Annoti i punti importanti della conversazione…"
             multiline
           />
+          <Text style={styles.fieldLabel}>Esito / informazioni da ricordare</Text>
+          <TextInput style={styles.searchInput} value={interactionOutcome} onChangeText={setInteractionOutcome} placeholder="es. Richiamare dopo aver parlato con il coniuge" />
+          <Text style={styles.fieldLabel}>Quando ricontattarlo? (AAAA-MM-GG)</Text>
+          <TextInput style={styles.searchInput} value={nextContactDate} onChangeText={setNextContactDate} placeholder="2026-12-03" keyboardType="numbers-and-punctuation" />
           <Pressable style={[styles.button, savingInteraction && styles.buttonDisabled]} onPress={() => void saveInteraction()} disabled={savingInteraction || !interactionNote.trim()}>
-            <Text style={styles.buttonText}>{savingInteraction ? "Registrazione…" : "Registra telefonata / nota"}</Text>
+            <Text style={styles.buttonText}>{savingInteraction ? "Registrazione…" : "Salva nello storico"}</Text>
           </Pressable>
           {interactions.length === 0 ? <Text style={styles.body}>Nessuna interazione registrata.</Text> : interactions.map(interaction => (
             <View key={interaction.id} style={styles.interactionItem}>
               <View style={styles.contactsHeader}>
-                <Text style={styles.contactName}>{interaction.interaction_type.replaceAll("_", " ")}</Text>
+                <Text style={styles.contactName}>{interaction.interaction_type === "altro" ? "Nota" : interaction.interaction_type.replaceAll("_", " ")}</Text>
                 <Text style={styles.contactStatus}>{new Date(interaction.created_at).toLocaleString("it-IT")}</Text>
               </View>
+              {interaction.property_id ? <Text style={styles.contactMeta}>Immobile: {linkedProperties.find(property => property.id === interaction.property_id)?.title ?? "Immobile collegato"}</Text> : null}
               {interaction.outcome ? <Text style={styles.contactMeta}>Esito: {interaction.outcome}</Text> : null}
               {interaction.notes ? <Text style={styles.body}>{interaction.notes}</Text> : null}
               {interaction.next_contact_at ? <Text style={styles.contactMeta}>Richiamare: {interaction.next_contact_at}</Text> : null}
@@ -469,6 +519,11 @@ const styles = StyleSheet.create({
   addLink: { color: theme.colors.success, fontSize: 12, fontWeight: "800" },
   removeLink: { color: theme.colors.warning, fontSize: 12, fontWeight: "700" },
   interactionItem: { paddingVertical: 10, gap: 5, borderBottomWidth: 1, borderBottomColor: theme.colors.line },
+  choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  choice: { borderWidth: 1, borderColor: theme.colors.line, borderRadius: 18, paddingHorizontal: 11, paddingVertical: 8, backgroundColor: theme.colors.white },
+  choiceSelected: { borderColor: theme.colors.navy, backgroundColor: theme.colors.softGold },
+  choiceText: { color: theme.colors.muted, fontSize: 12, fontWeight: "700" },
+  choiceTextSelected: { color: theme.colors.navy },
   multilineInput: { minHeight: 76, textAlignVertical: "top", paddingTop: 12 },
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   stat: { width: "47%", minHeight: 65, borderRadius: 12, backgroundColor: theme.colors.paper, padding: 12, gap: 3 },
