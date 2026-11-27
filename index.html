@@ -588,7 +588,16 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .nmre-contact-property a{font-size:12px;color:#8b6b3e}
 .nmre-contact-unlink{white-space:nowrap;font-size:11px;padding:7px 9px}
 .nmre-contact-property-form,.nmre-contact-edit-form{margin-top:12px}
-@media(max-width:640px){.nmre-contact-property{align-items:flex-start;flex-direction:column}.nmre-contact-unlink{width:100%}}
+.nmre-contact-workspace{margin:12px 0;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#f8f9fb}
+.nmre-contact-quick-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.nmre-contact-action{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 12px;border:1px solid #d9dfe8;border-radius:8px;background:#fff;color:var(--navy);font-size:12px;font-weight:700;text-decoration:none}
+.nmre-contact-action-whatsapp{background:#edf6ef;border-color:#cfe3d3;color:#285d39}
+.nmre-contact-quick-actions button{min-height:38px;padding:8px 12px;font-size:12px}
+.nmre-contact-no-phone{font-size:11px;color:var(--muted)}
+.nmre-contact-followup{display:flex;gap:6px 14px;flex-wrap:wrap;margin-top:9px;font-size:11px;color:var(--muted);line-height:1.45}
+.nmre-contact-next strong{color:#8a642c}
+.nmre-contact-next-empty{color:#7b8797}
+@media(max-width:640px){.nmre-contact-property{align-items:flex-start;flex-direction:column}.nmre-contact-unlink{width:100%}.nmre-contact-quick-actions>*{flex:1 1 calc(50% - 7px)}.nmre-contact-quick-actions button{flex-basis:100%}}
 </style>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 </head>
@@ -3897,6 +3906,23 @@ function nmreCrmRenderContacts(){
   const properties=nmreCrmPropertiesForContact(x.id),archiveListings=(listingCache||[]).filter(a=>String(a.contact_id||"")===String(x.id)),linkedIds=new Set(properties.map(p=>String(p.id))),representedArchiveIds=new Set(properties.map(p=>String(p.source_listing_id||"")).filter(Boolean)),archiveOnlyListings=archiveListings.filter(a=>!representedArchiveIds.has(String(a.id)));
   const availableProperties=nmreCrmProperties.filter(p=>!linkedIds.has(String(p.id)));
   const availableArchive=(listingCache||[]).filter(a=>!nmreCrmProperties.some(p=>String(p.source_listing_id||"")===String(a.id)));
+  const contactInteractions=(nmreCrmInteractions||[]).filter(row=>String(row.contact_id)===String(x.id)).sort((a,b)=>Date.parse(b.created_at||0)-Date.parse(a.created_at||0));
+  const latestInteraction=contactInteractions[0]||null;
+  const now=Date.now();
+  const nextDates=[
+   ...contactInteractions.filter(row=>row.next_contact_at&&Date.parse(row.next_contact_at+"T00:00:00")>=new Date(new Date().toDateString()).getTime()).map(row=>({date:row.next_contact_at,label:"Richiamo"})),
+   ...(nmreCrmAppointments||[]).filter(row=>String(row.contact_id)===String(x.id)&&row.starts_at&&Date.parse(row.starts_at)>=now).map(row=>({date:String(row.starts_at).slice(0,10),label:"Appuntamento"}))
+  ].sort((a,b)=>a.date.localeCompare(b.date));
+  const nextActivity=nextDates[0]||null;
+  const phoneDigits=String(x.phone||"").replace(/\D/g,"");
+  const phoneValid=phoneDigits.length>=8&&phoneDigits.length<=15;
+  const whatsappDigits=(phoneDigits.length===9||phoneDigits.length===10)&&!phoneDigits.startsWith("39")?"39"+phoneDigits:phoneDigits;
+  const activitySummary=nextActivity
+   ? '<span class="nmre-contact-next"><strong>'+safe(nextActivity.label)+' previsto</strong> · '+safe(new Date(nextActivity.date+"T00:00:00").toLocaleDateString("it-IT"))+'</span>'
+   : '<span class="nmre-contact-next nmre-contact-next-empty">Nessun richiamo programmato</span>';
+  const latestSummary=latestInteraction
+   ? '<span class="nmre-contact-last">Ultimo contatto: '+safe(nmreCrmOutcomeLabels[latestInteraction.outcome_code]||latestInteraction.outcome||latestInteraction.interaction_type||"Interazione")+' · '+safe(new Date(latestInteraction.created_at).toLocaleDateString("it-IT"))+'</span>'
+   : '<span class="nmre-contact-last">Nessuna interazione registrata</span>';
   const propertyHtml=properties.map(p=>{
    const link=nmreCrmPropertyContacts.find(row=>String(row.contact_id)===String(x.id)&&String(row.property_id)===String(p.id));
    const source=(listingCache||[]).find(a=>String(a.id)===String(p.source_listing_id));
@@ -3930,6 +3956,10 @@ function nmreCrmRenderContacts(){
    '<label class="wide">Note immobile<textarea name="notes" rows="2" maxlength="4000"></textarea></label>'+
    '<div class="wide"><button class="gold" type="submit">Salva collegamento</button><span class="status" data-contact-property-msg></span></div></form></details></details>';
   return '<article class="nmre-crm-item"><div class="nmre-crm-contact-main"><h4>'+safe(x.full_name)+'</h4><p>'+safe(nmreCrmLabels.contact[x.contact_type]||x.contact_type)+' · '+safe(x.municipality||"Comune non indicato")+(x.address?" · "+safe(x.address):"")+'</p><p>'+safe(x.phone||"")+(x.phone&&x.email?" · ":"")+safe(x.email||"")+'</p>'+(x.notes?'<p>'+safe(x.notes)+'</p>':"")+
+   '<div class="nmre-contact-workspace"><div class="nmre-contact-quick-actions">'+
+    (phoneValid?'<a class="nmre-contact-action" href="tel:'+safe(x.phone)+'">Chiama</a><a class="nmre-contact-action nmre-contact-action-whatsapp" href="https://wa.me/'+whatsappDigits+'" target="_blank" rel="noopener noreferrer">WhatsApp</a>':'<span class="nmre-contact-no-phone">Numero non disponibile</span>')+
+    '<button class="secondary nmre-contact-action" type="button" data-contact-history-open="'+safe(x.id)+'">Registra attività</button></div>'+
+    '<div class="nmre-contact-followup">'+activitySummary+latestSummary+'</div></div>'+
    propertyManager+editForm+
    '<details class="nmre-sales-coach" data-sales-coach="'+safe(x.id)+'"><summary>Prepara telefonata · Sales Coach</summary><div class="nmre-sales-coach-output" data-sales-coach-output="'+safe(x.id)+'"><div class="hint">Apra per preparare la conversazione.</div></div></details>'+
    '<details class="nmre-crm-history" data-crm-history="'+safe(x.id)+'"><summary>Storico conversazioni e interazioni</summary>'+
@@ -3946,6 +3976,11 @@ function nmreCrmRenderContacts(){
  }).join(""):'<div class="nmre-crm-empty">Nessun contatto registrato. Inserisca il primo contatto qui sopra.</div>';
 
  $("nmreCrmContactList").querySelectorAll("[data-open-associated-listing]").forEach(button=>button.addEventListener("click",()=>openCallCrm(button.dataset.openAssociatedListing)));
+ $("nmreCrmContactList").querySelectorAll("[data-contact-history-open]").forEach(button=>button.addEventListener("click",()=>{
+  const contactId=button.dataset.contactHistoryOpen;
+  const details=$("nmreCrmContactList").querySelector('[data-crm-history="'+CSS.escape(contactId)+'"]');
+  if(details){details.open=true;requestAnimationFrame(()=>details.scrollIntoView({behavior:"smooth",block:"center"}));}
+ }));
  $("nmreCrmContactList").querySelectorAll("[data-crm-contact-status]").forEach(el=>el.addEventListener("change",async()=>{
   const {error}=await supabase.from("nmre_contacts").update({status:el.value,updated_at:new Date().toISOString()}).eq("id",el.dataset.crmContactStatus).eq("owner_id",currentUser.id);
   if(error){$("nmreCrmContactMsg").textContent=error.message;return;}await loadCrmWorkspace();
