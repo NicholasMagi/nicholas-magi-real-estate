@@ -5711,7 +5711,7 @@ function nmreSubitoBookmarkletMain(){
   if(old)old.remove();
   var panel=document.createElement("div");
   panel.id="nmre-subito-panel";
-  panel.setAttribute("style","position:fixed;z-index:2147483647;left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right));bottom:max(10px,env(safe-area-inset-bottom));width:auto;max-width:440px;max-height:min(65vh,calc(100dvh - 24px));overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;box-sizing:border-box;background:#fff;color:#1d2433;border:2px solid #1d2433;border-radius:14px;padding:14px;font:16px/1.45 Arial,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.25)");
+  panel.setAttribute("style","position:fixed;z-index:2147483647;left:auto;right:max(10px,env(safe-area-inset-right));bottom:max(10px,env(safe-area-inset-bottom));width:min(440px,calc(100vw - 20px));max-width:440px;max-height:65vh;max-height:min(65vh,calc(100dvh - 24px));overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;box-sizing:border-box;background:#fff;color:#1d2433;border:2px solid #1d2433;border-radius:14px;padding:14px;font:16px/1.45 Arial,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.25)");
   function line(text,bold){var p=document.createElement("div");p.textContent=text;if(bold)p.style.fontWeight="700";p.style.marginBottom="6px";panel.appendChild(p);return p;}
   line("NMRE · Subito",true);
   line("Pagina "+dataPage+(acc.total_pages?" di "+acc.total_pages:"")+": "+fresh.length+" annunci letti, "+added+" nuovi in questa raccolta.");
@@ -5728,7 +5728,7 @@ function nmreSubitoBookmarkletMain(){
      panel.appendChild(nextLink);
    }
   var status=line("");
-  function button(label,handler){var b=document.createElement("button");b.type="button";b.textContent=label;b.setAttribute("style","margin:4px 6px 0 0;padding:8px 10px;border:1px solid #1d2433;border-radius:6px;background:#fff;color:#1d2433;cursor:pointer;font:inherit");b.addEventListener("click",handler);panel.appendChild(b);return b;}
+  function button(label,handler){var b=document.createElement("button");b.type="button";b.textContent=label;b.setAttribute("style","margin:4px 6px 0 0;padding:10px 12px;min-height:44px;border:1px solid #1d2433;border-radius:8px;background:#fff;color:#1d2433;cursor:pointer;touch-action:manipulation;font:inherit");b.addEventListener("click",handler);panel.appendChild(b);return b;}
   button("Copia per NMRE",function(){
     var text=JSON.stringify(acc);
     var fallback=function(){var area=document.createElement("textarea");area.value=text;area.setAttribute("style","width:100%;height:80px;margin-top:6px");panel.appendChild(area);area.focus();area.select();status.textContent="Copi il testo selezionato (Ctrl+C) e lo incolli in NMRE.";};
