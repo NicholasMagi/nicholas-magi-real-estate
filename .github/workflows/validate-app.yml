@@ -56,6 +56,8 @@ jobs:
 
       - name: Test automatic contact matching and safe property linking
         run: node tests/frontend/contact_autolink_test.mjs
+      - name: Test manual Subito opportunity import fallback
+        run: node tests/frontend/subito_manual_import_test.mjs
 
       - name: Check migration layout (phase 2 not applicable, production versions)
         run: |
