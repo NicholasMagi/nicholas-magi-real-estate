@@ -22,7 +22,7 @@ import {
 } from "@/features/crm/phoneContactsSync";
 import { theme } from "@/shared/theme";
 
-type PermissionState = "checking" | "not_granted" | "granted" | "blocked";
+type PermissionState = "checking" | "not_granted" | "granted" | "limited" | "blocked";
 
 export function CrmScreen() {
   const { user } = useAuth();
@@ -47,6 +47,8 @@ export function CrmScreen() {
         setMessage("Il permesso alla rubrica non è più attivo. Lo riabiliti per continuare la sincronizzazione.");
         return;
       }
+      setPermission(permissionResult.accessPrivileges === "limited" ? "limited" : "granted");
+        return;
       const next = await syncPhoneContacts(userId);
       setResult(next);
       setContacts(await loadCrmContacts(userId));
@@ -72,7 +74,7 @@ export function CrmScreen() {
       .then(permissionResult => {
         if (!active) return;
         if (permissionResult.granted) {
-          setPermission("granted");
+          setPermission(permissionResult.accessPrivileges === "limited" ? "limited" : "granted");
           void runSync();
         } else {
           setPermission(permissionResult.canAskAgain ? "not_granted" : "blocked");
@@ -88,14 +90,14 @@ export function CrmScreen() {
   }, [runSync, userId]);
 
   useEffect(() => {
-    const contactsSubscription = permission === "granted"
+    const contactsSubscription = permission === "granted" || permission === "limited"
       ? addPhoneContactsChangeListener(() => { void runSync(); })
       : null;
     const appStateSubscription = AppState.addEventListener("change", state => {
       if (state !== "active") return;
       void getPhoneContactsPermission().then(permissionResult => {
         if (permissionResult.granted) {
-          setPermission("granted");
+          setPermission(permissionResult.accessPrivileges === "limited" ? "limited" : "granted");
           void runSync();
         } else {
           setPermission(permissionResult.canAskAgain ? "not_granted" : "blocked");
@@ -113,7 +115,7 @@ export function CrmScreen() {
     try {
       const permissionResult = await requestPhoneContactsPermission();
       if (permissionResult.granted) {
-        setPermission("granted");
+        setPermission(permissionResult.accessPrivileges === "limited" ? "limited" : "granted");
         await runSync();
       } else {
         setPermission(permissionResult.canAskAgain ? "not_granted" : "blocked");
@@ -140,7 +142,7 @@ export function CrmScreen() {
           <View style={styles.headingText}>
             <Text style={styles.cardTitle}>Sincronizzazione rubrica</Text>
             <Text style={styles.cardSubtitle}>
-              {permission === "granted" ? "Accesso autorizzato" : "Collegamento non ancora attivo"}
+              {permission === "limited" ? "Accesso limitato ai contatti selezionati" : permission === "granted" ? "Accesso autorizzato" : "Collegamento non ancora attivo"}
             </Text>
           </View>
           {syncing ? <ActivityIndicator color={theme.colors.gold} /> : null}
@@ -148,14 +150,21 @@ export function CrmScreen() {
 
         {permission === "checking" ? (
           <Text style={styles.body}>Verifica dei permessi in corso…</Text>
-        ) : permission === "granted" ? (
+        ) : permission === "granted" || permission === "limited" ? (
           <>
             <Text style={styles.body}>
-              NMRE importa i nuovi contatti e completa solo i campi CRM vuoti quando apre questa schermata, quando l&apos;app torna attiva e quando il telefono segnala modifiche.
+              {permission === "limited"
+                ? "Il telefono consente l'accesso solo ai contatti selezionati. NMRE sincronizza questo gruppo; per importare l'intera rubrica, abiliti l'accesso completo nelle impostazioni del dispositivo."
+                : "NMRE importa i nuovi contatti e completa solo i campi CRM vuoti quando apre questa schermata, quando l&apos;app torna attiva e quando il telefono segnala modifiche."}
             </Text>
             <Pressable style={[styles.button, syncing && styles.buttonDisabled]} onPress={() => void runSync()} disabled={syncing}>
-              <Text style={styles.buttonText}>{syncing ? "Sincronizzazione…" : "Sincronizza adesso"}</Text>
+              <Text style={styles.buttonText}>{syncing ? "Sincronizzazione…" : permission === "limited" ? "Sincronizza contatti selezionati" : "Sincronizza adesso"}</Text>
             </Pressable>
+            {permission === "limited" ? (
+              <Pressable style={styles.button} onPress={() => void Linking.openSettings()}>
+                <Text style={styles.buttonText}>Gestisci accesso alla rubrica</Text>
+              </Pressable>
+            ) : null}
           </>
         ) : (
           <>
