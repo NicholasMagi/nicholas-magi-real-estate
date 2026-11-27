@@ -25,6 +25,7 @@ import {
   updateCrmContact,
   clearContactReviewFlag,
   getContactReviewNote,
+  getContactSupplementalNotes,
   type CrmContactSummary,
   type CrmLinkedProperty,
   type CrmInteraction,
@@ -330,6 +331,9 @@ export function CrmScreen() {
           <Text style={styles.fieldLabel}>Ruolo del contatto</Text>
           <TextInput style={styles.searchInput} value={editRole} onChangeText={setEditRole} placeholder="es. venditore, acquirente, altro" />
           <Text style={styles.footnote}>Provenienza: {selectedContact.source === "rubrica_telefono" ? "Rubrica del telefono" : "Inserimento manuale o altra origine"}.</Text>
+          {getContactSupplementalNotes(selectedContact.notes) ? (
+            <Text style={styles.footnote}>Note e recapiti aggiuntivi: {getContactSupplementalNotes(selectedContact.notes)}</Text>
+          ) : null}
           {getContactReviewNote(selectedContact.notes) ? (
             <View style={styles.reviewWarning}>
               <Text style={styles.reviewWarningTitle}>! Da verificare</Text>
