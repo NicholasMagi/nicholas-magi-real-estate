@@ -708,7 +708,7 @@ export async function unlinkPropertyFromContact(
 export async function addContactInteraction(
   ownerId: string,
   contactId: string,
-  input: { interaction_type: string; notes: string; outcome?: string | null; next_contact_at?: string | null }
+  input: { interaction_type: string; notes: string; outcome?: string | null; next_contact_at?: string | null; property_id?: string | null }
 ): Promise<void> {
   if (!ownerId || !contactId) throw new Error("Contatto non valido.");
   if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
@@ -720,7 +720,8 @@ export async function addContactInteraction(
       interaction_type: input.interaction_type,
       notes: input.notes.trim() || null,
       outcome: input.outcome?.trim() || null,
-      next_contact_at: input.next_contact_at || null
+      next_contact_at: input.next_contact_at || null,
+      property_id: input.property_id || null
     });
   if (error) throw new Error("Non è stato possibile registrare l'interazione.");
 }
