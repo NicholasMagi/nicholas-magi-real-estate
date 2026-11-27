@@ -105,6 +105,17 @@ export function subitoListingUrl(value: unknown): string | null {
   const url = new URL(String(value));
   return "https://www.subito.it" + url.pathname;
 }
+/**
+ * Pattern LIKE per trovare un annuncio Subito per ID nelle colonne listing_key e url, sia con
+ * il titolo nell'URL (/<categoria>/<titolo>-<id>.htm) sia senza (/<categoria>/<id>.htm).
+ */
+export function subitoIdLikePatterns(adId: string): { listingKey: string[]; url: string[] } {
+  return {
+    listingKey: ["subito.it/%-" + adId + ".htm", "subito.it/%/" + adId + ".htm"],
+    url: ["%subito.it/%-" + adId + ".htm%", "%subito.it/%/" + adId + ".htm%"]
+  };
+}
+
 /** ID Subito ricavato da una listing_key NMRE (subito.it/<categoria>/<titolo>-<id>.htm). */
 export function subitoAdIdFromListingKey(value: unknown): string | null {
   const key = String(value || "");

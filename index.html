@@ -96,6 +96,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .gmail-sync-stat strong{display:block;font-size:20px;font-variant-numeric:tabular-nums;color:var(--ink)}
 .gmail-sync-stat span{display:block;font-size:10px;color:var(--muted);margin-top:3px}
 .subito-browser-filter{margin:8px 0;padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.45;background:#eef6ee;color:#1f5130}.subito-browser-filter-non_privati,.subito-browser-filter-non_rilevato{background:#fdf1f0;color:#7a221e;font-weight:700}
+.subito-import-link{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:8px 0;padding:10px;border-radius:8px;background:#eef3fb;color:#1d3557;font-size:13px}.subito-import-link[hidden]{display:none}
+.subito-bookmarklet-box{margin:10px 0;padding:10px;border:1px dashed var(--line,#c9ced8);border-radius:8px}.subito-bookmarklet{display:inline-block;padding:8px 12px;border-radius:8px;background:#1d2433;color:#fff;font-weight:700;text-decoration:none;cursor:grab}
 .subito-search-log{margin-top:12px;font-size:12px;line-height:1.5}.subito-search-log ul{margin:6px 0 0 18px;padding:0;overflow-wrap:anywhere}.subito-search-log li{margin:4px 0}.subito-search-log-error{color:#a3261e;font-weight:700}
 .gmail-sync-details{margin-top:10px;font-size:11px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
 @media(max-width:650px){.gmail-sync-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -1266,8 +1268,19 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
   <details class="crm candidate-recovery subito-browser-import" id="subitoBrowserImportPanel">
     <summary>Importa annunci da una pagina Subito aperta nel browser</summary>
     <p class="hint">Usi questo importatore con le ricerche Subito in cui ha già applicato il filtro per i venditori privati: NMRE controlla il filtro nel link della ricerca e lo segnala nell’anteprima. Il venditore è «Privato» solo quando Subito lo indica per il singolo annuncio e il testo non lo contraddice; professionisti, riferimenti professionali nel testo e annunci senza indicazione restano «Da verificare». La novità dell’annuncio non viene dedotta dal filtro.</p>
-    <p class="hint">L’importazione crea una normale opportunità e la relativa notifica. I duplicati esatti vengono esclusi; i possibili duplicati sono evidenziati e non selezionati automaticamente. L’annuncio non viene trasferito automaticamente nell’Archivio.</p>
-    <label for="subitoBrowserPayload">Dati copiati dalla Console di Subito</label>
+    <p class="hint">L’importazione crea soltanto nuove opportunità: gli annunci già presenti nelle Opportunità (anche scartati) o nell’Archivio (anche nel cestino) non vengono reinseriti né modificati. I possibili duplicati sono evidenziati e non selezionati automaticamente. L’annuncio non viene trasferito automaticamente nell’Archivio.</p>
+    <div id="subitoImportLink" class="subito-import-link" hidden>
+      <strong id="subitoImportLinkTitle">Importazione collegata a una ricerca</strong>
+      <span id="subitoImportLinkText"></span>
+      <button class="secondary" id="subitoImportUnlink" type="button">Scollega</button>
+    </div>
+    <div class="subito-bookmarklet-box">
+      <strong>Pulsante NMRE per Subito</strong>
+      <p class="hint">Trascini il pulsante qui sotto nella barra dei preferiti (una sola volta). Poi: apra la ricerca su Subito, clicchi «NMRE · Subito» su ogni pagina dei risultati che vuole importare (passando lei da una pagina all’altra), e alla fine «Copia per NMRE» e incolli qui. Il pulsante legge soltanto la pagina che ha aperto: non fa richieste a Subito, non apre altre pagine e non interviene su verifiche o CAPTCHA.</p>
+      <p><a id="subitoBookmarklet" class="subito-bookmarklet" href="#" draggable="true">NMRE · Subito</a>
+        <button class="secondary" id="subitoBookmarkletCopy" type="button">Copia il codice per la Console</button></p>
+    </div>
+    <label for="subitoBrowserPayload">Dati copiati con il pulsante NMRE</label>
     <textarea id="subitoBrowserPayload" rows="7" placeholder="Incolli qui il JSON copiato dalla pagina dei risultati Subito"></textarea>
     <div class="candidate-actions subito-browser-import-actions">
       <button class="secondary" id="subitoBrowserAnalyze" type="button">Analizza e mostra anteprima</button>
@@ -1556,7 +1569,8 @@ function nmreSubitoRecoveryHtml(c){
           ?links(search.schede_proposte,"Ogni annuncio è in coda come scheda singola «Da verificare»:")
           :links(search.possibili,"Possibili nuovi annunci (da controllare uno per uno):"))
       +links((Array.isArray(search.gia_in_archivio)?search.gia_in_archivio:[]).map(entry=>({...entry,titolo:(entry.titolo||("Annuncio "+entry.id))+(entry.eliminato_dall_archivio?" (eliminato dall’Archivio)":" (già nell’Archivio)")})),"Già presenti nell’Archivio, non duplicati:")
-      +(searchUrl?'<p><a href="'+escape(searchUrl)+'" target="_blank" rel="noopener noreferrer" data-subito-search>Apri la pagina dei risultati su Subito</a></p>':"")
+      +(searchUrl?'<p><a href="'+escape(searchUrl)+'" target="_blank" rel="noopener noreferrer" data-subito-search>Apri la pagina dei risultati su Subito</a>'
+        +' <button type="button" class="secondary" data-subito-import-link="'+escape(searchUrl)+'" data-subito-import-label="'+escape(String(c&&c.email_subject||"").replace(/\s+ha\s+\d+\s+nuov[oi]\s+annunc[io].*$/i,"").slice(0,160))+'" data-subito-import-candidate="'+escape(c&&c.id||"")+'">Importa da Subito</button></p>':"")
       +'</div>';
   }
   const item=extracted.subito&&typeof extracted.subito==="object"?extracted.subito:null;
@@ -1600,7 +1614,7 @@ let nmreServiceWorkerRegistration=null;
 function nmreBase64UrlBytes(value){const padding="=".repeat((4-value.length%4)%4);const raw=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function registerNmreServiceWorker(){
  if(!("serviceWorker" in navigator))return;
- try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261127-subito-full-search-2");await navigator.serviceWorker.ready;await refreshNmrePushState();}
+ try{nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261127-subito-browser-importer-1");await navigator.serviceWorker.ready;await refreshNmrePushState();}
  catch(error){const help=$("nmrePushHelp");if(help)help.textContent="Registrazione notifiche non riuscita: "+(error.message||error);}
 }
 async function refreshNmrePushState(){
@@ -1675,7 +1689,7 @@ async function enableNmrePush(){
   }
   if(help)help.textContent="Preparazione del servizio notifiche sul dispositivo…";
   let reg=nmreServiceWorkerRegistration;
-  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261127-subito-full-search-2");
+  if(!reg)reg=await navigator.serviceWorker.register("./sw.js?v=20261127-subito-browser-importer-1");
   nmreServiceWorkerRegistration=reg;
   await navigator.serviceWorker.ready;
   reg=await navigator.serviceWorker.getRegistration("./")||reg;
@@ -4877,7 +4891,7 @@ async function boot(){
     // evita che installazioni/PWA continuino a usare una vecchia versione.
     if("serviceWorker" in navigator){
       try{
-        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261127-subito-full-search-2");
+        nmreServiceWorkerRegistration=await navigator.serviceWorker.register("./sw.js?v=20261127-subito-browser-importer-1");
         await nmreServiceWorkerRegistration.update();
       }catch(workerError){
         console.warn("Aggiornamento service worker NMRE non riuscito:",workerError);
@@ -5364,9 +5378,29 @@ function nmreSubitoBrowserAdId(value){
     const url=new URL(String(value||""));
     const host=url.hostname.toLowerCase().replace(/^www\./,"");
     if(host!=="subito.it"&&!host.endsWith(".subito.it"))return null;
-    const match=url.pathname.match(/-(\d{6,})\.htm$/i);
+    // Con o senza titolo nell'URL: /<categoria>/<titolo>-<id>.htm oppure /<categoria>/<id>.htm
+    const match=url.pathname.match(/^\/[^/]+\/(?:[^/]*-)?(\d{6,})\.htm$/i);
     return match?match[1]:null;
   }catch{return null;}
+}
+
+// Data di Subito: "2026-11-26 07:33:56" è ora italiana senza fuso (come parseSubitoDate del
+// server): convertita in UTC con il fuso Europe/Rome, indipendentemente dal fuso del computer.
+function nmreSubitoDateIso(value){
+  const raw=String(value??"").trim();
+  if(!raw)return null;
+  if(/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:?\d{2})$/.test(raw)){const time=Date.parse(raw);return Number.isFinite(time)?new Date(time).toISOString():null;}
+  const match=raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if(!match)return null;
+  const [y,mo,d,h,mi,s]=match.slice(1).map(part=>Number(part||0));
+  const target=Date.UTC(y,mo-1,d,h,mi,s);
+  let utc=target;
+  for(let i=0;i<2;i++){
+    const parts=new Intl.DateTimeFormat("en-GB",{timeZone:"Europe/Rome",hourCycle:"h23",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"})
+      .formatToParts(new Date(utc)).reduce((acc,part)=>({...acc,[part.type]:Number(part.value)}),{});
+    utc-=Date.UTC(parts.year,parts.month-1,parts.day,parts.hour,parts.minute,parts.second)-target;
+  }
+  return new Date(utc).toISOString();
 }
 
 function nmreParseSubitoBrowserPayload(value){
@@ -5402,7 +5436,7 @@ function nmreParseSubitoBrowserPayload(value){
     const images=Array.isArray(raw.images)?raw.images.map(validUrl).filter(src=>{
       try{return !!src&&new URL(src).protocol==="https:";}catch{return false;}
     }).slice(0,10):[];
-    const date=Date.parse(String(raw.published_at||""));
+    const date=Date.parse(nmreSubitoDateIso(raw.published_at)||"");
     items.push({
       id,url,title:text(raw.title,250)||("Annuncio Subito "+id),
       description:text(raw.description,2000),
@@ -5416,7 +5450,15 @@ function nmreParseSubitoBrowserPayload(value){
     });
   }
   if(!items.length)return {ok:false,error:"Non è stato trovato nessun link valido a una scheda Subito con ID numerico."};
-  return {ok:true,meta:{searchUrl,capturedAt,totalReported:Number(payload.total)||payload.items.length,skipped},items};
+  const pages=Array.isArray(payload.pages)?[...new Set(payload.pages.map(Number).filter(n=>Number.isInteger(n)&&n>0&&n<1000))].sort((a,b)=>a-b):[];
+  const totalPages=Number.isInteger(Number(payload.total_pages))&&Number(payload.total_pages)>0?Number(payload.total_pages):null;
+  const searchFilters={};
+  if(payload.search_filters&&typeof payload.search_filters==="object"&&!Array.isArray(payload.search_filters)){
+    for(const [key,value] of Object.entries(payload.search_filters).slice(0,40)){
+      if(/^[a-z_]{1,40}$/i.test(key)&&(typeof value==="string"||typeof value==="number"))searchFilters[key]=String(value).slice(0,200);
+    }
+  }
+  return {ok:true,meta:{searchUrl,capturedAt,totalReported:Number(payload.total)||payload.items.length,skipped,pages,totalPages,searchFilters},items};
 }
 
 function nmreBuildSubitoBrowserCandidate(item,meta,ownerId,batchId){
@@ -5442,7 +5484,7 @@ function nmreBuildSubitoBrowserCandidate(item,meta,ownerId,batchId){
     tipo_venditore:seller.classification,
     seller_confidence:seller.confidence,
     seller_evidence:seller.evidence,
-    portale:"Subito",
+    portale:"subito.it",
     url:item.url,
     url_originale:meta.searchUrl,
     data_pubblicazione:null,
@@ -5532,6 +5574,154 @@ function nmreSubitoBrowserSeller(item,filter){
     evidence:"La scheda non indica il tipo di inserzionista: non verificabile, resta da verificare."+filterNote};
 }
 
+// Identità della ricerca Subito (stesse regole del server, _shared/subito.ts): parametri che
+// non cambiano i risultati o cambiano da un'email all'altra non contano.
+const NMRE_SUBITO_KEY_IGNORED=/^(?:utm_[a-z_]+|fbclid|gclid|kxconfid|xtor|from|order|o|page)$/i;
+function nmreSubitoSearchKey(value){
+  let url;
+  try{url=new URL(String(value||""));}catch{return null;}
+  const host=url.hostname.toLowerCase().replace(/^www\./,"");
+  if(host!=="subito.it"||!/^\/annunci-[a-z-]+\//i.test(url.pathname))return null;
+  const params=[...url.searchParams.entries()].filter(([key])=>!NMRE_SUBITO_KEY_IGNORED.test(key))
+    .sort(([a,av],[b,bv])=>a===b?av.localeCompare(bv):a.localeCompare(b));
+  return "subito.it"+url.pathname.toLowerCase().replace(/\/+$/,"")+(params.length?"?"+params.map(([k,v])=>k+"="+v).join("&"):"");
+}
+// La pagina raccolta corrisponde alla ricerca attesa? Come subitoPageConfirmsSearch del server:
+// filtri del link atteso (regione, tipo, categoria, città, parametri come advt) confrontati con
+// quelli che la pagina dichiara. true = tutti confermati; false = almeno uno diverso; null = non
+// verificabile (si usa allora la chiave della ricerca).
+function nmreSubitoSearchMatches(expectedUrl,meta){
+  let url;
+  try{url=new URL(String(expectedUrl||""));}catch{return false;}
+  const path=url.pathname.split("/").filter(Boolean);
+  const region=(path[0]||"").match(/^annunci-([a-z-]+)$/i)?.[1];
+  if(!region)return false;
+  const wanted={region,type:path[1]||"",category:path[2]||"",city:path[3]||""};
+  for(const [key,value] of url.searchParams)if(!NMRE_SUBITO_KEY_IGNORED.test(key))wanted[key]=value;
+  const declared=meta&&meta.searchFilters||{};
+  const norm=value=>{let text=String(value??"");try{text=decodeURIComponent(text);}catch{}return text.trim().toLowerCase().replace(/\s+/g,"");};
+  let unknown=false;
+  for(const [key,value] of Object.entries(wanted)){
+    if(!value)continue;
+    if(declared[key]===undefined||declared[key]===null||declared[key]===""){unknown=true;continue;}
+    if(norm(declared[key])!==norm(value))return false;
+  }
+  if(!unknown)return true;
+  const expectedKey=nmreSubitoSearchKey(expectedUrl),pageKey=nmreSubitoSearchKey(meta&&meta.searchUrl);
+  return expectedKey&&pageKey?expectedKey===pageKey:null;
+}
+// Importazione avviata da una notifica Gmail di ricerca salvata: la ricerca attesa.
+let nmreSubitoExpectedSearch=null;
+function nmreRenderSubitoImportLink(){
+  const box=$("subitoImportLink");
+  if(!box)return;
+  if(!nmreSubitoExpectedSearch){box.hidden=true;return;}
+  $("subitoImportLinkTitle").textContent="Importazione collegata alla ricerca: "+(nmreSubitoExpectedSearch.label||"ricerca salvata Subito");
+  $("subitoImportLinkText").textContent=" Si accettano solo i dati raccolti da questa ricerca. Apra le pagine dei risultati su Subito, clicchi il pulsante NMRE su ognuna, poi incolli qui i dati.";
+  box.hidden=false;
+}
+function nmreLinkSubitoImport(searchUrl,label,candidateId){
+  const url=validUrl(searchUrl);
+  if(!url||!nmreSubitoSearchKey(url))return false;
+  nmreSubitoExpectedSearch={url,label:String(label||"").slice(0,160),candidateId:candidateId?String(candidateId):null};
+  nmreRenderSubitoImportLink();
+  return true;
+}
+// Pulsante NMRE (bookmarklet): eseguito SULLA pagina di Subito aperta dall'utente. Legge solo i
+// dati di quella pagina (__NEXT_DATA__), li accumula nella scheda (sessionStorage di subito.it)
+// pagina dopo pagina e li copia per NMRE. Nessuna richiesta di rete, nessuna pagina aperta,
+// nessun intervento su verifiche o CAPTCHA. Funzione autosufficiente: viene serializzata.
+function nmreSubitoBookmarkletMain(){
+  var KEY="nmre-subito-accumulo-v1",MAX=200;
+  var IGNORED=/^(?:utm_[a-z_]+|fbclid|gclid|kxconfid|xtor|from|order|o|page)$/i;
+  var host=String(location.hostname||"").toLowerCase().replace(/^www\./,"");
+  if(host!=="subito.it"){alert("Il pulsante NMRE funziona solo su una pagina dei risultati di Subito.");return;}
+  var node=document.getElementById("__NEXT_DATA__");
+  var data=null;
+  try{data=node?JSON.parse(node.textContent||""):null;}catch(e){data=null;}
+  var state=data&&data.props&&data.props.pageProps&&data.props.pageProps.initialState;
+  var list=state&&state.items&&Array.isArray(state.items.originalList)?state.items.originalList:null;
+  if(!list){alert("NMRE: elenco dei risultati non trovato in questa pagina. Apra una pagina dei risultati di una ricerca Subito: nessun dato raccolto.");return;}
+  var here=new URL(location.href);
+  var urlPage=Number(here.searchParams.get("o")||"1");
+  var dataPage=Number(state.search&&state.search.page)||1;
+  if(dataPage!==urlPage){alert("NMRE: la pagina "+urlPage+" è stata aperta senza ricaricare, quindi i dati disponibili sono ancora quelli della pagina "+dataPage+". Ricarichi la pagina (F5) e clicchi di nuovo il pulsante NMRE.");return;}
+  var searchUrl=new URL(here.href);
+  searchUrl.searchParams.delete("o");
+  Array.from(searchUrl.searchParams.keys()).forEach(function(key){if(/^utm_/i.test(key))searchUrl.searchParams.delete(key);});
+  var params=Array.from(here.searchParams.entries()).filter(function(p){return !IGNORED.test(p[0]);}).sort(function(a,b){return a[0]===b[0]?a[1].localeCompare(b[1]):a[0].localeCompare(b[0]);});
+  var key="subito.it"+here.pathname.toLowerCase().replace(/\/+$/,"")+(params.length?"?"+params.map(function(p){return p[0]+"="+p[1];}).join("&"):"");
+  var filters={};
+  [data.query||{},(state.search&&state.search.filters)||{}].forEach(function(source){
+    Object.keys(source).forEach(function(name){var value=source[name];if(/^[a-z_]{1,40}$/i.test(name)&&!/^utm_/i.test(name)&&(typeof value==="string"||typeof value==="number"))filters[name]=String(value).slice(0,200);});
+  });
+  function feature(item,names){
+    var all=item&&item.features,entry=null;
+    if(Array.isArray(all))entry=all.filter(function(f){return names.indexOf(String(f&&(f.uri||f.key)||""))>=0;})[0]||null;
+    else if(all&&typeof all==="object")entry=names.map(function(n){return all[n];}).filter(Boolean)[0]||null;
+    var first=entry&&(Array.isArray(entry.values)?entry.values[0]:entry.value);
+    if(first===null||first===undefined)return null;
+    var raw=typeof first==="object"?(first.key!==undefined?first.key:first.value):first;
+    var n=Number(String(raw).replace(/[^\d.,]/g,"").replace(/\.(?=\d{3}(\D|$))/g,"").replace(",","."));
+    return isFinite(n)&&String(raw).trim()!==""?n:null;
+  }
+  var fresh=[];
+  list.forEach(function(entry){
+    if(entry&&entry.kind&&entry.kind!=="AdItem")return;
+    var item=entry&&entry.item&&!entry.urls?entry.item:entry;
+    var url=item&&item.urls&&item.urls.default||item&&item.url;
+    var parsed=null;
+    try{parsed=new URL(String(url||""));}catch(e){parsed=null;}
+    if(!parsed||parsed.hostname.toLowerCase().replace(/^www\./,"")!=="subito.it")return;
+    var match=parsed.pathname.match(/^\/[^/]+\/(?:[^/]*-)?(\d{6,})\.htm$/i);
+    if(!match)return;
+    var geo=item.geo||{};
+    var images=(Array.isArray(item.images)?item.images:[]).map(function(img){return typeof img==="string"?img:img&&(img.cdnBaseUrl||img.url||img.uri||(Array.isArray(img.scale)&&img.scale[0]&&(img.scale[0].secureuri||img.scale[0].uri)));}).filter(function(src){return typeof src==="string"&&/^https:\/\//i.test(src);}).slice(0,10);
+    var company=item.advertiser&&item.advertiser.company;
+    fresh.push({id:match[1],url:"https://www.subito.it"+parsed.pathname,title:item.subject||item.title||null,description:item.body||item.description||null,
+      price:feature(item,["/price"]),location:(geo.town&&geo.town.value)||(geo.city&&geo.city.value)||null,surface_mq:feature(item,["/size"]),
+      rooms:feature(item,["/room","/rooms"]),images:images,published_at:item.date||null,advertiser_company:company===true?true:company===false?false:null});
+  });
+  var acc=null;
+  try{acc=JSON.parse(sessionStorage.getItem(KEY)||"null");}catch(e){acc=null;}
+  if(acc&&acc.search_key!==key){
+    if(!confirm("NMRE: sono già raccolti "+acc.items.length+" annunci di un'altra ricerca. Vuole ricominciare con questa ricerca?"))return;
+    acc=null;
+  }
+  if(!acc)acc={source:"nmre-subito-browser-v1",search_url:searchUrl.href,search_key:key,search_filters:filters,total:Number(state.items.total)||null,total_pages:Number(state.items.totalPages)||null,pages:[],items:[]};
+  var known={},added=0,overLimit=0;
+  acc.items.forEach(function(item){known[item.id]=true;});
+  fresh.forEach(function(item){if(known[item.id])return;if(acc.items.length>=MAX){overLimit++;return;}known[item.id]=true;acc.items.push(item);added++;});
+  if(acc.pages.indexOf(dataPage)<0)acc.pages.push(dataPage);
+  acc.pages.sort(function(a,b){return a-b;});
+  acc.captured_at=new Date().toISOString();
+  try{sessionStorage.setItem(KEY,JSON.stringify(acc));}catch(e){alert("NMRE: impossibile conservare i dati raccolti in questa scheda.");return;}
+  var old=document.getElementById("nmre-subito-panel");
+  if(old)old.remove();
+  var panel=document.createElement("div");
+  panel.id="nmre-subito-panel";
+  panel.setAttribute("style","position:fixed;z-index:2147483647;right:16px;bottom:16px;max-width:360px;background:#fff;color:#1d2433;border:2px solid #1d2433;border-radius:10px;padding:14px;font:14px/1.45 Arial,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.25)");
+  function line(text,bold){var p=document.createElement("div");p.textContent=text;if(bold)p.style.fontWeight="700";p.style.marginBottom="6px";panel.appendChild(p);return p;}
+  line("NMRE · Subito",true);
+  line("Pagina "+dataPage+(acc.total_pages?" di "+acc.total_pages:"")+": "+fresh.length+" annunci letti, "+added+" nuovi in questa raccolta.");
+  line("Raccolti finora: "+acc.items.length+" annunci da "+acc.pages.length+" pagine ("+acc.pages.join(", ")+")"+(acc.total?" · la ricerca ne dichiara "+acc.total:"")+".");
+  if(overLimit)line("Limite di "+MAX+" annunci raggiunto: "+overLimit+" non aggiunti. Copi e importi questi, poi svuoti e continui.",true);
+  line("Per continuare apra lei la pagina successiva e clicchi di nuovo NMRE. Quando ha finito, «Copia per NMRE» e incolli nell'app.");
+  var status=line("");
+  function button(label,handler){var b=document.createElement("button");b.type="button";b.textContent=label;b.setAttribute("style","margin:4px 6px 0 0;padding:8px 10px;border:1px solid #1d2433;border-radius:6px;background:#fff;color:#1d2433;cursor:pointer;font:inherit");b.addEventListener("click",handler);panel.appendChild(b);return b;}
+  button("Copia per NMRE",function(){
+    var text=JSON.stringify(acc);
+    var fallback=function(){var area=document.createElement("textarea");area.value=text;area.setAttribute("style","width:100%;height:80px;margin-top:6px");panel.appendChild(area);area.focus();area.select();status.textContent="Copi il testo selezionato (Ctrl+C) e lo incolli in NMRE.";};
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(function(){status.textContent="Copiato: incolli in NMRE, nel campo dell'importatore.";},fallback);else fallback();
+  });
+  button("Svuota la raccolta",function(){if(confirm("Svuotare gli annunci raccolti in questa scheda?")){try{sessionStorage.removeItem(KEY);}catch(e){}panel.remove();}});
+  button("Chiudi",function(){panel.remove();});
+  document.body.appendChild(panel);
+}
+function nmreSubitoBookmarkletHref(){
+  return "javascript:"+encodeURIComponent("("+nmreSubitoBookmarkletMain.toString()+")();void 0");
+}
+
 let nmreSubitoBrowserPreviewState=null;
 
 function nmreSubitoBrowserRowAdId(row){
@@ -5599,6 +5789,14 @@ async function nmreAnalyzeSubitoBrowserPayload(){
     const candidates=candidateResult.data||[];
     const archive=archiveResult.data||[];
     const filter=nmreSubitoSellerFilter(parsed.meta.searchUrl);
+    if(nmreSubitoExpectedSearch){
+      const match=nmreSubitoSearchMatches(nmreSubitoExpectedSearch.url,parsed.meta);
+      if(match!==true){
+        throw new Error(match===false
+          ?"I dati incollati provengono da una ricerca diversa da quella della notifica («"+(nmreSubitoExpectedSearch.label||"ricerca salvata")+"»): nessun annuncio importato. Apra la ricerca dalla notifica oppure scolleghi l’importazione."
+          :"Non è possibile verificare che i dati incollati provengano dalla ricerca della notifica: nessun annuncio importato. Raccolga i dati con il pulsante NMRE dalla pagina della ricerca.");
+      }
+    }
     const knownCandidateIds=new Set(candidates.map(nmreSubitoBrowserRowAdId).filter(Boolean));
     const knownArchiveIds=new Set(archive.map(nmreSubitoBrowserRowAdId).filter(Boolean));
     const enriched=parsed.items.map(item=>{
@@ -5607,7 +5805,9 @@ async function nmreAnalyzeSubitoBrowserPayload(){
       return {item,exact,possible,imported:false,seller:nmreSubitoBrowserSeller(item,filter)};
     });
     nmreSubitoBrowserPreviewState={meta:parsed.meta,filter,items:enriched};
-    $("subitoBrowserMsg").textContent=(parsed.meta.skipped?parsed.meta.skipped+" voci non valide o ripetute escluse. ":"")
+    const pagesText=parsed.meta.pages.length?"Pagine raccolte: "+parsed.meta.pages.join(", ")+(parsed.meta.totalPages?" di "+parsed.meta.totalPages:"")+". ":"";
+    $("subitoBrowserMsg").textContent=(parsed.meta.skipped?parsed.meta.skipped+" voci non valide o ripetute escluse. ":"")+pagesText
+      +(nmreSubitoExpectedSearch?"Ricerca della notifica verificata. ":"")
       +"Anteprima pronta. Selezioni manualmente gli annunci da importare.";
     nmreRenderSubitoBrowserPreview();
   }catch(error){
@@ -7995,6 +8195,33 @@ $("subitoBrowserPreview").addEventListener("change",event=>{
   if(event.target.matches("[data-subito-browser-id]"))nmreUpdateSubitoBrowserSelection();
 });
 $("subitoBrowserImportSelected").addEventListener("click",nmreImportSelectedSubitoBrowserItems);
+// Pulsante NMRE: link da trascinare tra i preferiti e codice per la Console.
+{
+  const bookmarklet=$("subitoBookmarklet");
+  if(bookmarklet){
+    bookmarklet.href=nmreSubitoBookmarkletHref();
+    bookmarklet.addEventListener("click",event=>{event.preventDefault();msg("subitoBrowserMsg","Trascini il pulsante «NMRE · Subito» nella barra dei preferiti: si usa sulla pagina di Subito, non qui.");});
+  }
+  $("subitoBookmarkletCopy")?.addEventListener("click",async()=>{
+    try{await navigator.clipboard.writeText("("+nmreSubitoBookmarkletMain.toString()+")();");msg("subitoBrowserMsg","Codice copiato: lo incolli nella Console del browser sulla pagina dei risultati di Subito.");}
+    catch{msg("subitoBrowserMsg","Copia non riuscita: usi il pulsante da trascinare tra i preferiti.");}
+  });
+  $("subitoImportUnlink")?.addEventListener("click",()=>{nmreSubitoExpectedSearch=null;nmreRenderSubitoImportLink();});
+}
+// Dalla scheda della notifica Gmail: apre la ricerca su Subito e collega l'importatore.
+document.addEventListener("click",event=>{
+  const button=event.target instanceof Element?event.target.closest("[data-subito-import-link]"):null;
+  if(!button)return;
+  event.preventDefault();
+  event.stopPropagation();
+  if(!nmreLinkSubitoImport(button.dataset.subitoImportLink,button.dataset.subitoImportLabel,button.dataset.subitoImportCandidate)){
+    msg("subitoBrowserMsg","Link della ricerca non valido: importazione non collegata.");
+    return;
+  }
+  window.open(nmreSubitoExpectedSearch.url,"_blank","noopener,noreferrer");
+  const panel=$("subitoBrowserImportPanel");
+  if(panel){panel.open=true;panel.scrollIntoView({behavior:"smooth",block:"start"});}
+},true);
 $("archiveManualToggle").addEventListener("click",()=>{
   const panel=$("archiveManualPanel");
   panel.hidden=!panel.hidden;

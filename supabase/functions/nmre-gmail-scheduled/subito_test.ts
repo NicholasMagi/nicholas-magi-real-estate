@@ -266,14 +266,19 @@ Deno.test("8 · annunci già presenti in archivio o scartati: non reinseriti né
     listing_key: "subito.it/appartamenti/bilocale-arredato-centro-falconara-marittima-608799020.htm", dedup_key: "gmail:old-b", source_email_id: "old-b",
     dati_estratti: { storico_stato: [{ data: "2026-11-25T19:00:00Z", origine: "utente", azione: "scartato", motivo: "Zona non interessante" }] } };
   const db = await afterPreviousDigest([archived, discarded]);
+  const existingBefore = JSON.stringify(db.tables.annunci_candidati.filter((row: Any) => row.dedup_key === "gmail:old-a" || row.dedup_key === "gmail:old-b"));
   const result = await syncCycle(db, [EMAIL_26], pages({ html: PAGE }).fetchPage);
+  eq(JSON.stringify(db.tables.annunci_candidati.filter((row: Any) => row.dedup_key === "gmail:old-a" || row.dedup_key === "gmail:old-b")), existingBefore,
+    "archiviato e scartato identici campo per campo (compreso updated_at)");
   eq(result.counters.inserted, 1, "inserito solo l'annuncio non ancora acquisito");
   eq(byAd(db, "608812345")[0].stato, "confermato", "l'archiviato resta archiviato");
   eq(byAd(db, "608812345")[0].titolo, "Trilocale Adriatico (archiviato)", "dati dell'archiviato invariati");
   const bilocale = byAd(db, "608799020")[0];
   eq(bilocale.stato, "scartato", "lo scarto manuale resta");
   eq(bilocale.dati_estratti.storico_stato[0].motivo, "Zona non interessante", "decisione manuale conservata");
-  eq(bilocale.dati_estratti.notifiche_dopo_scarto?.elenco?.length, 1, "nuova notifica evidenziata sullo scartato");
+  // Decisione del titolare: un annuncio Subito già presente non viene modificato in alcun modo
+  // (nemmeno con il contrassegno di una nuova notifica); la notifica resta nello storico.
+  eq(bilocale.dati_estratti.notifiche_dopo_scarto, undefined, "scheda scartata non modificata (nessun contrassegno)");
   eq(db.tables.annunci_candidati_notifiche.filter(n => String(n.source_email_id).startsWith(EMAIL_26.id)).length, 3, "tutte e tre le notifiche tracciate");
 });
 

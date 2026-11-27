@@ -172,5 +172,16 @@ assert.equal(professionalConflict.tipo_venditore, "Da verificare", "una dichiara
 assert.equal(professionalConflict.seller_confidence, 0);
 assert.equal(row.email_subject, "Importazione manuale dalla pagina Subito");
 
+assert.equal(row.portale, "subito.it", "portale coerente con le altre schede Subito");
+assert.equal(parse({ ...payload, items: [{ ...payload.items[0], id: "669796301", url: "https://www.subito.it/appartamenti/669796301.htm" }] }).items[0]?.id, "669796301", "ID anche nei link senza titolo");
+// L'importatore crea SOLO nuove schede: nessun aggiornamento, upsert o cancellazione di dati esistenti.
+const importSource = sourceBetween("async function nmreImportSelectedSubitoBrowserItems(){", "function candidateSourceTheme(portal){");
+assert.match(importSource, /supabase\.from\("annunci_candidati"\)\.insert\(row\)/, "inserimento di una nuova scheda");
+assert.doesNotMatch(importSource, /\.update\(|\.upsert\(|\.delete\(|\.rpc\(/, "nessuna modifica di schede o archivio esistenti");
+assert.match(importSource, /error\.code==="23505"\)\{duplicates\+\+;entry\.exact="opportunita";continue;\}/, "duplicato concorrente: ignorato, mai sovrascritto");
+const analyzeSource = sourceBetween("async function nmreAnalyzeSubitoBrowserPayload(){", "function nmreUpdateSubitoBrowserSelection(){");
+assert.match(analyzeSource, /from\("annunci_candidati"\)\.select\([^)]*\)\.eq\("owner_id",currentUser\.id\)\)/, "confronto con TUTTE le opportunità (nessun filtro sullo stato: scartate comprese)");
+assert.match(analyzeSource, /from\("annunci"\)\.select\("[^"]*deleted_at"\)\.eq\("owner_id",currentUser\.id\)\)/, "confronto con tutto l'Archivio (cestino compreso)");
+assert.doesNotMatch(analyzeSource, /\.(?:neq|is|in)\("stato"|\.is\("deleted_at"/, "nessuna esclusione di scartati o cestino");
 assert.ok(!/preclassificato come «Privato» in base al filtro|preclassifica il venditore come «Privato»/.test(html), "nessun testo dell'app promette la classificazione dal solo filtro");
 console.log("Importazione Subito da browser: parsing, validazioni, filtro della ricerca controllato e classificazione prudente verificati.");

@@ -15,6 +15,7 @@ import {
   identifyNewSubitoListings, isBlockedSubitoPage, normalizeSubitoSearchUrl, parseSubitoResultsPage, subitoPageConfirmsSearch, subitoSearchKey,
   SUBITO_REASON_TEXT
 } from "./subito.ts";
+import { subitoIdLikePatterns } from "./subito.ts";
 import type { NewListingsDecision, SubitoDigest, SubitoItem, SubitoPage } from "./subito.ts";
 
 export const SUBITO_MAX_ATTEMPTS = 6;
@@ -205,10 +206,19 @@ export function subitoNotificationId(gmailId: string, adId: string): string {
   return gmailId + "#subito-" + adId;
 }
 
-/** La ricerca salvata filtra per "Privato", ma non è una prova sul singolo annuncio. */
+/**
+ * La ricerca salvata filtra per "Privato", ma non è una prova sul singolo annuncio. Le
+ * ricerche Subito sono già filtrate per privati: nessuna esclusione come «Agenzia» (che
+ * toglierebbe l'annuncio dalla coda); segnali di agenzia nel testo → «Da verificare».
+ */
+export function subitoNoAgencyExclusion(result: SellerResult): SellerResult {
+  if (result.classification !== "Agenzia") return result;
+  return { classification: "Da verificare", confidence: 0,
+    evidence: "Il testo contiene segnali di agenzia (" + result.evidence + "): annuncio di una ricerca filtrata per privati, mantenuto in coda per la verifica" };
+}
 function itemSeller(item: SubitoItem, classify: (text: string) => SellerResult): SellerResult {
   const fromText = classify([item.title, item.description].filter(Boolean).join(" "));
-  if (fromText.classification === "Agenzia") return fromText;
+  if (fromText.classification === "Agenzia") return subitoNoAgencyExclusion(fromText);
   if (item.advertiserCompany === true) {
     return { classification: "Da verificare", confidence: 0, evidence: "Subito indica un inserzionista professionale: controllo manuale necessario" };
   }
@@ -294,7 +304,10 @@ export function subitoItemRow(item: SubitoItem, ctx: SubitoRowContext, details: 
     // Campi interni, non colonne del database (rimossi prima dell'inserimento).
     notification_source_id: notificationId,
     subito_ad_id: item.id,
-    preserve_existing: true
+    preserve_existing: true,
+    // Annuncio già presente in NMRE: nessun dato della scheda viene modificato (né campi
+    // vuoti, né stato, né riapertura degli scartati); solo lo storico notifiche.
+    history_only: true
   };
 }
 
@@ -417,7 +430,8 @@ export function supabaseSubitoDeps(
     async archivedListing(adId) {
       if (!/^\d{6,}$/.test(adId)) return null;
       // listing_key per gli immobili archiviati da NMRE, url per quelli inseriti a mano.
-      for (const [column, pattern] of [["listing_key", "subito.it/%-" + adId + ".htm"], ["url", "%subito.it/%-" + adId + ".htm%"]]) {
+      const patterns = subitoIdLikePatterns(adId);
+      for (const [column, pattern] of [...patterns.listingKey.map(p => ["listing_key", p]), ...patterns.url.map(p => ["url", p])]) {
         const { data, error } = await admin
           .from("annunci")
           .select("id,deleted_at")
@@ -434,9 +448,12 @@ export function supabaseSubitoDeps(
       const byKey = await admin.from("annunci_candidati").select("id").eq("owner_id", owner).eq("dedup_key", "subito:" + adId).limit(1);
       if (byKey.error) throw new Error("Confronto con le opportunità non riuscito");
       if (byKey.data?.length) return true;
-      const byListing = await admin.from("annunci_candidati").select("id").eq("owner_id", owner).like("listing_key", "subito.it/%-" + adId + ".htm").limit(1);
-      if (byListing.error) throw new Error("Confronto con le opportunità non riuscito");
-      return !!byListing.data?.length;
+      for (const pattern of subitoIdLikePatterns(adId).listingKey) {
+        const byListing = await admin.from("annunci_candidati").select("id").eq("owner_id", owner).like("listing_key", pattern).limit(1);
+        if (byListing.error) throw new Error("Confronto con le opportunità non riuscito");
+        if (byListing.data?.length) return true;
+      }
+      return false;
     },
     async existingDigest(gmailId) {
       const { data, error } = await admin

@@ -484,7 +484,10 @@ export default {
       const repairIds = (candidatesToRepair || [])
         .filter((candidate: any) => isRepairEligible(candidate))
         // Annunci di una ricerca salvata Subito: si rilegge l'email riepilogativa.
-        .map((candidate: any) => repairEmailId(candidate.source_email_id));
+        .map((candidate: any) => repairEmailId(candidate.source_email_id))
+        // Seconda protezione: solo identificativi con la forma di un ID Gmail (le schede
+        // importate dal browser, "subito-browser:…", non sono email).
+        .filter((id: string) => /^[0-9A-Za-z]{6,64}$/.test(id));
 
       // Avvisi dubbi (Fase 2): attivi solo con NMRE_CAPTURE_DUBIOUS_ALERTS=true e
       // DOPO l'applicazione della migrazione della tabella nmre_gmail_avvisi_dubbi.
@@ -854,7 +857,6 @@ export default {
         subitoFullSearch: fullSearch,
         subitoSearchLogs: fullCycle ? fullCycle.logs.length : 0,
         subitoSightingsWithoutChanges: counters.sightingsWithoutChanges || 0,
-        subitoFieldsCompleted: counters.fieldsCompleted || 0,
         duplicatesOrExisting: Math.max(0, rows.length - inserted - updated),
         missingMessages: emails.filter(email => !email).length
       });

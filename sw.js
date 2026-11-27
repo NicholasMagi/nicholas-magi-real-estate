@@ -1,4 +1,4 @@
-// NMRE service worker build 20261127-subito-full-search-2
+// NMRE service worker build 20261127-subito-browser-importer-1
 self.addEventListener("install",event=>{self.skipWaiting();});
 self.addEventListener("activate",event=>{event.waitUntil(self.clients.claim());});
 self.addEventListener("push",event=>{
