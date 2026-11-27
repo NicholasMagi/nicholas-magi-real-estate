@@ -1,7 +1,7 @@
 import { Contact, ContactField } from "expo-contacts";
 import * as ContactsLegacy from "expo-contacts/legacy";
 import { supabase } from "@/shared/supabase/client";
-import { extractPhoneNumbers, normalizePhoneNumber } from "@/features/crm/phoneContactMatching";
+import { canUseNameFallback, extractPhoneNumbers, normalizePhoneNumber } from "@/features/crm/phoneContactMatching";
 
 const CONTACT_FIELDS = [
   ContactField.FULL_NAME,
@@ -153,7 +153,11 @@ async function importDeviceContacts(
     if (email) {
       for (const match of byEmail.get(email) ?? []) candidates.set(match.id, match);
     }
-    if (candidates.size === 0 && nameKey && deviceNameCounts.get(nameKey) === 1) {
+    if (candidates.size === 0 && nameKey && canUseNameFallback({
+      phoneNumbers,
+      email,
+      deviceNameCount: deviceNameCounts.get(nameKey) ?? 0
+    })) {
       for (const match of byName.get(nameKey) ?? []) candidates.set(match.id, match);
     }
 
