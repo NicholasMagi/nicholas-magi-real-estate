@@ -1,3 +1,12 @@
+## 2026-11-27 — Importazione automatica rubrica nativa (mobile)
+- Sostituita la schermata CRM segnaposto di NMRE Mobile con il collegamento alla rubrica nativa iOS/Android tramite Expo Contacts.
+- Dopo il consenso del sistema, importa i contatti in pagine, confronta telefoni/email/nominativi con `nmre_contacts` e crea solo i record mancanti; completa esclusivamente campi CRM vuoti.
+- Attivato il controllo automatico quando la schermata CRM viene aperta, quando l'app torna in primo piano e quando il sistema segnala modifiche alla rubrica. Non viene promesso un job in background.
+- Gli annunci archiviati senza referente vengono associati solo se i numeri normalizzati individuano un unico contatto. Gli abbinamenti ambigui e i conflitti non vengono scritti.
+- Tutte le modifiche sono confinate a `mobile/`; nessuna migration, Edge Function, tabella o deploy è stato eseguito.
+- Limite dello schema CRM attuale: `nmre_contacts.phone` conserva un solo numero principale. Gli altri numeri letti dal dispositivo partecipano al matching durante la sincronizzazione, ma non vengono salvati come recapiti multipli permanenti. Per questo serve una futura migration additiva verificata su staging.
+- Test automatici, typecheck, lint, Expo Doctor e build native restano da eseguire in un workspace con dipendenze installate e su dispositivi fisici.
+
 ## 2026-11-25 — Archiviazione automatica solo con prova forte
 - Ripristinata l'archiviazione automatica Gmail, ma solo dietro al gate della funzione SQL nmre_auto_archive_private_candidate.
 - La funzione consente l'inserimento soltanto per etichetta esplicita di venditore privato con confidence almeno 99 o verifica manuale esplicita, e richiede titolo e comune.
