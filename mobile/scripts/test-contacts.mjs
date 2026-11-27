@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  canUseNameFallback,
   extractPhoneNumbers,
   normalizePhoneNumber,
   uniqueContactMatch
@@ -31,4 +32,11 @@ test("a contact match is returned only when exactly one unique id exists", () =>
   assert.equal(uniqueContactMatch([{ id: "a" }, { id: "a" }])?.id, "a");
   assert.equal(uniqueContactMatch([{ id: "a" }, { id: "b" }]), null);
   assert.equal(uniqueContactMatch([]), null);
+});
+
+test("name-only fallback never overrides a different phone or email identity", () => {
+  assert.equal(canUseNameFallback({ phoneNumbers: [], email: null, deviceNameCount: 1 }), true);
+  assert.equal(canUseNameFallback({ phoneNumbers: ["3331234567"], email: null, deviceNameCount: 1 }), false);
+  assert.equal(canUseNameFallback({ phoneNumbers: [], email: "mario@example.it", deviceNameCount: 1 }), false);
+  assert.equal(canUseNameFallback({ phoneNumbers: [], email: null, deviceNameCount: 2 }), false);
 });
