@@ -32,10 +32,6 @@ Deno.test("Documented Italian date format is parsed correctly", () => {
   if (candidate.data_pubblicazione !== "2026-11-23T00:00:00.000Z") {
     throw new Error("Unexpected parsed date: " + candidate.data_pubblicazione);
   }
-  for (const town of ["fermo", "porto sant'elpidio", "montegranaro", "ascoli piceno", "pesaro"]) {
-    if (ALLOWED_MUNICIPALITIES.has(town)) throw new Error("Outside province must be excluded: " + town);
-  }
-  if (ALLOWED_MUNICIPALITIES.size !== 102) throw new Error("Expected 102 target municipalities, got " + ALLOWED_MUNICIPALITIES.size);
 });
 
 Deno.test("Only allowed Marche municipalities and official listing URLs are imported", () => {
@@ -79,8 +75,12 @@ Deno.test("Explicit professional metadata is excluded", () => {
   if (candidate !== null) throw new Error("Agency listing must be excluded");
 });
 
-Deno.test("The target municipality allowlist contains the core service area", () => {
+Deno.test("The target municipality allowlist contains only the two target provinces", () => {
   for (const town of ["castelfidardo", "ancona", "osimo", "recanati", "jesi", "macerata", "camerino", "civitanova marche", "fabriano", "senigallia"]) {
     if (!ALLOWED_MUNICIPALITIES.has(town)) throw new Error("Missing municipality: " + town);
   }
+  for (const town of ["fermo", "porto sant'elpidio", "montegranaro", "ascoli piceno", "pesaro"]) {
+    if (ALLOWED_MUNICIPALITIES.has(town)) throw new Error("Outside province must be excluded: " + town);
+  }
+  if (ALLOWED_MUNICIPALITIES.size !== 102) throw new Error("Expected 102 target municipalities, got " + ALLOWED_MUNICIPALITIES.size);
 });
