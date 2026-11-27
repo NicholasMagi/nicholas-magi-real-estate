@@ -122,7 +122,11 @@ async function mergeCertainDuplicateContacts(ownerId: string, contacts: CrmConta
       primary.contact_type = primary.contact_type && primary.contact_type !== "altro" ? primary.contact_type : duplicate.contact_type;
       primary.status = primary.status && primary.status !== "nuovo" ? primary.status : duplicate.status;
       primary.source = primary.source || duplicate.source;
-      primary.notes = [primary.notes, duplicate.notes].filter(Boolean).join("\n");
+      const secondaryDetails = [
+        primary.phone && duplicate.phone && normalizePhoneNumber(primary.phone) !== normalizePhoneNumber(duplicate.phone) ? "Telefono aggiuntivo: " + duplicate.phone : "",
+        primary.email && duplicate.email && normalizeEmail(primary.email) !== normalizeEmail(duplicate.email) ? "Email aggiuntiva: " + duplicate.email : ""
+      ].filter(Boolean);
+      primary.notes = [...new Set([primary.notes, duplicate.notes, ...secondaryDetails].filter(Boolean))].join("\n");
       removedIds.add(duplicate.id);
       merged += 1;
     }
@@ -284,6 +288,7 @@ async function importDeviceContacts(
       (candidates.size === 0 && !item.fullName) ||
       (candidates.size === 0 && phoneNumbers.length === 0 && !email && (deviceNameCounts.get(nameKey) ?? 0) > 1)
     ) {
+      for (const contact of candidates.values()) await flagContactForReview(ownerId, contact, "Possibile corrispondenza multipla: numero o email associati a più schede.");
       for (const phone of phoneNumbers) {
         for (const contact of byPhone.get(phone) ?? []) await flagContactForReview(ownerId, contact, "Numero condiviso da più voci della rubrica del telefono.");
       }
