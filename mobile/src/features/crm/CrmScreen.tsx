@@ -150,7 +150,7 @@ export function CrmScreen() {
         ) : permission === "granted" ? (
           <>
             <Text style={styles.body}>
-              NMRE aggiorna la rubrica quando apre questa schermata, quando l'app torna attiva e quando il telefono segnala modifiche ai contatti.
+              NMRE importa i nuovi contatti e completa solo i campi CRM vuoti quando apre questa schermata, quando l'app torna attiva e quando il telefono segnala modifiche.
             </Text>
             <Pressable style={[styles.button, syncing && styles.buttonDisabled]} onPress={() => void runSync()} disabled={syncing}>
               <Text style={styles.buttonText}>{syncing ? "Sincronizzazione…" : "Sincronizza adesso"}</Text>
