@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   canUseNameFallback,
   extractPhoneNumbers,
+  findCertainDuplicateGroups,
+  hasNameIdentityConflict,
   normalizePhoneNumber,
   uniqueContactMatch
 } from "../src/features/crm/phoneContactMatching.ts";
@@ -39,4 +41,57 @@ test("name-only fallback never overrides a different phone or email identity", (
   assert.equal(canUseNameFallback({ phoneNumbers: ["3331234567"], email: null, deviceNameCount: 1 }), false);
   assert.equal(canUseNameFallback({ phoneNumbers: [], email: "mario@example.it", deviceNameCount: 1 }), false);
   assert.equal(canUseNameFallback({ phoneNumbers: [], email: null, deviceNameCount: 2 }), false);
+});
+
+test("same CRM name with a different phone or email is treated as an identity conflict", () => {
+  assert.equal(hasNameIdentityConflict({
+    nameMatchCount: 1,
+    hasStrongIdentifier: true,
+    strongMatchCount: 0
+  }), true);
+  assert.equal(hasNameIdentityConflict({
+    nameMatchCount: 1,
+    hasStrongIdentifier: true,
+    strongMatchCount: 1
+  }), false);
+  assert.equal(hasNameIdentityConflict({
+    nameMatchCount: 0,
+    hasStrongIdentifier: true,
+    strongMatchCount: 0
+  }), false);
+  assert.equal(hasNameIdentityConflict({
+    nameMatchCount: 1,
+    hasStrongIdentifier: false,
+    strongMatchCount: 0
+  }), false);
+});
+
+
+test("automatic duplicate grouping requires same normalized name and matching phone or email", () => {
+  const groups = findCertainDuplicateGroups([
+    { id: "a", full_name: "Mario Rossi", phone: "+39 333 123 4567", email: null },
+    { id: "b", full_name: "  mario   rossi ", phone: "3331234567", email: "mario@example.it" },
+    { id: "c", full_name: "Mario Rossi", phone: "3337654321", email: null },
+    { id: "d", full_name: "Luigi Bianchi", phone: "3331234567", email: null }
+  ]);
+  assert.equal(groups.length, 1);
+  assert.deepEqual(groups[0].map(item => item.id).sort(), ["a", "b"]);
+});
+
+test("same phone without matching name is not auto-merged", () => {
+  const groups = findCertainDuplicateGroups([
+    { id: "a", full_name: "Mario Rossi", phone: "3331234567", email: null },
+    { id: "b", full_name: "Luigi Bianchi", phone: "3331234567", email: null }
+  ]);
+  assert.equal(groups.length, 0);
+});
+
+
+test("same-name contacts with conflicting strong identifiers are not auto-merged", () => {
+  const groups = findCertainDuplicateGroups([
+    { id: "a", full_name: "Mario Rossi", phone: "3331234567", email: "uno@example.it" },
+    { id: "b", full_name: "Mario Rossi", phone: "3331234567", email: "due@example.it" },
+    { id: "c", full_name: "Mario Rossi", phone: "3337654321", email: "uno@example.it" }
+  ]);
+  assert.equal(groups.length, 0);
 });

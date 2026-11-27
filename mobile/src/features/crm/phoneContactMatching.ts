@@ -43,3 +43,71 @@ export function uniqueContactMatch<T extends { id: string }>(ids: T[]): T | null
   const uniqueIds = new Set(ids.map(item => item.id));
   return uniqueIds.size === 1 ? ids.find(item => item.id === [...uniqueIds][0]) ?? null : null;
 }
+
+/**
+ * A matching name is not enough to merge two records when the device contact
+ * carries a phone/email that does not match any CRM identity. Treat it as a
+ * conflict instead of silently creating a duplicate person.
+ */
+export function hasNameIdentityConflict(input: {
+  nameMatchCount: number;
+  hasStrongIdentifier: boolean;
+  strongMatchCount: number;
+}): boolean {
+  return input.nameMatchCount > 0 &&
+    input.hasStrongIdentifier &&
+    input.strongMatchCount === 0;
+}
+
+
+export type DuplicateContactIdentity = { id: string; full_name: string | null; phone: string | null; email: string | null };
+
+function normalizeContactName(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("it-IT");
+}
+
+function normalizeContactEmail(value: string): string {
+  return value.trim().toLocaleLowerCase("en-US");
+}
+
+/** Merge only when name and a strong identifier match without conflicting identifiers. */
+export function findCertainDuplicateGroups<T extends DuplicateContactIdentity>(contacts: T[]): T[][] {
+  const parent = new Map<string, string>();
+  const find = (id: string): string => {
+    const current = parent.get(id) ?? id;
+    if (current === id) return id;
+    const root = find(current);
+    parent.set(id, root);
+    return root;
+  };
+  const union = (a: string, b: string) => {
+    const rootA = find(a);
+    const rootB = find(b);
+    if (rootA !== rootB) parent.set(rootB, rootA);
+  };
+  contacts.forEach(contact => parent.set(contact.id, contact.id));
+  for (let i = 0; i < contacts.length; i += 1) {
+    const a = contacts[i];
+    if (!a || !a.full_name?.trim()) continue;
+    for (let j = i + 1; j < contacts.length; j += 1) {
+      const b = contacts[j];
+      if (!b || !b.full_name?.trim() || normalizeContactName(a.full_name) !== normalizeContactName(b.full_name)) continue;
+      const phoneA = a.phone ? normalizePhoneNumber(a.phone) : null;
+      const phoneB = b.phone ? normalizePhoneNumber(b.phone) : null;
+      const emailA = a.email?.trim() ? normalizeContactEmail(a.email) : null;
+      const emailB = b.email?.trim() ? normalizeContactEmail(b.email) : null;
+      const phoneConflict = Boolean(phoneA && phoneB && phoneA !== phoneB);
+      const emailConflict = Boolean(emailA && emailB && emailA !== emailB);
+      if (phoneConflict || emailConflict) continue;
+      if ((phoneA && phoneA === phoneB) || (emailA && emailA === emailB)) union(a.id, b.id);
+    }
+  }
+  const groups = new Map<string, T[]>();
+  for (const contact of contacts) {
+    const root = find(contact.id);
+    const group = groups.get(root) ?? [];
+    group.push(contact);
+    groups.set(root, group);
+  }
+  return [...groups.values()].filter(group => group.length > 1);
+}

@@ -15,9 +15,20 @@ import {
   addPhoneContactsChangeListener,
   getPhoneContactsPermission,
   loadCrmContacts,
+  loadContactRelations,
+  searchAvailableProperties,
+  linkPropertyToContact,
+  unlinkPropertyFromContact,
+  addContactInteraction,
   requestPhoneContactsPermission,
   syncPhoneContacts,
+  updateCrmContact,
+  clearContactReviewFlag,
+  getContactReviewNote,
+  getContactSupplementalNotes,
   type CrmContactSummary,
+  type CrmLinkedProperty,
+  type CrmInteraction,
   type PhoneContactSyncResult
 } from "@/features/crm/phoneContactsSync";
 import { theme } from "@/shared/theme";
@@ -33,6 +44,18 @@ export function CrmScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [contacts, setContacts] = useState<CrmContactSummary[]>([]);
   const [search, setSearch] = useState("");
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editRole, setEditRole] = useState("altro");
+  const [savingContact, setSavingContact] = useState(false);
+  const [linkedProperties, setLinkedProperties] = useState<CrmLinkedProperty[]>([]);
+  const [interactions, setInteractions] = useState<CrmInteraction[]>([]);
+  const [availableProperties, setAvailableProperties] = useState<{ id: string; title: string; municipality: string; status: string }[]>([]);
+  const [interactionNote, setInteractionNote] = useState("");
+  const [loadingRelations, setLoadingRelations] = useState(false);
+  const [savingInteraction, setSavingInteraction] = useState(false);
   const syncInProgress = useRef(false);
 
   const runSync = useCallback(async () => {
@@ -51,7 +74,7 @@ export function CrmScreen() {
       const next = await syncPhoneContacts(userId);
       setResult(next);
       setContacts(await loadCrmContacts(userId));
-      setMessage("Rubrica sincronizzata. I dati già presenti nel CRM sono stati preservati.");
+      setMessage(next.mergedDuplicates > 0 ? String(next.mergedDuplicates) + " duplicati certi uniti automaticamente. La rubrica è aggiornata." : "Rubrica sincronizzata. I dati già presenti nel CRM sono stati preservati.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Sincronizzazione non riuscita. Riprovi.");
     } finally {
@@ -108,6 +131,94 @@ export function CrmScreen() {
       appStateSubscription.remove();
     };
   }, [permission, runSync]);
+
+  const selectedContact = contacts.find(contact => contact.id === selectedContactId) ?? null;
+
+  const refreshRelations = useCallback(async (contactId: string) => {
+    if (!userId) return;
+    setLoadingRelations(true);
+    try {
+      const [relations, properties] = await Promise.all([
+        loadContactRelations(userId, contactId),
+        searchAvailableProperties(userId)
+      ]);
+      setLinkedProperties(relations.properties);
+      setInteractions(relations.interactions);
+      setAvailableProperties(properties);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Non è stato possibile caricare i dettagli del contatto.");
+    } finally {
+      setLoadingRelations(false);
+    }
+  }, [userId]);
+
+  const openContact = (contact: CrmContactSummary) => {
+    setSelectedContactId(contact.id);
+    setEditName(contact.full_name ?? "");
+    setEditPhone(contact.phone ?? "");
+    setEditEmail(contact.email ?? "");
+    setEditRole(contact.contact_type ?? "altro");
+    void refreshRelations(contact.id);
+  };
+
+  const attachProperty = async (propertyId: string) => {
+    if (!userId || !selectedContactId) return;
+    try {
+      await linkPropertyToContact(userId, selectedContactId, propertyId);
+      await refreshRelations(selectedContactId);
+      setMessage("Immobile associato al contatto.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Associazione non riuscita.");
+    }
+  };
+
+  const detachProperty = async (propertyId: string) => {
+    if (!userId || !selectedContactId) return;
+    try {
+      await unlinkPropertyFromContact(userId, selectedContactId, propertyId);
+      await refreshRelations(selectedContactId);
+      setMessage("Associazione rimossa. L'immobile non è stato eliminato.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Rimozione associazione non riuscita.");
+    }
+  };
+
+  const saveInteraction = async () => {
+    if (!userId || !selectedContactId || !interactionNote.trim()) return;
+    setSavingInteraction(true);
+    try {
+      await addContactInteraction(userId, selectedContactId, {
+        interaction_type: "telefonata",
+        notes: interactionNote
+      });
+      setInteractionNote("");
+      await refreshRelations(selectedContactId);
+      setMessage("Interazione registrata nello storico.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Registrazione interazione non riuscita.");
+    } finally {
+      setSavingInteraction(false);
+    }
+  };
+
+  const saveContact = async () => {
+    if (!userId || !selectedContactId) return;
+    setSavingContact(true);
+    try {
+      await updateCrmContact(userId, selectedContactId, {
+        full_name: editName,
+        phone: editPhone,
+        email: editEmail,
+        contact_type: editRole
+      });
+      setContacts(await loadCrmContacts(userId));
+      setMessage("Contatto aggiornato.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Salvataggio non riuscito.");
+    } finally {
+      setSavingContact(false);
+    }
+  };
 
   const enableImport = async () => {
     setMessage(null);
@@ -182,7 +293,7 @@ export function CrmScreen() {
       <View style={styles.card}>
         <View style={styles.contactsHeader}>
           <Text style={styles.cardTitle}>Contatti in NMRE</Text>
-          <Text style={styles.cardSubtitle}>{contacts.length === 100 ? "Primi 100 contatti" : contacts.length + " contatti"}</Text>
+          <Text style={styles.cardSubtitle}>{contacts.length + " contatti"}</Text>
         </View>
         <TextInput
           style={styles.searchInput}
@@ -194,16 +305,100 @@ export function CrmScreen() {
         />
         {contacts.filter(contact => [contact.full_name, contact.phone, contact.email].some(value => String(value ?? "").toLocaleLowerCase("it-IT").includes(search.trim().toLocaleLowerCase("it-IT")))).length === 0 ? (
           <Text style={styles.body}>Nessun contatto trovato.</Text>
-        ) : contacts.filter(contact => [contact.full_name, contact.phone, contact.email].some(value => String(value ?? "").toLocaleLowerCase("it-IT").includes(search.trim().toLocaleLowerCase("it-IT")))).slice(0, 50).map(contact => (
-          <View key={contact.id} style={styles.contactRow}>
+        ) : contacts.filter(contact => [contact.full_name, contact.phone, contact.email].some(value => String(value ?? "").toLocaleLowerCase("it-IT").includes(search.trim().toLocaleLowerCase("it-IT")))).map(contact => (
+          <Pressable key={contact.id} style={styles.contactRow} onPress={() => openContact(contact)}>
             <View style={styles.contactMain}>
-              <Text style={styles.contactName}>{contact.full_name}</Text>
+              <Text style={styles.contactName}>{getContactReviewNote(contact.notes) ? "! " : ""}{contact.full_name}</Text>
               <Text style={styles.contactMeta}>{contact.phone || "Telefono non presente"}{contact.email ? " · " + contact.email : ""}</Text>
             </View>
-            <Text style={styles.contactStatus}>{contact.contact_type || "altro"}</Text>
-          </View>
+            <Text style={styles.contactStatus}>{contact.contact_type || "altro"} · Modifica</Text>
+          </Pressable>
         ))}
       </View>
+
+      {selectedContact ? (
+        <View style={styles.card}>
+          <View style={styles.contactsHeader}>
+            <Text style={styles.cardTitle}>Scheda contatto</Text>
+            <Pressable onPress={() => setSelectedContactId(null)}><Text style={styles.contactStatus}>Chiudi</Text></Pressable>
+          </View>
+          <Text style={styles.fieldLabel}>Nome e cognome</Text>
+          <TextInput style={styles.searchInput} value={editName} onChangeText={setEditName} placeholder="Nome e cognome" />
+          <Text style={styles.fieldLabel}>Telefono principale</Text>
+          <TextInput style={styles.searchInput} value={editPhone} onChangeText={setEditPhone} placeholder="Numero telefonico" keyboardType="phone-pad" />
+          <Text style={styles.fieldLabel}>Email</Text>
+          <TextInput style={styles.searchInput} value={editEmail} onChangeText={setEditEmail} placeholder="Email" keyboardType="email-address" autoCapitalize="none" />
+          <Text style={styles.fieldLabel}>Ruolo del contatto</Text>
+          <TextInput style={styles.searchInput} value={editRole} onChangeText={setEditRole} placeholder="es. venditore, acquirente, altro" />
+          <Text style={styles.footnote}>Provenienza: {selectedContact.source === "rubrica_telefono" ? "Rubrica del telefono" : "Inserimento manuale o altra origine"}.</Text>
+          {getContactSupplementalNotes(selectedContact.notes) ? (
+            <Text style={styles.footnote}>Note e recapiti aggiuntivi: {getContactSupplementalNotes(selectedContact.notes)}</Text>
+          ) : null}
+          {getContactReviewNote(selectedContact.notes) ? (
+            <View style={styles.reviewWarning}>
+              <Text style={styles.reviewWarningTitle}>! Da verificare</Text>
+              <Text style={styles.reviewWarningText}>{getContactReviewNote(selectedContact.notes)}</Text>
+              <Pressable onPress={() => {
+                if (!userId || !selectedContactId) return;
+                void clearContactReviewFlag(userId, selectedContactId).then(async () => {
+                  setContacts(await loadCrmContacts(userId));
+                  setMessage("Contatto contrassegnato come verificato.");
+                }).catch(error => setMessage(error instanceof Error ? error.message : "Non è stato possibile aggiornare la segnalazione."));
+              }}>
+                <Text style={styles.reviewResolve}>Segna come verificato</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          <Pressable style={[styles.button, savingContact && styles.buttonDisabled]} onPress={() => void saveContact()} disabled={savingContact}>
+            <Text style={styles.buttonText}>{savingContact ? "Salvataggio…" : "Salva modifiche"}</Text>
+          </Pressable>
+          <View style={styles.sectionDivider} />
+          <Text style={styles.cardTitle}>Immobili associati</Text>
+          {loadingRelations ? <ActivityIndicator color={theme.colors.gold} /> : null}
+          {linkedProperties.length === 0 ? <Text style={styles.body}>Nessun immobile associato.</Text> : linkedProperties.map(property => (
+            <View key={property.id} style={styles.relationRow}>
+              <View style={styles.contactMain}>
+                <Text style={styles.contactName}>{property.title}</Text>
+                <Text style={styles.contactMeta}>{property.municipality} · {property.status} · {property.relation_role}</Text>
+              </View>
+              <Pressable onPress={() => void detachProperty(property.id)}><Text style={styles.removeLink}>Rimuovi</Text></Pressable>
+            </View>
+          ))}
+          <Text style={styles.fieldLabel}>Associa un immobile esistente</Text>
+          {availableProperties.filter(property => !linkedProperties.some(link => link.id === property.id)).slice(0, 20).map(property => (
+            <Pressable key={property.id} style={styles.relationRow} onPress={() => void attachProperty(property.id)}>
+              <View style={styles.contactMain}>
+                <Text style={styles.contactName}>{property.title}</Text>
+                <Text style={styles.contactMeta}>{property.municipality} · {property.status}</Text>
+              </View>
+              <Text style={styles.addLink}>+ Associa</Text>
+            </Pressable>
+          ))}
+          <View style={styles.sectionDivider} />
+          <Text style={styles.cardTitle}>Storico interazioni</Text>
+          <TextInput
+            style={[styles.searchInput, styles.multilineInput]}
+            value={interactionNote}
+            onChangeText={setInteractionNote}
+            placeholder="Annoti telefonata, appuntamento o altro contatto…"
+            multiline
+          />
+          <Pressable style={[styles.button, savingInteraction && styles.buttonDisabled]} onPress={() => void saveInteraction()} disabled={savingInteraction || !interactionNote.trim()}>
+            <Text style={styles.buttonText}>{savingInteraction ? "Registrazione…" : "Registra telefonata / nota"}</Text>
+          </Pressable>
+          {interactions.length === 0 ? <Text style={styles.body}>Nessuna interazione registrata.</Text> : interactions.map(interaction => (
+            <View key={interaction.id} style={styles.interactionItem}>
+              <View style={styles.contactsHeader}>
+                <Text style={styles.contactName}>{interaction.interaction_type.replaceAll("_", " ")}</Text>
+                <Text style={styles.contactStatus}>{new Date(interaction.created_at).toLocaleString("it-IT")}</Text>
+              </View>
+              {interaction.outcome ? <Text style={styles.contactMeta}>Esito: {interaction.outcome}</Text> : null}
+              {interaction.notes ? <Text style={styles.body}>{interaction.notes}</Text> : null}
+              {interaction.next_contact_at ? <Text style={styles.contactMeta}>Richiamare: {interaction.next_contact_at}</Text> : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       {result ? (
         <View style={styles.card}>
@@ -214,6 +409,7 @@ export function CrmScreen() {
             <Stat label="Dati completati" value={result.enriched} />
             <Stat label="Già presenti" value={result.alreadyPresent} />
             <Stat label="Annunci associati" value={result.listingsLinked} />
+            <Stat label="Duplicati uniti" value={result.mergedDuplicates} />
             <Stat label="Da verificare" value={result.ambiguous} />
           </View>
           <Text style={styles.footnote}>
@@ -267,11 +463,22 @@ const styles = StyleSheet.create({
   contactName: { color: theme.colors.ink, fontSize: 14, fontWeight: "700" },
   contactMeta: { color: theme.colors.muted, fontSize: 12 },
   contactStatus: { color: theme.colors.muted, fontSize: 10, textTransform: "capitalize" },
+  fieldLabel: { color: theme.colors.ink, fontSize: 12, fontWeight: "700" },
+  sectionDivider: { height: 1, backgroundColor: theme.colors.line, marginVertical: 5 },
+  relationRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.line },
+  addLink: { color: theme.colors.success, fontSize: 12, fontWeight: "800" },
+  removeLink: { color: theme.colors.warning, fontSize: 12, fontWeight: "700" },
+  interactionItem: { paddingVertical: 10, gap: 5, borderBottomWidth: 1, borderBottomColor: theme.colors.line },
+  multilineInput: { minHeight: 76, textAlignVertical: "top", paddingTop: 12 },
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   stat: { width: "47%", minHeight: 65, borderRadius: 12, backgroundColor: theme.colors.paper, padding: 12, gap: 3 },
   statValue: { color: theme.colors.navy, fontSize: 22, fontWeight: "800" },
   statLabel: { color: theme.colors.muted, fontSize: 11 },
   footnote: { color: theme.colors.muted, fontSize: 12, lineHeight: 18 },
+  reviewWarning: { borderWidth: 1, borderColor: theme.colors.warning, borderRadius: 10, padding: 12, gap: 6, backgroundColor: theme.colors.paper },
+  reviewWarningTitle: { color: theme.colors.warning, fontSize: 13, fontWeight: "800" },
+  reviewWarningText: { color: theme.colors.ink, fontSize: 12, lineHeight: 18 },
+  reviewResolve: { color: theme.colors.navy, fontSize: 12, fontWeight: "800" },
   notice: { borderRadius: theme.radius.card, backgroundColor: theme.colors.softGold, padding: 16, gap: 6 },
   noticeTitle: { color: theme.colors.navy, fontSize: 13, fontWeight: "800" },
   noticeText: { color: theme.colors.ink, fontSize: 12, lineHeight: 18 }

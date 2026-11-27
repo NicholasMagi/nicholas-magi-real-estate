@@ -1,9 +1,16 @@
 name: NMRE Mobile validation
 
 on:
+  pull_request:
+    branches:
+      - feat/mobile-phone-contacts-sync
+    paths:
+      - "mobile/**"
+      - ".github/workflows/mobile-contacts-ci.yml"
   push:
     branches:
       - feat/mobile-phone-contacts-sync
+      - feat/mobile-crm-contact-details
     paths:
       - "mobile/**"
       - ".github/workflows/mobile-contacts-ci.yml"
