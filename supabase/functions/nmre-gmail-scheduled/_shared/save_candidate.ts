@@ -19,7 +19,7 @@ import type { DiscardedNotificationPatchInfo, ExistingCandidateRow } from "./ret
 import { guardedCandidateUpdate } from "./guarded.ts";
 import type { GuardedClient } from "./guarded.ts";
 import { applyNotificationToExistingCandidate } from "./discard_flow.ts";
-import { subitoAdIdFromListingKey, subitoIdLikePatterns } from "./subito.ts";
+import { rowReferencesSubitoAd, subitoAdIdFromListingKey, subitoIdLikePatterns } from "./subito.ts";
 
 export type SaveCounters = {
   inserted: number; updated: number; notificationEventsLinked: number; autoArchived: number;
@@ -32,6 +32,8 @@ export function newSaveCounters(): SaveCounters {
 }
 
 const CANDIDATE_COLUMNS = "id,seller_manual_override,stato,listing_key,tipo_venditore,dati_estratti,deduplication_version,data_extraction_version,seller_classification_version";
+/** Colonne lette per riconoscere un annuncio Subito per ID (verificate con rowReferencesSubitoAd). */
+const SUBITO_LOOKUP_COLUMNS = CANDIDATE_COLUMNS + ",dedup_key,url";
 const INTERNAL_FIELDS = ["explicit_price_reduction", "notification_source_id", "subito_ad_id", "preserve_existing", "history_only", "sighting_only", "skip_auto_archive"];
 
 // deno-lint-ignore no-explicit-any
@@ -76,13 +78,14 @@ export async function saveCandidateRow(
     for (const pattern of subitoIdLikePatterns(String(subitoId)).listingKey) {
       const { data, error } = await admin
         .from("annunci_candidati")
-        .select(CANDIDATE_COLUMNS)
+        .select(SUBITO_LOOKUP_COLUMNS)
         .eq("owner_id", owner)
         .like("listing_key", pattern)
         .order("created_at", { ascending: true })
-        .limit(1);
+        .limit(20);
       if (error) throw new Error("Ricerca dell'annuncio Subito già acquisito non riuscita");
-      canonicalCandidate = Array.isArray(data) ? data[0] || null : data;
+      // deno-lint-ignore no-explicit-any
+      canonicalCandidate = (Array.isArray(data) ? data : []).find((candidate: any) => rowReferencesSubitoAd(candidate, String(subitoId))) || null;
       if (canonicalCandidate) break;
     }
   }
@@ -93,13 +96,15 @@ export async function saveCandidateRow(
     for (const pattern of subitoIdLikePatterns(String(subitoId)).url) {
       const { data, error } = await admin
         .from("annunci_candidati")
-        .select(CANDIDATE_COLUMNS)
+        .select(SUBITO_LOOKUP_COLUMNS)
         .eq("owner_id", owner)
         .like("url", pattern)
         .order("created_at", { ascending: true })
-        .limit(1);
+        .limit(20);
       if (error) throw new Error("Ricerca dell'annuncio Subito già acquisito non riuscita");
-      canonicalCandidate = Array.isArray(data) ? data[0] || null : data;
+      // Solo una scheda che si riferisce davvero all'annuncio su subito.it (protocollo, dominio, ID).
+      // deno-lint-ignore no-explicit-any
+      canonicalCandidate = (Array.isArray(data) ? data : []).find((candidate: any) => rowReferencesSubitoAd(candidate, String(subitoId))) || null;
       if (canonicalCandidate) break;
     }
   }

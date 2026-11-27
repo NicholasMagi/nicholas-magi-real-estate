@@ -21,7 +21,7 @@
 //    uniche per annuncio e registro per email).
 import { readSubitoResultsPage, subitoDigestRow, subitoItemRow, SUBITO_MAX_ATTEMPTS } from "./subito_acquisition.ts";
 import type { SubitoAcquisition, SubitoAcquisitionDeps, SubitoDbClient, SubitoEmail, SubitoRowContext } from "./subito_acquisition.ts";
-import { subitoIdLikePatterns, subitoSearchPageUrl, SUBITO_REASON_TEXT } from "./subito.ts";
+import { rowReferencesSubitoAd, subitoIdLikePatterns, subitoSearchPageUrl, SUBITO_REASON_TEXT } from "./subito.ts";
 import { subitoNoAgencyExclusion } from "./subito_acquisition.ts";
 import type { SubitoDigest, SubitoItem, SubitoPage } from "./subito.ts";
 import type { SellerResult } from "./retention.ts";
@@ -425,9 +425,10 @@ export function supabaseFullSearchDeps(admin: SubitoDbClient, owner: string, bas
         ...patterns.listingKey.map(p => ["listing_key", "like", p] as const),
         ...patterns.url.map(p => ["url", "like", p] as const)
       ]) {
-        const { data, error } = await admin.from("annunci_candidati").select("id").eq("owner_id", owner)[method](column, pattern).limit(10);
+        const { data, error } = await admin.from("annunci_candidati").select("id,dedup_key,listing_key,url").eq("owner_id", owner)[method](column, pattern).limit(20);
         if (error) throw new Error("Confronto con le opportunità non riuscito");
-        for (const row of data || []) ids.add(String(row.id));
+        // Solo righe che si riferiscono davvero all'annuncio su subito.it (nessun dominio contraffatto).
+        for (const row of data || []) if (rowReferencesSubitoAd(row, adId)) ids.add(String(row.id));
       }
       return [...ids];
     },

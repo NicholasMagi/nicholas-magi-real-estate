@@ -7,7 +7,8 @@ import { subitoItemRow, subitoRowsForEmails, supabaseSubitoDeps } from "./_share
 import { newSaveCounters, saveCandidateRow } from "./_shared/save_candidate.ts";
 import { assertAllRowsSaved, processRowsIsolated } from "./_shared/row_isolation.ts";
 import { sellerClassificationDetails } from "./_shared/parser.ts";
-import { parseSubitoResultsPage } from "./_shared/subito.ts";
+import { parseSubitoResultsPage, rowReferencesSubitoAd, subitoIdLikePatterns } from "./_shared/subito.ts";
+import { supabaseFullSearchDeps } from "./_shared/subito_full_search.ts";
 import type { SubitoItem } from "./_shared/subito.ts";
 import { fakeSupabase } from "./fake_supabase.ts";
 
@@ -146,4 +147,105 @@ Deno.test("altre righe (non Subito acquisite): confronto per URL non applicato, 
   const code = Deno.readTextFileSync(new URL("./_shared/save_candidate.ts", import.meta.url));
   eq(/if \(!canonicalCandidate && row\.history_only && subitoId && /.test(code), true, "ricerca per URL solo per gli annunci Subito acquisiti (history_only)");
   eq(/\.eq\("stato"|\.neq\("stato"|\.in\("stato"/.test(code), false, "nessun filtro sullo stato nella ricerca del candidato esistente");
+});
+
+// ---------- Dominio reale subito.it: niente domini contraffatti ----------
+
+const ID = "710000030";
+const VALID_URLS = [
+  "https://www.subito.it/appartamenti/bilocale-ancona-" + ID + ".htm",
+  "https://subito.it/appartamenti/bilocale-ancona-" + ID + ".htm",
+  "http://www.subito.it/appartamenti/" + ID + ".htm",
+  "http://subito.it/appartamenti/" + ID + ".htm",
+  "https://www.subito.it/appartamenti/" + ID + ".htm?utm_source=app#foto"
+];
+const FORGED_URLS = [
+  "https://evilsubito.it/appartamenti/bilocale-" + ID + ".htm",
+  "https://www.evilsubito.it/appartamenti/" + ID + ".htm",
+  "https://fakesubito.it/appartamenti/" + ID + ".htm",
+  "https://subito.it.evil.com/appartamenti/bilocale-" + ID + ".htm",
+  "https://www.subito.it.evil.com/appartamenti/" + ID + ".htm",
+  "http://evilsubito.it/appartamenti/" + ID + ".htm",
+  "https://evil.com/www.subito.it/appartamenti/bilocale-" + ID + ".htm",
+  "https://evil.com/?u=https://www.subito.it/appartamenti/" + ID + ".htm",
+  "https://www.subito.it/redirect?to=/appartamenti/bilocale-" + ID + ".htm",
+  "ftp://www.subito.it/appartamenti/" + ID + ".htm",
+  "https://www.subito.it/appartamenti/bilocale-" + ID + ".html"
+];
+const OTHER_IDS = [
+  "https://www.subito.it/appartamenti/casa-9" + ID + ".htm",   // più lungo, termina con l'ID
+  "https://www.subito.it/appartamenti/9" + ID + ".htm",
+  "https://www.subito.it/appartamenti/casa-" + ID + "1.htm",   // più lungo, inizia con l'ID
+  "https://www.subito.it/appartamenti/casa-" + ID.slice(1) + ".htm" // più corto
+];
+// Stessa semantica del LIKE di PostgreSQL usata dal database simulato (% = qualsiasi sequenza).
+const like = (pattern: string, value: string) =>
+  new RegExp("^" + pattern.split("%").map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*") + "$").test(value);
+
+Deno.test("livello 1 · pattern LIKE ancorati: URL Subito validi sì, domini contraffatti no", () => {
+  const { url, listingKey } = subitoIdLikePatterns(ID);
+  for (const value of VALID_URLS) eq(url.some(p => like(p, value)), true, "valido: " + value);
+  for (const value of FORGED_URLS.slice(0, 8)) eq(url.some(p => like(p, value)), false, "contraffatto escluso dal LIKE: " + value);
+  for (const pattern of [...url, ...listingKey]) eq(pattern.startsWith("%"), false, "pattern ancorato: " + pattern);
+  for (const key of ["evilsubito.it/appartamenti/x-" + ID + ".htm", "subito.it.evil.com/appartamenti/x-" + ID + ".htm", "fakesubito.it/appartamenti/" + ID + ".htm"]) {
+    eq(listingKey.some(p => like(p, key)), false, "chiave contraffatta esclusa: " + key);
+  }
+  eq(listingKey.some(p => like(p, "subito.it/appartamenti/" + ID + ".htm")) && listingKey.some(p => like(p, "subito.it/appartamenti/x-" + ID + ".htm")), true, "chiavi NMRE con e senza titolo");
+});
+
+Deno.test("livello 2 · verifica di ogni riga: protocollo, dominio e ID esatti", () => {
+  for (const url of VALID_URLS) eq(rowReferencesSubitoAd({ url }, ID), true, "valido: " + url);
+  for (const url of [...FORGED_URLS, ...OTHER_IDS]) eq(rowReferencesSubitoAd({ url }, ID), false, "escluso: " + url);
+  eq(rowReferencesSubitoAd({ url: "https://m.subito.it/appartamenti/" + ID + ".htm" }, ID), true, "sottodominio di subito.it (dominio legittimo)");
+  eq(rowReferencesSubitoAd({ dedup_key: "subito:" + ID }, ID), true, "dedup_key esatta");
+  eq(rowReferencesSubitoAd({ dedup_key: "subito:9" + ID }, ID), false, "dedup_key di un altro ID");
+  eq(rowReferencesSubitoAd({ listing_key: "subito.it/appartamenti/" + ID + ".htm" }, ID), true, "listing_key senza titolo");
+  eq(rowReferencesSubitoAd({ listing_key: "evilsubito.it/appartamenti/x-" + ID + ".htm" }, ID), false, "listing_key contraffatta");
+  eq(rowReferencesSubitoAd({ url: "https://www.immobiliare.it/annunci/" + ID + "/" }, ID), false, "altro portale");
+  eq(rowReferencesSubitoAd({ url: VALID_URLS[0] }, "12345"), false, "ID non valido");
+});
+
+Deno.test("integrazione · knownCandidate, Archivio, intera ricerca: solo dominio reale, scartati e cestino compresi", async () => {
+  const forgedCandidates = FORGED_URLS.map(url => candidate({ url }));
+  const forgedArchive = FORGED_URLS.map((url, i) => ({ id: "f" + i, owner_id: OWNER, url, listing_key: null, deleted_at: i % 2 ? "2026-11-01T00:00:00Z" : null }));
+  const forged = fakeSupabase({ annunci_candidati: [...forgedCandidates, ...OTHER_IDS.map(url => candidate({ url }))], annunci: forgedArchive });
+  const d = deps(forged);
+  eq(await d.knownCandidate(ID), false, "nessuna opportunità con domini contraffatti o ID diversi");
+  eq(await d.archivedListing(ID), null, "nessun annuncio d'Archivio contraffatto");
+  eq(await supabaseFullSearchDeps(forged.client, OWNER, d).candidatesForAd(ID), [], "intera ricerca: nessuna corrispondenza");
+  for (const url of VALID_URLS) {
+    const db = fakeSupabase({ annunci_candidati: [...forgedCandidates, candidate({ url, stato: "scartato" })],
+      annunci: [...forgedArchive, { id: "real", owner_id: OWNER, url, listing_key: null, deleted_at: "2026-11-03T00:00:00Z" }] });
+    const dd = deps(db);
+    eq(await dd.knownCandidate(ID), true, "scartata riconosciuta: " + url);
+    eq(await dd.archivedListing(ID), { annuncioId: "real", eliminato: true }, "cestino riconosciuto: " + url);
+    eq(await supabaseFullSearchDeps(db.client, OWNER, dd).candidatesForAd(ID), ["seed-" + (forgedCandidates.length + 1)], "intera ricerca: solo la scheda reale (" + url + ")");
+    eq(db.state.writes, 0, "sola lettura");
+  }
+});
+
+Deno.test("integrazione · saveCandidateRow: dominio contraffatto non scambiato per la scheda; scheda reale mai modificata", async () => {
+  const forged = fakeSupabase({ annunci_candidati: FORGED_URLS.map(url => candidate({ url })) });
+  const forgedBefore = JSON.stringify(forged.tables.annunci_candidati);
+  const counters = newSaveCounters();
+  await saveCandidateRow(forged.client, OWNER, rowFor(ID) as Any, counters, () => NOW);
+  eq(counters.inserted, 1, "nuova scheda: nessuna delle schede contraffatte è l'annuncio");
+  eq(JSON.stringify(forged.tables.annunci_candidati.slice(0, FORGED_URLS.length)), forgedBefore, "schede contraffatte intatte");
+  const real = fakeSupabase({ annunci_candidati: [...FORGED_URLS.map(url => candidate({ url })), candidate({ url: "http://subito.it/appartamenti/" + ID + ".htm", stato: "scartato" })] });
+  const realBefore = JSON.stringify(real.tables.annunci_candidati);
+  const realCounters = newSaveCounters();
+  const id = await saveCandidateRow(real.client, OWNER, rowFor(ID) as Any, realCounters, () => NOW);
+  eq([id, realCounters.inserted, realCounters.updated], ["seed-" + (FORGED_URLS.length + 1), 0, 0], "trovata la scheda reale (http, senza www, senza titolo), nessun inserimento");
+  eq(JSON.stringify(real.tables.annunci_candidati), realBefore, "nessuna scheda modificata");
+});
+
+Deno.test("nessuna regressione sugli altri portali", async () => {
+  const db = fakeSupabase({ annunci_candidati: [candidate({ url: "https://www.immobiliare.it/annunci/" + ID + "/", listing_key: "immobiliare.it/annunci/" + ID, dedup_key: "gmail:imm" })] });
+  eq(await deps(db).knownCandidate(ID), false, "un annuncio di Immobiliare con lo stesso numero non è un annuncio Subito");
+  const row = { owner_id: OWNER, titolo: "Trilocale", portale: "immobiliare.it", url: "https://www.immobiliare.it/annunci/" + ID + "/", url_originale: null,
+    listing_key: "immobiliare.it/annunci/" + ID, dedup_key: "gmail:nuova", source_email_id: "nuova", stato: "da_verificare", tipo_venditore: "Da verificare",
+    data_pubblicazione: NOW, dati_estratti: {}, deduplication_version: 1, data_extraction_version: 6, seller_classification_version: 3 };
+  const counters = newSaveCounters();
+  const id = await saveCandidateRow(db.client, OWNER, row as Any, counters, () => NOW);
+  eq([id, counters.inserted], ["seed-1", 0], "deduplicazione per listing_key degli altri portali invariata");
 });

@@ -105,15 +105,36 @@ export function subitoListingUrl(value: unknown): string | null {
   const url = new URL(String(value));
   return "https://www.subito.it" + url.pathname;
 }
+/** Inizi ammessi per gli URL delle schede Subito: protocollo e dominio esatti, mai "%subito.it". */
+export const SUBITO_URL_PREFIXES = ["https://www.subito.it/", "https://subito.it/", "http://www.subito.it/", "http://subito.it/"] as const;
+
 /**
  * Pattern LIKE per trovare un annuncio Subito per ID nelle colonne listing_key e url, sia con
  * il titolo nell'URL (/<categoria>/<titolo>-<id>.htm) sia senza (/<categoria>/<id>.htm).
+ * Primo livello di protezione: tutti i pattern sono ANCORATI all'inizio (chiave NMRE
+ * "subito.it/…" o URL "http(s)://(www.)subito.it/…"), così domini come evilsubito.it,
+ * subito.it.evil.com o fakesubito.it non corrispondono. Il secondo livello è
+ * rowReferencesSubitoAd(), da applicare a ogni riga trovata.
  */
 export function subitoIdLikePatterns(adId: string): { listingKey: string[]; url: string[] } {
   return {
     listingKey: ["subito.it/%-" + adId + ".htm", "subito.it/%/" + adId + ".htm"],
-    url: ["%subito.it/%-" + adId + ".htm%", "%subito.it/%/" + adId + ".htm%"]
+    url: SUBITO_URL_PREFIXES.flatMap(prefix => [prefix + "%-" + adId + ".htm%", prefix + "%/" + adId + ".htm%"])
   };
+}
+
+/**
+ * Secondo livello di protezione, dopo il LIKE: la riga si riferisce davvero all'annuncio adId
+ * su subito.it? dedup_key "subito:<id>", oppure listing_key o url che, interpretati come URL,
+ * hanno protocollo http(s), dominio subito.it (o un suo sottodominio) e il percorso di una
+ * scheda (/<categoria>/[<titolo>-]<id>.htm) con lo STESSO ID. Nessun confronto per sottostringa.
+ */
+export function rowReferencesSubitoAd(row: { dedup_key?: unknown; listing_key?: unknown; url?: unknown } | null | undefined, adId: string): boolean {
+  if (!row || !/^\d{6,}$/.test(adId)) return false;
+  if (row.dedup_key === "subito:" + adId) return true;
+  if (subitoAdIdFromListingKey(row.listing_key) === adId) return true;
+  const url = String(row.url ?? "");
+  return /^https?:\/\//i.test(url) && subitoAdId(url) === adId;
 }
 
 /** ID Subito ricavato da una listing_key NMRE (subito.it/<categoria>/<titolo>-<id>.htm). */

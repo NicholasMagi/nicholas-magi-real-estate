@@ -10,7 +10,7 @@ import { emailFromGmailMessage } from "../nmre-gmail-scheduled/_shared/mailbox.t
 import { acquireSubitoDigest, subitoItemRow, supabaseSubitoDeps } from "../nmre-gmail-scheduled/_shared/subito_acquisition.ts";
 import type { SubitoAcquisitionDeps } from "../nmre-gmail-scheduled/_shared/subito_acquisition.ts";
 import {
-  isSubitoSender, parseSubitoResultsPage, subitoSavedSearchDigest, SUBITO_CLOCK_TOLERANCE_MS, SUBITO_REASON_TEXT
+  isSubitoSender, parseSubitoResultsPage, rowReferencesSubitoAd, subitoIdLikePatterns, subitoSavedSearchDigest, SUBITO_CLOCK_TOLERANCE_MS, SUBITO_REASON_TEXT
 } from "../nmre-gmail-scheduled/_shared/subito.ts";
 import type { SubitoItem } from "../nmre-gmail-scheduled/_shared/subito.ts";
 import { sellerClassificationDetails } from "../nmre-gmail-scheduled/_shared/parser.ts";
@@ -97,16 +97,18 @@ type ExistingCandidate = { id: string; stato: string | null; tipo_venditore: str
 /** Candidato già presente per questo ID Subito (stesse chiavi del salvataggio, più l'URL). */
 async function existingCandidate(db: ReadOnlyDb, owner: string, adId: string): Promise<ExistingCandidate | null> {
   if (!/^\d{6,}$/.test(adId)) return null;
-  const columns = "id,stato,tipo_venditore,seller_manual_override";
+  const columns = "id,stato,tipo_venditore,seller_manual_override,dedup_key,listing_key,url";
+  // Stessi pattern ancorati e stessa verifica di ogni riga del server (nessun dominio contraffatto).
+  const patterns = subitoIdLikePatterns(adId);
   const attempts: Array<(q: any) => any> = [
     q => q.eq("dedup_key", "subito:" + adId),
-    q => q.like("listing_key", "subito.it/%-" + adId + ".htm"),
-    q => q.like("url", "%subito.it/%-" + adId + ".htm%")
+    ...patterns.listingKey.map(pattern => (q: any) => q.like("listing_key", pattern)),
+    ...patterns.url.map(pattern => (q: any) => q.like("url", pattern))
   ];
   for (const filter of attempts) {
-    const { data, error } = await filter(db.from("annunci_candidati").select(columns).eq("owner_id", owner)).limit(1);
+    const { data, error } = await filter(db.from("annunci_candidati").select(columns).eq("owner_id", owner)).limit(20);
     if (error) throw new Error("Confronto con le Opportunità non riuscito");
-    const row = Array.isArray(data) ? data[0] : null;
+    const row = (Array.isArray(data) ? data : []).find((candidate: any) => rowReferencesSubitoAd(candidate, adId)) || null;
     if (row) return { id: String(row.id), stato: row.stato ?? null, tipo_venditore: row.tipo_venditore ?? null, manuale: row.seller_manual_override === true };
   }
   return null;

@@ -15,7 +15,7 @@ import {
   identifyNewSubitoListings, isBlockedSubitoPage, normalizeSubitoSearchUrl, parseSubitoResultsPage, subitoPageConfirmsSearch, subitoSearchKey,
   SUBITO_REASON_TEXT
 } from "./subito.ts";
-import { subitoIdLikePatterns } from "./subito.ts";
+import { rowReferencesSubitoAd, subitoIdLikePatterns } from "./subito.ts";
 import type { NewListingsDecision, SubitoDigest, SubitoItem, SubitoPage } from "./subito.ts";
 
 export const SUBITO_MAX_ATTEMPTS = 6;
@@ -434,12 +434,14 @@ export function supabaseSubitoDeps(
       for (const [column, pattern] of [...patterns.listingKey.map(p => ["listing_key", p]), ...patterns.url.map(p => ["url", p])]) {
         const { data, error } = await admin
           .from("annunci")
-          .select("id,deleted_at")
+          .select("id,deleted_at,listing_key,url")
           .eq("owner_id", owner)
           .like(column, pattern)
-          .limit(1);
+          .limit(20);
         if (error) throw new Error("Confronto con l'Archivio non riuscito");
-        if (data?.[0]) return { annuncioId: String(data[0].id), eliminato: !!data[0].deleted_at };
+        // deno-lint-ignore no-explicit-any
+        const match = (data || []).find((row: any) => rowReferencesSubitoAd(row, adId));
+        if (match) return { annuncioId: String(match.id), eliminato: !!match.deleted_at };
       }
       return null;
     },
@@ -452,9 +454,10 @@ export function supabaseSubitoDeps(
       // senza titolo nell'URL. Sola lettura.
       const patterns = subitoIdLikePatterns(adId);
       for (const [column, pattern] of [...patterns.listingKey.map(p => ["listing_key", p]), ...patterns.url.map(p => ["url", p])]) {
-        const found = await admin.from("annunci_candidati").select("id").eq("owner_id", owner).like(column, pattern).limit(1);
+        const found = await admin.from("annunci_candidati").select("id,dedup_key,listing_key,url").eq("owner_id", owner).like(column, pattern).limit(20);
         if (found.error) throw new Error("Confronto con le opportunità non riuscito");
-        if (found.data?.length) return true;
+        // deno-lint-ignore no-explicit-any
+        if ((found.data || []).some((row: any) => rowReferencesSubitoAd(row, adId))) return true;
       }
       return false;
     },
