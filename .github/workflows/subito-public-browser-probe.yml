@@ -1,0 +1,43 @@
+name: Subito public browser probe
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "tests/browser/subito_public_probe.mjs"
+      - ".github/workflows/subito-public-browser-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-browser-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Playwright
+        run: npm install --no-save playwright
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Open saved Subito search in a clean browser
+        run: node tests/browser/subito_public_probe.mjs
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: subito-public-browser-probe
+          path: artifacts/subito-public-probe/
+          if-no-files-found: warn
+          retention-days: 3
