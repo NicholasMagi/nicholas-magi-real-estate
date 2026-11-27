@@ -40,6 +40,8 @@ type CrmContact = {
   status?: string | null;
   source?: string | null;
   notes?: string | null;
+  municipality?: string | null;
+  address?: string | null;
 };
 
 const REVIEW_FLAG = "NMRE_VERIFICA:";
@@ -84,6 +86,8 @@ async function mergeContactRecords(ownerId: string, primary: CrmContact, duplica
     contact_type: primary.contact_type && primary.contact_type !== "altro" ? primary.contact_type : (duplicate.contact_type || primary.contact_type || "altro"),
     status: primary.status && primary.status !== "nuovo" ? primary.status : (duplicate.status || primary.status || "nuovo"),
     source: primary.source || duplicate.source,
+    municipality: primary.municipality || duplicate.municipality || null,
+    address: primary.address || duplicate.address || null,
     notes: mergedNotes || null
   };
   const { error: primaryError } = await supabase.from("nmre_contacts").update(patch).eq("owner_id", ownerId).eq("id", primary.id);
@@ -122,6 +126,8 @@ async function mergeCertainDuplicateContacts(ownerId: string, contacts: CrmConta
       primary.contact_type = primary.contact_type && primary.contact_type !== "altro" ? primary.contact_type : duplicate.contact_type;
       primary.status = primary.status && primary.status !== "nuovo" ? primary.status : duplicate.status;
       primary.source = primary.source || duplicate.source;
+      primary.municipality = primary.municipality || duplicate.municipality;
+      primary.address = primary.address || duplicate.address;
       const secondaryDetails = [
         primary.phone && duplicate.phone && normalizePhoneNumber(primary.phone) !== normalizePhoneNumber(duplicate.phone) ? "Telefono aggiuntivo: " + duplicate.phone : "",
         primary.email && duplicate.email && normalizeEmail(primary.email) !== normalizeEmail(duplicate.email) ? "Email aggiuntiva: " + duplicate.email : ""
@@ -202,7 +208,7 @@ async function importDeviceContacts(
   for (let offset = 0; ; offset += 100) {
     const { data, error } = await supabase
       .from("nmre_contacts")
-      .select("id,full_name,phone,email,contact_type,status,source,notes")
+      .select("id,full_name,phone,email,contact_type,status,source,notes,municipality,address")
       .eq("owner_id", ownerId)
       .order("full_name", { ascending: true })
       .range(offset, offset + 99);
