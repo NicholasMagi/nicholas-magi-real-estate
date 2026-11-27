@@ -231,12 +231,12 @@ Deno.test("scheda della notifica Gmail: pulsante «Importa da Subito» collegato
 });
 
 Deno.test("mobile: guida installazione, copia preferito, incolla da appunti e pagina successiva sono disponibili", () => {
-  eq(/id="subitoBookmarkletMobileCopy"/.test(html), true, "copia codice per il preferito mobile");
-  eq(/Installazione su iPhone e Android/.test(html), true, "guida installazione mobile");
-  eq(/navigator\\.clipboard\\.readText\\(\\)/.test(html), true, "incolla da appunti con gesto esplicito");
-  eq(/await nmreAnalyzeSubitoBrowserPayload\\(\\)/.test(html), true, "l'incolla apre solo l'analisi e l'anteprima");
+  eq(html.includes('id="subitoBookmarkletMobileCopy"'), true, "copia codice per il preferito mobile");
+  eq(html.includes("Installazione su iPhone e Android"), true, "guida installazione mobile");
+  eq(html.includes("navigator.clipboard.readText()"), true, "incolla da appunti con gesto esplicito");
+  eq(html.includes("await nmreAnalyzeSubitoBrowserPayload()"), true, "l'incolla apre solo l'analisi e l'anteprima");
   const source = grab("nmreSubitoBookmarkletMain");
-  eq(/env\\(safe-area-inset-bottom\\)/.test(source) && /100dvh/.test(source), true, "pannello mobile rispetta safe area e altezza viewport");
-  eq(/Pagina successiva/.test(source) && /nextUrl\\.searchParams\\.set\\("o"/.test(source), true, "link manuale alla pagina successiva");
-  eq(/location\\.(?:assign|replace)|location\\.href\\s*=|\\.click\\s*\\(\\s*\\)/.test(source), false, "nessuna navigazione o clic automatico");
+  eq(source.includes("env(safe-area-inset-bottom)") && source.includes("100dvh"), true, "pannello mobile rispetta safe area e altezza viewport");
+  eq(source.includes("Pagina successiva") && source.includes('nextUrl.searchParams.set("o"'), true, "link manuale alla pagina successiva");
+  eq(source.includes("location.assign") || source.includes("location.replace") || source.includes(".click()"), false, "nessuna navigazione o clic automatico");
 });
