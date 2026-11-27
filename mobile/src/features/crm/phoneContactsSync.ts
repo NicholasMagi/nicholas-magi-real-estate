@@ -97,14 +97,19 @@ async function importDeviceContacts(
 }> {
   if (!supabase) throw new Error("Configurazione Supabase non disponibile.");
 
-  const { data, error } = await supabase
-    .from("nmre_contacts")
-    .select("id,full_name,phone,email")
-    .eq("owner_id", ownerId)
-    .order("full_name", { ascending: true });
-  if (error) throw new Error("Non è stato possibile leggere la Rubrica NMRE.");
-
-  const contacts = (data ?? []) as CrmContact[];
+  const contacts: CrmContact[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const { data, error } = await supabase
+      .from("nmre_contacts")
+      .select("id,full_name,phone,email")
+      .eq("owner_id", ownerId)
+      .order("full_name", { ascending: true })
+      .range(offset, offset + 99);
+    if (error) throw new Error("Non è stato possibile leggere la Rubrica NMRE.");
+    const page = (data ?? []) as CrmContact[];
+    contacts.push(...page);
+    if (page.length < 100) break;
+  }
   const byPhone = new Map<string, CrmContact[]>();
   const byEmail = indexBy(contacts, item => item.email ? normalizeEmail(item.email) : null);
   const byName = indexBy(contacts, item => item.full_name ? normalizeName(item.full_name) : null);
@@ -269,27 +274,27 @@ async function linkListingsByPhone(
   }
 
   for (const row of rowsToCheck) {
-      const listingPhones = unique([
+    const listingPhones = unique([
         ...extractPhoneNumbers(row.contatto),
         ...extractPhoneNumbers(row.seller_identity)
       ]);
-      const matches = new Set<string>();
-      for (const phone of listingPhones) {
-        for (const id of phoneToContactIds.get(phone) ?? []) matches.add(id);
-      }
-      if (matches.size !== 1) continue;
-      const contactId = matches.values().next().value as string | undefined;
-      if (!contactId) continue;
-      const { data: updated, error: updateError } = await supabase
-        .from("annunci")
-        .update({ contact_id: contactId })
-        .eq("owner_id", ownerId)
-        .eq("id", row.id)
-        .is("contact_id", null)
-        .is("deleted_at", null)
-        .select("id")
-        .maybeSingle();
-      if (!updateError && updated) linked += 1;
+    const matches = new Set<string>();
+    for (const phone of listingPhones) {
+      for (const id of phoneToContactIds.get(phone) ?? []) matches.add(id);
+    }
+    if (matches.size !== 1) continue;
+    const contactId = matches.values().next().value as string | undefined;
+    if (!contactId) continue;
+    const { data: updated, error: updateError } = await supabase
+      .from("annunci")
+      .update({ contact_id: contactId })
+      .eq("owner_id", ownerId)
+      .eq("id", row.id)
+      .is("contact_id", null)
+      .is("deleted_at", null)
+      .select("id")
+      .maybeSingle();
+    if (!updateError && updated) linked += 1;
   }
 
   return linked;
