@@ -85,7 +85,7 @@ async function mergeContactRecords(ownerId: string, primary: CrmContact, duplica
     email: primary.email || duplicate.email,
     contact_type: primary.contact_type && primary.contact_type !== "altro" ? primary.contact_type : (duplicate.contact_type || primary.contact_type || "altro"),
     status: primary.status && primary.status !== "nuovo" ? primary.status : (duplicate.status || primary.status || "nuovo"),
-    source: primary.source || duplicate.source,
+    source: primary.source || duplicate.source || null,
     municipality: primary.municipality || duplicate.municipality || null,
     address: primary.address || duplicate.address || null,
     notes: mergedNotes || null
