@@ -319,6 +319,12 @@ async function importDeviceContacts(
     const primaryEmail = item.emails.find(value => value.includes("@"))?.trim() ?? null;
 
     if (!matched) {
+      const extraPhones = item.phoneNumbers.filter(value => normalizePhoneNumber(value) !== normalizePhoneNumber(primaryPhone ?? ""));
+      const extraEmails = item.emails.filter(value => normalizeEmail(value) !== normalizeEmail(primaryEmail ?? ""));
+      const contactNotes = [
+        ...extraPhones.map(value => "Telefono aggiuntivo: " + value),
+        ...extraEmails.map(value => "Email aggiuntiva: " + value)
+      ].join("\n");
       const { data: inserted, error: insertError } = await supabase
         .from("nmre_contacts")
         .insert({
@@ -328,9 +334,10 @@ async function importDeviceContacts(
           phone: primaryPhone,
           email: primaryEmail,
           source: "rubrica_telefono",
-          status: "nuovo"
+          status: "nuovo",
+          notes: contactNotes || null
         })
-        .select("id,full_name,phone,email")
+        .select("id,full_name,phone,email,contact_type,status,source,notes")
         .single();
       if (insertError || !inserted) {
         throw new Error("Importazione di un contatto non riuscita. Gli altri dati CRM non sono stati eliminati.");
@@ -338,14 +345,6 @@ async function importDeviceContacts(
       matched = inserted as CrmContact;
       contacts.push(matched);
       created += 1;
-      if (matched.phone) {
-        const key = normalizePhoneNumber(matched.phone);
-        if (key) byPhone.set(key, [...(byPhone.get(key) ?? []), matched]);
-      }
-      if (matched.email) {
-        const key = normalizeEmail(matched.email);
-        byEmail.set(key, [...(byEmail.get(key) ?? []), matched]);
-      }
       if (matched.full_name) {
         const key = normalizeName(matched.full_name);
         byName.set(key, [...(byName.get(key) ?? []), matched]);
@@ -356,13 +355,32 @@ async function importDeviceContacts(
       if (!matched.phone && primaryPhone) patch.phone = primaryPhone;
       if (!matched.email && primaryEmail) patch.email = primaryEmail;
 
+      const knownPhones = new Set([matched.phone, ...extractPhoneNumbers(matched.notes)]
+        .map(value => value ? normalizePhoneNumber(value) : null).filter((value): value is string => value !== null));
+      const knownEmails = new Set([matched.email, ...extractContactEmails(matched.notes)].filter((value): value is string => Boolean(value)).map(normalizeEmail));
+      const extraPhones = item.phoneNumbers.filter(value => {
+        const normalized = normalizePhoneNumber(value);
+        return Boolean(normalized && !knownPhones.has(normalized) && normalized !== normalizePhoneNumber(matched?.phone ?? ""));
+      });
+      const extraEmails = item.emails.filter(value => {
+        const normalized = normalizeEmail(value);
+        return Boolean(value.includes("@") && !knownEmails.has(normalized) && normalized !== normalizeEmail(matched?.email ?? ""));
+      });
+      const additionalNotes = [
+        ...extraPhones.map(value => "Telefono aggiuntivo: " + value),
+        ...extraEmails.map(value => "Email aggiuntiva: " + value)
+      ];
+      if (additionalNotes.length) {
+        patch.notes = [...new Set([matched.notes, ...additionalNotes].filter(Boolean))].join("\n");
+      }
+
       if (Object.keys(patch).length) {
         const { data: updated, error: updateError } = await supabase
           .from("nmre_contacts")
           .update(patch)
           .eq("owner_id", ownerId)
           .eq("id", matched.id)
-          .select("id,full_name,phone,email")
+          .select("id,full_name,phone,email,notes")
           .maybeSingle();
         if (updateError) throw new Error("Aggiornamento prudente di un contatto non riuscito.");
         if (updated) {
@@ -374,6 +392,15 @@ async function importDeviceContacts(
       } else {
         alreadyPresent += 1;
       }
+    }
+
+    for (const value of unique([matched.phone ?? "", ...extractPhoneNumbers(matched.notes)])) {
+      const key = normalizePhoneNumber(value);
+      if (key) byPhone.set(key, [...(byPhone.get(key) ?? []).filter(contact => contact.id !== matched?.id), matched]);
+    }
+    for (const value of unique([matched.email ?? "", ...extractContactEmails(matched.notes)])) {
+      const key = normalizeEmail(value);
+      if (key) byEmail.set(key, [...(byEmail.get(key) ?? []).filter(contact => contact.id !== matched?.id), matched]);
     }
 
     for (const phone of phoneNumbers) {
