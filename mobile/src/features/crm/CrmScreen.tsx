@@ -194,7 +194,7 @@ export function CrmScreen() {
 
   const saveInteraction = async () => {
     if (!userId || !selectedContactId || !interactionNote.trim()) return;
-    if (nextContactDate && !/^\\d{4}-\\d{2}-\\d{2}$/.test(nextContactDate)) {
+    if (nextContactDate && !/^\d{4}-\d{2}-\d{2}$/.test(nextContactDate)) {
       setMessage("Inserisca la data del richiamo nel formato AAAA-MM-GG.");
       return;
     }
