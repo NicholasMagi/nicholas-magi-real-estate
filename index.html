@@ -1278,11 +1278,22 @@ La casella Gmail viene elaborata dal server in background. Qui non vengono mostr
       <strong>Pulsante NMRE per Subito</strong>
       <p class="hint">Trascini il pulsante qui sotto nella barra dei preferiti (una sola volta). Poi: apra la ricerca su Subito, clicchi «NMRE · Subito» su ogni pagina dei risultati che vuole importare (passando lei da una pagina all’altra), e alla fine «Copia per NMRE» e incolli qui. Il pulsante legge soltanto la pagina che ha aperto: non fa richieste a Subito, non apre altre pagine e non interviene su verifiche o CAPTCHA.</p>
       <p><a id="subitoBookmarklet" class="subito-bookmarklet" href="#" draggable="true">NMRE · Subito</a>
-        <button class="secondary" id="subitoBookmarkletCopy" type="button">Copia il codice per la Console</button></p>
+        <button class="secondary" id="subitoBookmarkletCopy" type="button">Copia il codice per la Console</button>
+        <button class="secondary" id="subitoBookmarkletMobileCopy" type="button">Copia per il telefono</button></p>
+      <details class="subito-mobile-guide">
+        <summary>Installazione su iPhone e Android</summary>
+        <ol>
+          <li><strong>iPhone · Safari:</strong> aggiunga questa pagina ai Preferiti. Apra Preferiti, tenga premuto il preferito, scelga Modifica e sostituisca l'indirizzo con il codice copiato da «Copia per il telefono». Salvi con nome «NMRE».</li>
+          <li><strong>Android · Chrome:</strong> aggiunga questa pagina ai Preferiti. Dal menu Preferiti scelga Modifica e sostituisca l'indirizzo con il codice copiato. Salvi con nome «NMRE».</li>
+          <li>Apra la ricerca Subito, tocchi il preferito «NMRE» su ogni pagina e, alla fine, usi «Copia per NMRE».</li>
+        </ol>
+        <p class="hint">L'installazione si fa una volta sola. Se il browser non esegue i preferiti JavaScript, usi il metodo alternativo da computer. Non vengono aggirati blocchi, CAPTCHA o controlli del portale.</p>
+      </details>
     </div>
     <label for="subitoBrowserPayload">Dati copiati con il pulsante NMRE</label>
     <textarea id="subitoBrowserPayload" rows="7" placeholder="Incolli qui il JSON copiato dalla pagina dei risultati Subito"></textarea>
     <div class="candidate-actions subito-browser-import-actions">
+      <button class="secondary" id="subitoBrowserPaste" type="button">Incolla da Subito</button>
       <button class="secondary" id="subitoBrowserAnalyze" type="button">Analizza e mostra anteprima</button>
       <button class="secondary" id="subitoBrowserSelectSafe" type="button" disabled>Seleziona tutti quelli senza duplicati</button>
       <button id="subitoBrowserImportSelected" type="button" disabled>Importa selezionati</button>
@@ -5700,13 +5711,22 @@ function nmreSubitoBookmarkletMain(){
   if(old)old.remove();
   var panel=document.createElement("div");
   panel.id="nmre-subito-panel";
-  panel.setAttribute("style","position:fixed;z-index:2147483647;right:16px;bottom:16px;max-width:360px;background:#fff;color:#1d2433;border:2px solid #1d2433;border-radius:10px;padding:14px;font:14px/1.45 Arial,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.25)");
+  panel.setAttribute("style","position:fixed;z-index:2147483647;left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right));bottom:max(10px,env(safe-area-inset-bottom));width:auto;max-width:440px;max-height:min(65vh,calc(100dvh - 24px));overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;box-sizing:border-box;background:#fff;color:#1d2433;border:2px solid #1d2433;border-radius:14px;padding:14px;font:16px/1.45 Arial,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.25)");
   function line(text,bold){var p=document.createElement("div");p.textContent=text;if(bold)p.style.fontWeight="700";p.style.marginBottom="6px";panel.appendChild(p);return p;}
   line("NMRE · Subito",true);
   line("Pagina "+dataPage+(acc.total_pages?" di "+acc.total_pages:"")+": "+fresh.length+" annunci letti, "+added+" nuovi in questa raccolta.");
   line("Raccolti finora: "+acc.items.length+" annunci da "+acc.pages.length+" pagine ("+acc.pages.join(", ")+")"+(acc.total?" · la ricerca ne dichiara "+acc.total:"")+".");
   if(overLimit)line("Limite di "+MAX+" annunci raggiunto: "+overLimit+" non aggiunti. Copi e importi questi, poi svuoti e continui.",true);
-  line("Per continuare apra lei la pagina successiva e clicchi di nuovo NMRE. Quando ha finito, «Copia per NMRE» e incolli nell'app.");
+  line("Per continuare, apra la pagina successiva e tocchi di nuovo NMRE. Alla fine tocchi «Copia per NMRE» e torni nell'app.");
+   if(acc.total_pages&&dataPage<acc.total_pages){
+     var nextUrl=new URL(location.href);
+     nextUrl.searchParams.set("o",String(dataPage+1));
+     var nextLink=document.createElement("a");
+     nextLink.href=nextUrl.href;
+     nextLink.textContent="Pagina successiva ("+(dataPage+1)+"/"+acc.total_pages+")";
+     nextLink.setAttribute("style","display:block;text-align:center;margin:10px 0;padding:13px 12px;border:1px solid #1d2433;border-radius:9px;background:#1d2433;color:#fff;text-decoration:none;font-weight:700;min-height:44px;box-sizing:border-box");
+     panel.appendChild(nextLink);
+   }
   var status=line("");
   function button(label,handler){var b=document.createElement("button");b.type="button";b.textContent=label;b.setAttribute("style","margin:4px 6px 0 0;padding:8px 10px;border:1px solid #1d2433;border-radius:6px;background:#fff;color:#1d2433;cursor:pointer;font:inherit");b.addEventListener("click",handler);panel.appendChild(b);return b;}
   button("Copia per NMRE",function(){
@@ -8183,6 +8203,24 @@ $("candidateRecoveryPanel").addEventListener("toggle",async()=>{
 $("candidateDubiousFilter").addEventListener("change",renderDubiousAlerts);
 $("refreshCandidates").addEventListener("click",()=>loadCandidates({force:true}));
 $("subitoBrowserAnalyze").addEventListener("click",nmreAnalyzeSubitoBrowserPayload);
+$("subitoBrowserPaste")?.addEventListener("click",async()=>{
+  const button=$("subitoBrowserPaste");
+  if(!navigator.clipboard||typeof navigator.clipboard.readText!=="function"){
+    msg("subitoBrowserMsg","Il browser non consente di leggere gli appunti. Incolli manualmente i dati nel campo qui sopra.");
+    $("subitoBrowserPayload").focus();
+    return;
+  }
+  button.disabled=true;
+  try{
+    const copied=await navigator.clipboard.readText();
+    if(!copied.trim()){msg("subitoBrowserMsg","Gli appunti sono vuoti. Torni su Subito, tocchi «Copia per NMRE» e riprovi.");return;}
+    $("subitoBrowserPayload").value=copied;
+    await nmreAnalyzeSubitoBrowserPayload();
+  }catch{
+    msg("subitoBrowserMsg","Accesso agli appunti non autorizzato. Incolli manualmente i dati nel campo qui sopra.");
+    $("subitoBrowserPayload").focus();
+  }finally{button.disabled=false;}
+});
 $("subitoBrowserSelectSafe").addEventListener("click",()=>{
   const target=$("subitoBrowserPreview");
   target.querySelectorAll("[data-subito-browser-id]").forEach(input=>{
@@ -8205,6 +8243,19 @@ $("subitoBrowserImportSelected").addEventListener("click",nmreImportSelectedSubi
   $("subitoBookmarkletCopy")?.addEventListener("click",async()=>{
     try{await navigator.clipboard.writeText("("+nmreSubitoBookmarkletMain.toString()+")();");msg("subitoBrowserMsg","Codice copiato: lo incolli nella Console del browser sulla pagina dei risultati di Subito.");}
     catch{msg("subitoBrowserMsg","Copia non riuscita: usi il pulsante da trascinare tra i preferiti.");}
+  });
+  $("subitoBookmarkletMobileCopy")?.addEventListener("click",async()=>{
+    const code=nmreSubitoBookmarkletHref();
+    try{await navigator.clipboard.writeText(code);msg("subitoBrowserMsg","Codice del preferito copiato. Modifichi un Preferito qualsiasi e incolli il codice nel campo Indirizzo.");}
+    catch{
+      const area=document.createElement("textarea");
+      area.value=code;
+      area.setAttribute("aria-label","Codice del preferito NMRE");
+      area.setAttribute("style","width:100%;min-height:110px;margin-top:8px");
+      $("subitoBrowserMsg").textContent="La copia automatica non è disponibile. Selezioni e copi il codice qui sotto, poi lo incolli nell'indirizzo del Preferito.";
+      $("subitoBrowserMsg").appendChild(area);
+      area.focus();area.select();
+    }
   });
   $("subitoImportUnlink")?.addEventListener("click",()=>{nmreSubitoExpectedSearch=null;nmreRenderSubitoImportLink();});
 }
