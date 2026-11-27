@@ -15,7 +15,13 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Consenti a NMRE di leggere i contatti per importarli nella Rubrica del gestionale e associare gli annunci ai contatti corretti."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
