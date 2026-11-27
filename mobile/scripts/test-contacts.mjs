@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   canUseNameFallback,
   extractPhoneNumbers,
+  hasNameIdentityConflict,
   normalizePhoneNumber,
   uniqueContactMatch
 } from "../src/features/crm/phoneContactMatching.ts";
@@ -39,4 +40,27 @@ test("name-only fallback never overrides a different phone or email identity", (
   assert.equal(canUseNameFallback({ phoneNumbers: ["3331234567"], email: null, deviceNameCount: 1 }), false);
   assert.equal(canUseNameFallback({ phoneNumbers: [], email: "mario@example.it", deviceNameCount: 1 }), false);
   assert.equal(canUseNameFallback({ phoneNumbers: [], email: null, deviceNameCount: 2 }), false);
+});
+
+test("same CRM name with a different phone or email is treated as an identity conflict", () => {
+  assert.equal(hasNameIdentityConflict({
+    nameMatchCount: 1,
+    hasStrongIdentifier: true,
+    strongMatchCount: 0
+  }), true);
+  assert.equal(hasNameIdentityConflict({
+    nameMatchCount: 1,
+    hasStrongIdentifier: true,
+    strongMatchCount: 1
+  }), false);
+  assert.equal(hasNameIdentityConflict({
+    nameMatchCount: 0,
+    hasStrongIdentifier: true,
+    strongMatchCount: 0
+  }), false);
+  assert.equal(hasNameIdentityConflict({
+    nameMatchCount: 1,
+    hasStrongIdentifier: false,
+    strongMatchCount: 0
+  }), false);
 });
