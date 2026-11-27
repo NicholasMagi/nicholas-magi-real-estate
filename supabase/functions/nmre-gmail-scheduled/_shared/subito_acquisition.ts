@@ -8,7 +8,8 @@
 //    notifica resta come candidato "da verificare" con gli annunci plausibili;
 //  - "errore": link mancante, pagina bloccata, vuota, errore di rete o HTTP → la notifica
 //    resta come candidato "da verificare" e, salvo il link mancante, viene ritentata.
-import { canonicalListingKey, bedrooms, bathrooms, extractAdditionalPropertyDetails, propertyType } from "./parser.ts";
+import { canonicalListingKey, bedrooms, bathrooms, extractAdditionalPropertyDetails, propertyType, municipality } from "./parser.ts";
+import { isTargetMunicipality, territoryClassification } from "../../_shared/territory.ts";
 import { DATA_EXTRACTION_VERSION, SELLER_CLASSIFICATION_VERSION } from "./retention.ts";
 import type { SellerResult } from "./retention.ts";
 import {
@@ -71,9 +72,25 @@ export async function acquireSubitoDigest(
   email: SubitoEmail,
   digest: SubitoDigest,
   deps: SubitoAcquisitionDeps,
-  options: { batchPreviousIso?: string | null; deferred?: boolean } = {}
+  options: { batchPreviousIso?: string | null; deferred?: boolean; acquisitionEnabled?: boolean } = {}
 ): Promise<SubitoAcquisition> {
   const existing = await deps.existingDigest(String(email.id));
+  // L'estrazione automatizzata delle pagine risultati resta disattivata finché
+  // il portale non autorizza per iscritto questo specifico utilizzo.
+  if (options.acquisitionEnabled === false) {
+    return {
+      status: "errore",
+      reason: "autorizzazione_richiesta",
+      items: [],
+      decision: null,
+      archived: [],
+      pageSource: null,
+      pageCount: 0,
+      attempts: previousAttempts(existing),
+      retry: false,
+      keepDigestRecord: true
+    };
+  }
   // Rinvio per limite di letture nel ciclo: non conta come tentativo.
   if (options.deferred) {
     const attemptsSoFar = previousAttempts(existing);
@@ -188,7 +205,11 @@ export function subitoItemRow(item: SubitoItem, ctx: SubitoRowContext, details: 
   const gmailId = String(ctx.email.id);
   const receivedAt = emailIso(ctx.email.date);
   const text = [item.title, item.description].filter(Boolean).join(" ");
-  const seller = itemSeller(item, ctx.classifySeller);
+  const parsedTown = municipality(String(item.location || ""));
+  const territory = territoryClassification(parsedTown);
+  const seller = parsedTown
+    ? itemSeller(item, ctx.classifySeller)
+    : { classification: "Da verificare" as const, confidence: 0, evidence: "Comune non riconosciuto: verifica territoriale manuale necessaria" };
   const title = item.title || "Annuncio Subito " + item.id;
   const notificationId = subitoNotificationId(gmailId, item.id);
   const campi = {
@@ -208,6 +229,7 @@ export function subitoItemRow(item: SubitoItem, ctx: SubitoRowContext, details: 
     bagni: campi.bagni,
     dati_estratti: {
       ...extractAdditionalPropertyDetails(text),
+      territorio: territory,
       riduzione_prezzo: null,
       campi_immobile: campi,
       subito: {
@@ -420,7 +442,14 @@ export type SubitoCycleResult = {
 export async function subitoRowsForEmails(
   entries: Array<{ email: SubitoEmail; digest: SubitoDigest }>,
   deps: SubitoAcquisitionDeps,
-  ctx: { owner: string; classifySeller(text: string): SellerResult; now?: () => string; maxPages?: number }
+  ctx: {
+    owner: string;
+    classifySeller(text: string): SellerResult;
+    now?: () => string;
+    maxPages?: number;
+    /** Must be explicitly true after written provider authorization. Defaults to false. */
+    allowAutomatedPageFetch?: boolean;
+  }
 ): Promise<SubitoCycleResult> {
   const now = ctx.now || (() => new Date().toISOString());
   const maxPages = ctx.maxPages ?? SUBITO_MAX_PAGES_PER_RUN;
@@ -435,12 +464,21 @@ export async function subitoRowsForEmails(
       if (needsPage && !deferred) pagesRead++;
       const acquisition = await acquireSubitoDigest(email, digest, deps, {
         batchPreviousIso: digest.searchKey ? lastBySearch.get(digest.searchKey) ?? null : null,
-        deferred
+        deferred,
+        acquisitionEnabled: ctx.allowAutomatedPageFetch === true
       });
       const key = acquisition.status + ":" + acquisition.reason;
       result.outcomes[key] = (result.outcomes[key] || 0) + 1;
       const rowContext: SubitoRowContext = { owner: ctx.owner, email, digest, classifySeller: ctx.classifySeller, nowIso: now() };
-      for (const item of acquisition.items) result.rows.push(subitoItemRow(item, rowContext, { pageSource: acquisition.pageSource }));
+      const inTerritoryItems = acquisition.items.filter(item => {
+        const town = municipality(String(item.location || ""));
+        return !town || isTargetMunicipality(town);
+      });
+      const outsideTerritoryItems = acquisition.items.length - inTerritoryItems.length;
+      if (outsideTerritoryItems) {
+        result.outcomes["fuori_territorio"] = (result.outcomes["fuori_territorio"] || 0) + outsideTerritoryItems;
+      }
+      for (const item of inTerritoryItems) result.rows.push(subitoItemRow(item, rowContext, { pageSource: acquisition.pageSource }));
       if (acquisition.keepDigestRecord) {
         result.rows.push(subitoDigestRow(rowContext, acquisition, acquisition.items.map(item => ({ id: item.id, url: item.url, title: item.title }))));
       }

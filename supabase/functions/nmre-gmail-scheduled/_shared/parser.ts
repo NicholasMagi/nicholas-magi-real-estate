@@ -1,3 +1,5 @@
+import { TARGET_MUNICIPALITIES, normalizeMunicipality } from "../../_shared/territory.ts";
+
 const PORTALS = ["idealista.it","immobiliare.it","casa.it","subito.it","green-acres.it","green-acres.com","gate-away.com","trovacasa.it","wikicasa.it"];
 const TOWNS = ["Porto Sant'Elpidio","Porto Recanati","Porto San Giorgio","Civitanova Marche","Falconara Marittima","Santa Maria Nuova","Maiolati Spontini","Monte San Vito","Monte Urano","Monte Roberto","Montecassiano","Morro d'Alba","Montemarciano","Castelfidardo","Ancona","Osimo","Loreto","Recanati","Camerano","Numana","Sirolo","Jesi","Macerata","Fermo","Senigallia","Filottrano","Polverigi","Agugliano","Offagna","Chiaravalle","Ostra","Tolentino","Staffolo","Cupramontana","Monsano","Trecastelli","Corridonia","Montegranaro"];
 
@@ -22,7 +24,14 @@ export function municipality(s:string):string|null {
     .replace(/[^\p{L}\p{N}]+/gu," ")
     .trim();
   const n=" "+normalizeTown(s)+" ";
-  return TOWNS.find(t=>n.includes(" "+normalizeTown(t)+" "))||null;
+  const known = TOWNS.find(t=>n.includes(" "+normalizeTown(t)+" "));
+  if (known) return known;
+  const target = [...TARGET_MUNICIPALITIES]
+    .sort((a,b)=>b.length-a.length)
+    .find(t=>n.includes(" "+normalizeMunicipality(t)+" "));
+  return target
+    ? target.split(" ").map(part=>part ? part[0].toLocaleUpperCase("it")+part.slice(1) : part).join(" ")
+    : null;
 }
 
 
