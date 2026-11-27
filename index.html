@@ -6093,7 +6093,7 @@ function renderCandidates(){
       +(url?'<a class="candidate-row-open" href="'+safe(url)+'" target="_blank" rel="noopener noreferrer" data-open-listing="'+safe(c.id)+'" title="Apri l’annuncio originale">Apri</a>':'<span class="candidate-link-warning">Link n/d</span>')
       +(rowSearchUrl?'<button type="button" class="secondary" data-subito-import-link="'+safe(rowSearchUrl)+'" data-subito-import-label="'+safe(String(c.email_subject||"").replace(/\s+ha\s+\d+\s+nuov[oi]\s+annunc[io].*$/i,"").slice(0,160))+'" data-subito-import-candidate="'+safe(c.id)+'">Importa</button>':"")
       +'<button class="secondary" type="button" data-open-candidate-details="'+safe(c.id)+'" aria-expanded="false">Dettagli</button>'
-      +'<button class="gold" type="button" data-confirm="'+safe(c.id)+'">Archivia</button>'
+      +(isPrivate?'<button class="gold" type="button" data-confirm="'+safe(c.id)+'">Archivia</button>':"")
       +'<button class="danger" type="button" data-discard="'+safe(c.id)+'">Scarta</button>'
       +'</div>'
       +'</div>'
@@ -6132,10 +6132,9 @@ function renderCandidates(){
       +'</div></details>'
       +'</article>';
   }).join("");
+  // Archivia è disponibile solo per i candidati già verificati come privati.
+  // Non modificare mai la selezione del venditore implicitamente al clic.
   box.querySelectorAll("[data-confirm]").forEach(btn=>btn.addEventListener("click",()=>{
-    const card=btn.closest("[data-candidate]");
-    const seller=card?.querySelector('[data-field="venditore"]');
-    if(seller)seller.value="Privato";
     confirmCandidate(btn.dataset.confirm,btn);
   }));
   box.querySelectorAll("[data-open-candidate-details]").forEach(btn=>btn.addEventListener("click",()=>{
