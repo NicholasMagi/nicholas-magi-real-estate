@@ -402,7 +402,7 @@ export function CrmScreen() {
               ["whatsapp", "WhatsApp"],
               ["appuntamento", "Appuntamento"],
               ["email", "Email"],
-              ["nota", "Nota"]
+              ["altro", "Nota"]
             ].map(([value, label]) => (
               <Pressable key={value} style={[styles.choice, interactionType === value && styles.choiceSelected]} onPress={() => setInteractionType(value)}>
                 <Text style={[styles.choiceText, interactionType === value && styles.choiceTextSelected]}>{label}</Text>
