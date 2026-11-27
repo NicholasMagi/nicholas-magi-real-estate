@@ -15,10 +15,17 @@ import {
   addPhoneContactsChangeListener,
   getPhoneContactsPermission,
   loadCrmContacts,
+  loadContactRelations,
+  searchAvailableProperties,
+  linkPropertyToContact,
+  unlinkPropertyFromContact,
+  addContactInteraction,
   requestPhoneContactsPermission,
   syncPhoneContacts,
   updateCrmContact,
   type CrmContactSummary,
+  type CrmLinkedProperty,
+  type CrmInteraction,
   type PhoneContactSyncResult
 } from "@/features/crm/phoneContactsSync";
 import { theme } from "@/shared/theme";
@@ -40,6 +47,12 @@ export function CrmScreen() {
   const [editEmail, setEditEmail] = useState("");
   const [editRole, setEditRole] = useState("altro");
   const [savingContact, setSavingContact] = useState(false);
+  const [linkedProperties, setLinkedProperties] = useState<CrmLinkedProperty[]>([]);
+  const [interactions, setInteractions] = useState<CrmInteraction[]>([]);
+  const [availableProperties, setAvailableProperties] = useState<Array<{ id: string; title: string; municipality: string; status: string }>>([]);
+  const [interactionNote, setInteractionNote] = useState("");
+  const [loadingRelations, setLoadingRelations] = useState(false);
+  const [savingInteraction, setSavingInteraction] = useState(false);
   const syncInProgress = useRef(false);
 
   const runSync = useCallback(async () => {
@@ -118,12 +131,79 @@ export function CrmScreen() {
 
   const selectedContact = contacts.find(contact => contact.id === selectedContactId) ?? null;
 
+  const refreshRelations = useCallback(async (contactId: string) => {
+    if (!userId) return;
+    setLoadingRelations(true);
+    try {
+      const [relations, properties] = await Promise.all([
+        loadContactRelations(userId, contactId),
+        searchAvailableProperties(userId)
+      ]);
+      setLinkedProperties(relations.properties);
+      setInteractions(relations.interactions);
+      setAvailableProperties(properties);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Non è stato possibile caricare i dettagli del contatto.");
+    } finally {
+      setLoadingRelations(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (selectedContactId) void refreshRelations(selectedContactId);
+    else {
+      setLinkedProperties([]);
+      setInteractions([]);
+      setAvailableProperties([]);
+    }
+  }, [selectedContactId, refreshRelations]);
+
   const openContact = (contact: CrmContactSummary) => {
     setSelectedContactId(contact.id);
     setEditName(contact.full_name ?? "");
     setEditPhone(contact.phone ?? "");
     setEditEmail(contact.email ?? "");
     setEditRole(contact.contact_type ?? "altro");
+  };
+
+  const attachProperty = async (propertyId: string) => {
+    if (!userId || !selectedContactId) return;
+    try {
+      await linkPropertyToContact(userId, selectedContactId, propertyId);
+      await refreshRelations(selectedContactId);
+      setMessage("Immobile associato al contatto.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Associazione non riuscita.");
+    }
+  };
+
+  const detachProperty = async (propertyId: string) => {
+    if (!userId || !selectedContactId) return;
+    try {
+      await unlinkPropertyFromContact(userId, selectedContactId, propertyId);
+      await refreshRelations(selectedContactId);
+      setMessage("Associazione rimossa. L'immobile non è stato eliminato.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Rimozione associazione non riuscita.");
+    }
+  };
+
+  const saveInteraction = async () => {
+    if (!userId || !selectedContactId || !interactionNote.trim()) return;
+    setSavingInteraction(true);
+    try {
+      await addContactInteraction(userId, selectedContactId, {
+        interaction_type: "telefonata",
+        notes: interactionNote
+      });
+      setInteractionNote("");
+      await refreshRelations(selectedContactId);
+      setMessage("Interazione registrata nello storico.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Registrazione interazione non riuscita.");
+    } finally {
+      setSavingInteraction(false);
+    }
   };
 
   const saveContact = async () => {
@@ -259,6 +339,51 @@ export function CrmScreen() {
           <Pressable style={[styles.button, savingContact && styles.buttonDisabled]} onPress={() => void saveContact()} disabled={savingContact}>
             <Text style={styles.buttonText}>{savingContact ? "Salvataggio…" : "Salva modifiche"}</Text>
           </Pressable>
+          <View style={styles.sectionDivider} />
+          <Text style={styles.cardTitle}>Immobili associati</Text>
+          {loadingRelations ? <ActivityIndicator color={theme.colors.gold} /> : null}
+          {linkedProperties.length === 0 ? <Text style={styles.body}>Nessun immobile associato.</Text> : linkedProperties.map(property => (
+            <View key={property.id} style={styles.relationRow}>
+              <View style={styles.contactMain}>
+                <Text style={styles.contactName}>{property.title}</Text>
+                <Text style={styles.contactMeta}>{property.municipality} · {property.status} · {property.relation_role}</Text>
+              </View>
+              <Pressable onPress={() => void detachProperty(property.id)}><Text style={styles.removeLink}>Rimuovi</Text></Pressable>
+            </View>
+          ))}
+          <Text style={styles.fieldLabel}>Associa un immobile esistente</Text>
+          {availableProperties.filter(property => !linkedProperties.some(link => link.id === property.id)).slice(0, 20).map(property => (
+            <Pressable key={property.id} style={styles.relationRow} onPress={() => void attachProperty(property.id)}>
+              <View style={styles.contactMain}>
+                <Text style={styles.contactName}>{property.title}</Text>
+                <Text style={styles.contactMeta}>{property.municipality} · {property.status}</Text>
+              </View>
+              <Text style={styles.addLink}>+ Associa</Text>
+            </Pressable>
+          ))}
+          <View style={styles.sectionDivider} />
+          <Text style={styles.cardTitle}>Storico interazioni</Text>
+          <TextInput
+            style={[styles.searchInput, styles.multilineInput]}
+            value={interactionNote}
+            onChangeText={setInteractionNote}
+            placeholder="Annoti telefonata, appuntamento o altro contatto…"
+            multiline
+          />
+          <Pressable style={[styles.button, savingInteraction && styles.buttonDisabled]} onPress={() => void saveInteraction()} disabled={savingInteraction || !interactionNote.trim()}>
+            <Text style={styles.buttonText}>{savingInteraction ? "Registrazione…" : "Registra telefonata / nota"}</Text>
+          </Pressable>
+          {interactions.length === 0 ? <Text style={styles.body}>Nessuna interazione registrata.</Text> : interactions.map(interaction => (
+            <View key={interaction.id} style={styles.interactionItem}>
+              <View style={styles.contactsHeader}>
+                <Text style={styles.contactName}>{interaction.interaction_type.replaceAll("_", " ")}</Text>
+                <Text style={styles.contactStatus}>{new Date(interaction.created_at).toLocaleString("it-IT")}</Text>
+              </View>
+              {interaction.outcome ? <Text style={styles.contactMeta}>Esito: {interaction.outcome}</Text> : null}
+              {interaction.notes ? <Text style={styles.body}>{interaction.notes}</Text> : null}
+              {interaction.next_contact_at ? <Text style={styles.contactMeta}>Richiamare: {interaction.next_contact_at}</Text> : null}
+            </View>
+          ))}
         </View>
       ) : null}
 
@@ -325,6 +450,12 @@ const styles = StyleSheet.create({
   contactMeta: { color: theme.colors.muted, fontSize: 12 },
   contactStatus: { color: theme.colors.muted, fontSize: 10, textTransform: "capitalize" },
   fieldLabel: { color: theme.colors.ink, fontSize: 12, fontWeight: "700" },
+  sectionDivider: { height: 1, backgroundColor: theme.colors.line, marginVertical: 5 },
+  relationRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.line },
+  addLink: { color: theme.colors.success, fontSize: 12, fontWeight: "800" },
+  removeLink: { color: theme.colors.danger, fontSize: 12, fontWeight: "700" },
+  interactionItem: { paddingVertical: 10, gap: 5, borderBottomWidth: 1, borderBottomColor: theme.colors.line },
+  multilineInput: { minHeight: 76, textAlignVertical: "top", paddingTop: 12 },
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   stat: { width: "47%", minHeight: 65, borderRadius: 12, backgroundColor: theme.colors.paper, padding: 12, gap: 3 },
   statValue: { color: theme.colors.navy, fontSize: 22, fontWeight: "800" },
