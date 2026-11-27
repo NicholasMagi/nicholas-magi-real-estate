@@ -55,6 +55,11 @@ export function getContactReviewNote(notes: string | null | undefined): string |
   return reviewNote(notes);
 }
 
+export function getContactSupplementalNotes(notes: string | null | undefined): string | null {
+  const cleaned = (notes ?? "").split("\n").filter(line => !line.trim().startsWith(REVIEW_FLAG)).join("\n").trim();
+  return cleaned || null;
+}
+
 async function flagContactForReview(ownerId: string, contact: CrmContact, reason: string): Promise<void> {
   if (!supabase || reviewNote(contact.notes)) return;
   const nextNotes = [contact.notes?.trim(), REVIEW_FLAG + " " + reason].filter(Boolean).join("\n");
@@ -360,11 +365,11 @@ async function importDeviceContacts(
       const knownEmails = new Set([matched.email, ...extractContactEmails(matched.notes)].filter((value): value is string => Boolean(value)).map(normalizeEmail));
       const extraPhones = item.phoneNumbers.filter(value => {
         const normalized = normalizePhoneNumber(value);
-        return Boolean(normalized && !knownPhones.has(normalized) && normalized !== normalizePhoneNumber(matched?.phone ?? ""));
+        return Boolean(normalized && !knownPhones.has(normalized) && normalized !== normalizePhoneNumber(patch.phone ?? matched?.phone ?? ""));
       });
       const extraEmails = item.emails.filter(value => {
         const normalized = normalizeEmail(value);
-        return Boolean(value.includes("@") && !knownEmails.has(normalized) && normalized !== normalizeEmail(matched?.email ?? ""));
+        return Boolean(value.includes("@") && !knownEmails.has(normalized) && normalized !== normalizeEmail(patch.email ?? matched?.email ?? ""));
       });
       const additionalNotes = [
         ...extraPhones.map(value => "Telefono aggiuntivo: " + value),
