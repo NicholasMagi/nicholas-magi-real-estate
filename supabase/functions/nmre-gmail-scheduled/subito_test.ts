@@ -110,8 +110,10 @@ Deno.test("Subito: il comune viene classificato nella provincia corretta e le lo
   const ancona = subitoItemRow({ ...base, location: "Castelfidardo" }, ctx, { pageSource: "next_data" });
   const macerata = subitoItemRow({ ...base, location: "Camerino" }, ctx, { pageSource: "next_data" });
   const unknown = subitoItemRow({ ...base, location: null }, ctx, { pageSource: "next_data" });
-  eq([ancona.dati_estratti.territorio, macerata.dati_estratti.territorio], ["Ancona", "Macerata"], "province riconosciute");
-  eq([unknown.dati_estratti.territorio, unknown.tipo_venditore], ["Da verificare", "Da verificare"], "località non riconosciuta prudente");
+  eq(ancona.dati_estratti.territorio, "Ancona", "provincia di Ancona riconosciuta");
+  eq(macerata.dati_estratti.territorio, "Macerata", "provincia di Macerata riconosciuta");
+  eq(unknown.dati_estratti.territorio, "Da verificare", "località non riconosciuta");
+  eq(unknown.tipo_venditore, "Da verificare", "venditore da verificare se manca il comune");
 });
 
 // ---------- 1 · Riconoscimento ----------
