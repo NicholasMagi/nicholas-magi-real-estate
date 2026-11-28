@@ -6,7 +6,7 @@
 import {
   extractSavedSearchLink, identifyNewSubitoListings, parseSubitoResultsPage, subitoAdId, subitoSavedSearchDigest
 } from "./_shared/subito.ts";
-import { subitoRowsForEmails, supabaseSubitoDeps, SUBITO_MAX_ATTEMPTS } from "./_shared/subito_acquisition.ts";
+import { subitoItemRow, subitoRowsForEmails, supabaseSubitoDeps, SUBITO_MAX_ATTEMPTS } from "./_shared/subito_acquisition.ts";
 import { newSaveCounters, saveCandidateRow } from "./_shared/save_candidate.ts";
 import { assertAllRowsSaved, IncompleteSyncError, processRowsIsolated } from "./_shared/row_isolation.ts";
 import { canonicalListingKey, propertyEmailDecision, sellerClassificationDetails } from "./_shared/parser.ts";
@@ -102,6 +102,16 @@ Deno.test("Subito result-page acquisition is disabled by default and preserves t
   eq(cycle.rows.length, 1, "la notifica riepilogativa resta salvabile");
   eq(cycle.rows[0].dati_estratti.ricerca_subito.motivo, "autorizzazione_richiesta", "motivo esplicito");
   eq(cycle.rows[0].dati_estratti.ricerca_subito.nuovo_tentativo, false, "nessun retry automatico");
+});
+
+Deno.test("Subito: il comune viene classificato nella provincia corretta e le località ignote restano da verificare", () => {
+  const base = { id: "700000001", url: "https://www.subito.it/appartamenti/prova-700000001.htm", title: "Appartamento", description: "Immobile in vendita", price: 150000, surfaceMq: 80, rooms: 3, images: [], publishedAt: null, advertiserCompany: false };
+  const ctx = { owner: OWNER, email: EMAIL_26, digest: subitoSavedSearchDigest(EMAIL_26)!, nowIso: "2026-11-26T10:00:00.000Z", classifySeller: text => sellerClassificationDetails(text) };
+  const ancona = subitoItemRow({ ...base, location: "Castelfidardo" }, ctx, { pageSource: "next_data" });
+  const macerata = subitoItemRow({ ...base, location: "Camerino" }, ctx, { pageSource: "next_data" });
+  const unknown = subitoItemRow({ ...base, location: null }, ctx, { pageSource: "next_data" });
+  eq([ancona.dati_estratti.territorio, macerata.dati_estratti.territorio], ["Ancona", "Macerata"], "province riconosciute");
+  eq([unknown.dati_estratti.territorio, unknown.tipo_venditore], ["Da verificare", "Da verificare"], "località non riconosciuta prudente");
 });
 
 // ---------- 1 · Riconoscimento ----------
