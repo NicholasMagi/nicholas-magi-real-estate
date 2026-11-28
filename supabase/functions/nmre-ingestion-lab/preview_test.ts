@@ -1,7 +1,7 @@
 import { parsePublicListingPreview, parseSubitoPreview } from "./_shared/preview.ts";
 
 Deno.test("public listing preview extracts structured real-estate data without classifying the seller", () => {
-  const html = \`<script type="application/ld+json">
+  const html = `<script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@graph": [
@@ -20,7 +20,7 @@ Deno.test("public listing preview extracts structured real-estate data without c
         }
       ]
     }
-  </script>\`;
+  </script>`;
   const items = parsePublicListingPreview(html, "https://example.test/ricerca", new Set(["castelfidardo"]));
   if (items.length !== 2) throw new Error("Expected two JSON-LD candidates");
   if (items[0].municipality !== "Castelfidardo") throw new Error("Expected Castelfidardo municipality");
@@ -36,7 +36,7 @@ Deno.test("public listing preview extracts structured real-estate data without c
 });
 
 Deno.test("public listing preview ignores malformed JSON-LD and ordinary scripts", () => {
-  const html = \`<script type="application/ld+json">{bad json}</script><script>window.__DATA__ = {}</script>\`;
+  const html = `<script type="application/ld+json">{bad json}</script><script>window.__DATA__ = {}</script>`;
   const items = parsePublicListingPreview(html, "https://example.test");
   if (items.length !== 0) throw new Error("Expected no candidates");
 });
