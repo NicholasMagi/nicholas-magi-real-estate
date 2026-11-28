@@ -103,11 +103,11 @@ const emailEntries = (emails: Any[]) => {
   return emails.map(email => ({ email, digest: subitoDigestById.get(String(email.id))! }));
 };
 /** Un ciclo come in index.ts: righe, salvataggio isolato, cursore, registro. */
-async function cycle(db: ReturnType<typeof fakeSupabase>, emails: Any[], fetchPage: Any, extra: { maxPagesPerRun?: number } = {}) {
+async function cycle(db: ReturnType<typeof fakeSupabase>, emails: Any[], fetchPage: Any, extra: { maxPagesPerRun?: number; allowAutomatedPageFetch?: boolean } = {}) {
   const counters = newSaveCounters();
   const deps = supabaseFullSearchDeps(db.client, OWNER, supabaseSubitoDeps(db.client, OWNER, fetchPage));
   const result = await subitoFullSearchRows(emailEntries(emails), deps,
-    { owner: OWNER, classifySeller: text => sellerClassificationDetails(text), now: () => NOW, ...extra });
+    { owner: OWNER, classifySeller: text => sellerClassificationDetails(text), now: () => NOW, allowAutomatedPageFetch: extra.allowAutomatedPageFetch ?? true, ...extra });
   const failures = [...result.failures, ...await processRowsIsolated(result.rows, row => String(row.notification_source_id || row.source_email_id),
     async row => { await saveCandidateRow(db.client, OWNER, row, counters, () => NOW); })];
   let advanced = false;
@@ -125,6 +125,24 @@ const logs = (db: Any) => db.tables.nmre_subito_ricerche_sync || [];
 Deno.test("interruttore: attivo solo con il valore esatto «true»", () => {
   for (const value of [undefined, "", "false", "1", "yes", "TRUE"]) eq(subitoFullSearchEnabled(value), value === "TRUE", "valore " + JSON.stringify(value));
   eq(subitoFullSearchEnabled("true"), true, "true");
+});
+
+Deno.test("ricerca completa: senza autorizzazione non viene effettuata alcuna richiesta", async () => {
+  const db = fakeSupabase();
+  const web = site([ids(0, 3).map(id => ({ id, company: false }))]);
+  await cycle(db, [realEmail("e-1")], web.fetchPage, { allowAutomatedPageFetch: false });
+  eq(web.requests.length, 0, "nessuna lettura della pagina Subito");
+  eq([logs(db)[0].motivo, logs(db)[0].nuovo_tentativo], ["autorizzazione_richiesta", false], "registro senza retry");
+  eq(digest(db).dati_estratti.ricerca_subito.motivo, "autorizzazione_richiesta", "notifica mantenuta in NMRE");
+});
+
+Deno.test("ricerca completa: esclude i comuni noti fuori territorio e conserva quelli sconosciuti per verifica", async () => {
+  const db = fakeSupabase();
+  const web = site([[{ id: ids(0,1)[0], company: false, town: "Ancona" }, { id: ids(1,1)[0], company: false, town: "Fermo" }, { id: ids(2,1)[0], company: false, town: "Località non riconosciuta" }]]);
+  await cycle(db, [realEmail("e-1")], web.fetchPage);
+  eq(cards(db).map((row: Any) => row.comune), ["Ancona", "Località non riconosciuta"], "solo comuni target e località sconosciute");
+  eq(logs(db)[0].dettagli.fuori_territorio, 1, "un annuncio fuori territorio registrato");
+  eq(cards(db).find((row: Any) => row.comune === "Località non riconosciuta")?.tipo_venditore, "Da verificare", "località non riconosciuta da verificare");
 });
 
 Deno.test("1 · email di una ricerca conosciuta: ricerca riconosciuta, filtri (privati) mantenuti in ogni richiesta", async () => {
