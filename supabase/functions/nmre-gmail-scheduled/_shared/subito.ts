@@ -556,6 +556,7 @@ export const SUBITO_REASON_TEXT: Record<string, string> = {
   struttura_non_riconosciuta: "Elenco dei risultati non riconosciuto nella pagina: gli annunci trovati sono solo proposti",
   possibili_ripubblicazioni: "Nella finestra ci sono annunci ripubblicati (ID più vecchi di annunci precedenti): non si può dimostrare quali sono i nuovi",
   link_mancante: "Link alla pagina dei risultati non trovato nell'email",
+  autorizzazione_richiesta: "Recupero automatico sospeso: serve autorizzazione scritta del portale e abilitazione esplicita lato server",
   pagina_bloccata: "Pagina dei risultati protetta (verifica anti-robot): non aggirata",
   pagina_vuota: "Pagina dei risultati vuota o con una struttura non riconosciuta",
   errore_rete: "Pagina dei risultati non raggiungibile (errore di rete o tempo scaduto)",

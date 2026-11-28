@@ -109,9 +109,16 @@ export async function acquireSubitoDigest(
   email: SubitoEmail,
   digest: SubitoDigest,
   deps: SubitoAcquisitionDeps,
-  options: { batchPreviousIso?: string | null; deferred?: boolean; itemCandidates?: boolean } = {}
+  options: { batchPreviousIso?: string | null; deferred?: boolean; itemCandidates?: boolean; acquisitionEnabled?: boolean } = {}
 ): Promise<SubitoAcquisition> {
   const existing = await deps.existingDigest(String(email.id));
+  // Default sicuro: nessuna lettura automatica delle pagine risultati senza autorizzazione scritta e abilitazione esplicita lato server.
+  if (digest.searchUrl && options.acquisitionEnabled !== true) {
+    return {
+      status: "errore", reason: "autorizzazione_richiesta", items: [], decision: null, archived: [], proposals: [],
+      pageSource: null, pageCount: 0, attempts: previousAttempts(existing), retry: false, keepDigestRecord: true
+    };
+  }
   // Rinvio per limite di letture nel ciclo: non conta come tentativo.
   if (options.deferred) {
     const attemptsSoFar = previousAttempts(existing);
@@ -466,7 +473,7 @@ export type SubitoCycleResult = {
 export async function subitoRowsForEmails(
   entries: Array<{ email: SubitoEmail; digest: SubitoDigest }>,
   deps: SubitoAcquisitionDeps,
-  ctx: { owner: string; classifySeller(text: string): SellerResult; now?: () => string; maxPages?: number; itemCandidates?: boolean }
+  ctx: { owner: string; classifySeller(text: string): SellerResult; now?: () => string; maxPages?: number; itemCandidates?: boolean; allowAutomatedPageFetch?: boolean }
 ): Promise<SubitoCycleResult> {
   const now = ctx.now || (() => new Date().toISOString());
   const maxPages = ctx.maxPages ?? SUBITO_MAX_PAGES_PER_RUN;
@@ -482,7 +489,8 @@ export async function subitoRowsForEmails(
       const acquisition = await acquireSubitoDigest(email, digest, deps, {
         batchPreviousIso: digest.searchKey ? lastBySearch.get(digest.searchKey) ?? null : null,
         deferred,
-        itemCandidates: ctx.itemCandidates === true
+        itemCandidates: ctx.itemCandidates === true,
+        acquisitionEnabled: ctx.allowAutomatedPageFetch === true
       });
       const key = acquisition.status + ":" + acquisition.reason;
       result.outcomes[key] = (result.outcomes[key] || 0) + 1;

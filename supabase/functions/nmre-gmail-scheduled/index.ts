@@ -723,7 +723,8 @@ export default {
       // registro 20261127020000): l'email è il segnale, si rilegge tutta la ricerca e ogni
       // annuncio non ancora presente diventa una scheda con la normale notifica. Senza la
       // variabile il comportamento resta quello attuale.
-      const fullSearch = subitoFullSearchEnabled(Deno.env.get("NMRE_SUBITO_FULL_SEARCH"));
+      const automatedSubitoAuthorized = Deno.env.get("NMRE_SUBITO_AUTOMATED_RESULTS_AUTHORIZED") === "true";
+      const fullSearch = automatedSubitoAuthorized && subitoFullSearchEnabled(Deno.env.get("NMRE_SUBITO_FULL_SEARCH"));
       const subitoEntries = subitoClassified.map(({ email }) => ({ email, digest: subitoDigestById.get(String(email.id))! }));
       const subitoBaseDeps = supabaseSubitoDeps(ctx.supabaseAdmin, owner, fetchSubitoPage);
       const fullCycle = fullSearch
@@ -739,7 +740,9 @@ export default {
           // Schede singole «Da verificare» quando la novità non è dimostrabile: solo con
           // NMRE_SUBITO_ITEM_CANDIDATES=true, DOPO la migrazione 20261126210000 (nessuna
           // notifica per scheda). Senza la variabile il comportamento resta quello attuale.
-          itemCandidates: subitoItemCandidatesEnabled(Deno.env.get("NMRE_SUBITO_ITEM_CANDIDATES"))
+          itemCandidates: subitoItemCandidatesEnabled(Deno.env.get("NMRE_SUBITO_ITEM_CANDIDATES")),
+          // Default sicuro: le pagine risultati si leggono solo dopo autorizzazione scritta.
+          allowAutomatedPageFetch: automatedSubitoAuthorized
         }
       );
       rowFailures.push(...subitoCycle.failures);
