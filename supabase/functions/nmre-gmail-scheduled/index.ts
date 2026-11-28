@@ -17,6 +17,7 @@ import {
   captureDubiousAlertsEnabled, dubiousAlertEvidence, promotedSellerClassification
 } from "./_shared/dubious.ts";
 import { withSupabase } from "npm:@supabase/server@^1";
+import { isTargetMunicipality, territoryClassification } from "../_shared/territory.ts";
 
 const ACCOUNT = "nicholasmagirealestate@gmail.com";
 const PORTALS = ["idealista.it","immobiliare.it","casa.it","subito.it","green-acres.it","green-acres.com","gate-away.com","trovacasa.it","wikicasa.it"];
@@ -675,6 +676,7 @@ export default {
           bagni: bathrooms(text),
           dati_estratti: {
             ...extractAdditionalPropertyDetails(text),
+            territorio: territoryClassification(municipality(text)),
             riduzione_prezzo: explicitPriceReduction,
             campi_immobile: {
               titolo: title,
@@ -720,13 +722,18 @@ export default {
         };
       }));
 
+      // I comuni noti fuori dalle province AN/MC non entrano nelle opportunità; località sconosciute restano da verificare.
+      const inTerritoryRows = regularRows.filter(row => !row.comune || isTargetMunicipality(row.comune));
+      const outsideTerritoryNotifications = regularRows.length - inTerritoryRows.length;
+
       // Ricerche salvate Subito: un annuncio per riga, con il proprio URL e ID. In caso di
       // incertezza o errore resta la notifica, da verificare (e ritentata se possibile).
       // Intera ricerca salvata (NMRE_SUBITO_FULL_SEARCH=true, solo DOPO la migrazione del
       // registro 20261127020000): l'email è il segnale, si rilegge tutta la ricerca e ogni
       // annuncio non ancora presente diventa una scheda con la normale notifica. Senza la
       // variabile il comportamento resta quello attuale.
-      const fullSearch = subitoFullSearchEnabled(Deno.env.get("NMRE_SUBITO_FULL_SEARCH"));
+      const automatedSubitoAuthorized = Deno.env.get("NMRE_SUBITO_AUTOMATED_RESULTS_AUTHORIZED") === "true";
+      const fullSearch = automatedSubitoAuthorized && subitoFullSearchEnabled(Deno.env.get("NMRE_SUBITO_FULL_SEARCH"));
       const subitoEntries = subitoClassified.map(({ email }) => ({ email, digest: subitoDigestById.get(String(email.id))! }));
       const subitoBaseDeps = supabaseSubitoDeps(ctx.supabaseAdmin, owner, fetchSubitoPage);
       const fullCycle = fullSearch
@@ -742,13 +749,14 @@ export default {
           // Schede singole «Da verificare» quando la novità non è dimostrabile: solo con
           // NMRE_SUBITO_ITEM_CANDIDATES=true, DOPO la migrazione 20261126210000 (nessuna
           // notifica per scheda). Senza la variabile il comportamento resta quello attuale.
-          itemCandidates: subitoItemCandidatesEnabled(Deno.env.get("NMRE_SUBITO_ITEM_CANDIDATES"))
+          itemCandidates: subitoItemCandidatesEnabled(Deno.env.get("NMRE_SUBITO_ITEM_CANDIDATES")),
+          allowAutomatedPageFetch: automatedSubitoAuthorized
         }
       );
       rowFailures.push(...subitoCycle.failures);
       const subitoRows = subitoCycle.rows;
       const subitoOutcomes = subitoCycle.outcomes;
-      const rows: any[] = [...regularRows, ...subitoRows];
+      const rows: any[] = [...inTerritoryRows, ...subitoRows];
 
       const counters = newSaveCounters();
       const promotedCandidateByEmail = new Map<string, string>();
@@ -822,7 +830,7 @@ export default {
       }
       // Riepilogo diagnostico nei log della funzione: solo conteggi e nomi di regola.
       console.log("nmre-gmail-scheduled summary", JSON.stringify({
-        syncMode, propertyFilterRules, keptForReview, reopenedOnPriceDrop, notificationsAfterDiscard, subitoOutcomes,
+        syncMode, propertyFilterRules, keptForReview, reopenedOnPriceDrop, notificationsAfterDiscard, subitoOutcomes, outsideTerritoryNotifications,
         agencyCandidatesKept: keepAgency, excludedAgencies, dubiousAlertsCaptured: captureDubious,
         dubiousAlertsSaved, promotedAlerts
       }));
