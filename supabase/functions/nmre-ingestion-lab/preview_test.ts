@@ -44,7 +44,7 @@ Deno.test("public listing preview ignores malformed JSON-LD and ordinary scripts
 
 Deno.test("Subito adapter reuses the established result parser and never imports automatically", () => {
   const fixture = Deno.readTextFileSync(new URL("../nmre-gmail-scheduled/fixtures/subito_results_page.html", import.meta.url));
-  const result = parseSubitoPreview(fixture, new Set(["ancona"]));
+  const result = parseSubitoPreview(fixture, new Set(["ancona", "osimo"]));
   if (result.page_status !== "ok") throw new Error("Expected readable Subito results page");
   if (result.page_source !== "next_data") throw new Error("Expected Subito structured result data");
   if (result.items.length !== 8) throw new Error("Expected eight fixture listings");
