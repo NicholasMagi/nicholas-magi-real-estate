@@ -106,7 +106,7 @@ Deno.test("Subito result-page acquisition is disabled by default and preserves t
 
 Deno.test("Subito: il comune viene classificato nella provincia corretta e le località ignote restano da verificare", () => {
   const base = { id: "700000001", url: "https://www.subito.it/appartamenti/prova-700000001.htm", title: "Appartamento", description: "Immobile in vendita", price: 150000, surfaceMq: 80, rooms: 3, images: [], publishedAt: null, advertiserCompany: false };
-  const ctx = { owner: OWNER, email: EMAIL_26, digest: subitoSavedSearchDigest(EMAIL_26)!, nowIso: "2026-11-26T10:00:00.000Z", classifySeller: text => sellerClassificationDetails(text) };
+  const ctx = { owner: OWNER, email: EMAIL_26, digest: subitoSavedSearchDigest(EMAIL_26)!, nowIso: "2026-11-26T10:00:00.000Z", classifySeller: (text: string) => sellerClassificationDetails(text) };
   const ancona = subitoItemRow({ ...base, location: "Castelfidardo" }, ctx, { pageSource: "next_data" });
   const macerata = subitoItemRow({ ...base, location: "Camerino" }, ctx, { pageSource: "next_data" });
   const unknown = subitoItemRow({ ...base, location: null }, ctx, { pageSource: "next_data" });
