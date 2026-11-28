@@ -329,7 +329,7 @@ export async function subitoFullSearchRows(
         ? { status: "errore" as const, reason: "rinviato", items: [], pagesRead: 0, totalPages: null, totalDeclared: null, source: null, skipped: 0 }
         : await fetchWholeSubitoSearch(digest, deps, { maxPages: Math.min(perSearch, budget) });
       budget -= fetched.pagesRead || (deferred ? 0 : digest.searchUrl ? 1 : 0);
-      const attempts = deferred ? log.tentativi : log.tentativi + 1;
+      const attempts = deferred || unauthorized ? log.tentativi : log.tentativi + 1;
       const retry = !unauthorized && fetched.status !== "completa" && fetched.reason !== "link_mancante" && (deferred || attempts < SUBITO_MAX_ATTEMPTS);
       Object.assign(log, {
         esito: fetched.status, motivo: fetched.reason, motivo_testo: SUBITO_REASON_TEXT[fetched.reason] || fetched.reason,
