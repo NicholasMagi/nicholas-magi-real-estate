@@ -60,7 +60,7 @@ async function syncCycle(db: ReturnType<typeof fakeSupabase>, itemCandidates: bo
   const cycle = await subitoRowsForEmails(
     emails.map(e => ({ email: e, digest: subitoDigestById.get(String(e.id))! })),
     supabaseSubitoDeps(db.client, OWNER, () => Promise.resolve({ status: 200, finalUrl: FINAL_URL, html: REAL_PAGE })),
-    { owner: OWNER, classifySeller: text => sellerClassificationDetails(text), now: () => NOW, itemCandidates }
+    { owner: OWNER, classifySeller: text => sellerClassificationDetails(text), now: () => NOW, itemCandidates, allowAutomatedPageFetch: true }
   );
   const failures = [...cycle.failures, ...await processRowsIsolated(cycle.rows, row => String(row.notification_source_id || row.source_email_id),
     async row => { await saveCandidateRow(db.client, OWNER, row, counters, () => NOW); })];
