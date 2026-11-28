@@ -112,6 +112,13 @@ export async function acquireSubitoDigest(
   options: { batchPreviousIso?: string | null; deferred?: boolean; itemCandidates?: boolean; acquisitionEnabled?: boolean } = {}
 ): Promise<SubitoAcquisition> {
   const existing = await deps.existingDigest(String(email.id));
+  // Default sicuro: nessuna lettura automatica delle pagine risultati senza autorizzazione scritta e abilitazione esplicita lato server.
+  if (digest.searchUrl && options.acquisitionEnabled !== true) {
+    return {
+      status: "errore", reason: "autorizzazione_richiesta", items: [], decision: null, archived: [], proposals: [],
+      pageSource: null, pageCount: 0, attempts: previousAttempts(existing), retry: false, keepDigestRecord: true
+    };
+  }
   // Rinvio per limite di letture nel ciclo: non conta come tentativo.
   if (options.deferred) {
     const attemptsSoFar = previousAttempts(existing);
@@ -125,8 +132,6 @@ export async function acquireSubitoDigest(
     retry: retryable && attempts < SUBITO_MAX_ATTEMPTS, keepDigestRecord: true
   });
   if (!digest.searchUrl) return fail("link_mancante", false);
-  // Default sicuro: nessuna lettura automatica delle pagine risultati senza autorizzazione scritta e abilitazione esplicita lato server.
-  if (options.acquisitionEnabled !== true) return fail("autorizzazione_richiesta", false);
   const read = await readSubitoResultsPage(digest.searchUrl, digest.searchUrl, digest.searchKey, deps.fetchPage);
   const page: SubitoPage | null = read.page;
   const pageError: string | null = read.error;
