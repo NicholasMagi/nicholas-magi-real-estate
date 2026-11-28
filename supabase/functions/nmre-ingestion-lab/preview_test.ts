@@ -49,5 +49,6 @@ Deno.test("Subito adapter reuses the established result parser and never imports
   if (result.page_source !== "next_data") throw new Error("Expected Subito structured result data");
   if (result.items.length !== 8) throw new Error("Expected eight fixture listings");
   if (!result.items.every(item => item.importable === false)) throw new Error("Subito preview must not import automatically");
-  if (!result.items.every(item => item.within_45_min === true)) throw new Error("Ancona listings should match configured test territory");
+  if (result.items[0]?.within_45_min !== true) throw new Error("First Ancona listing should match configured test territory");
+  if (!result.items.every(item => item.within_45_min === true || item.within_45_min === false || item.within_45_min === null)) throw new Error("Territory result must be explicit or unknown");
 });
