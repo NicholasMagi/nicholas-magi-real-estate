@@ -25,6 +25,8 @@ import { rowReferencesSubitoAd, subitoIdLikePatterns, subitoSearchPageUrl, SUBIT
 import { subitoNoAgencyExclusion } from "./subito_acquisition.ts";
 import type { SubitoDigest, SubitoItem, SubitoPage } from "./subito.ts";
 import type { SellerResult } from "./retention.ts";
+import { municipality } from "./parser.ts";
+import { isTargetMunicipality } from "../../_shared/territory.ts";
 
 /** Pagine lette al massimo per una ricerca (30 annunci per pagina nella pagina reale). */
 export const SUBITO_FULL_MAX_PAGES_PER_SEARCH = 10;
@@ -282,7 +284,7 @@ export function fullSearchItemRow(item: SubitoItem, ctx: SubitoRowContext, detai
 export async function subitoFullSearchRows(
   entries: Array<{ email: SubitoEmail; digest: SubitoDigest }>,
   deps: FullSearchDeps,
-  ctx: { owner: string; classifySeller(text: string): SellerResult; now?: () => string; maxPagesPerRun?: number; maxPagesPerSearch?: number; maxSingleNotifications?: number }
+  ctx: { owner: string; classifySeller(text: string): SellerResult; now?: () => string; maxPagesPerRun?: number; maxPagesPerSearch?: number; maxSingleNotifications?: number; allowAutomatedPageFetch?: boolean }
 ): Promise<FullSearchCycleResult> {
   const now = ctx.now || (() => new Date().toISOString());
   let budget = ctx.maxPagesPerRun ?? SUBITO_FULL_MAX_PAGES_PER_RUN;
@@ -319,13 +321,16 @@ export async function subitoFullSearchRows(
         if (existing) result.rows.push(subitoDigestRow(rowContext, { ...emptyAcquisition(), status: "completo", reason: "assorbita", attempts: log.tentativi }));
         continue;
       }
+      const unauthorized = !!digest.searchUrl && ctx.allowAutomatedPageFetch !== true;
       const deferred = !!digest.searchUrl && budget < 1;
-      const fetched = deferred
+      const fetched = unauthorized
+        ? { status: "errore" as const, reason: "autorizzazione_richiesta", items: [], pagesRead: 0, totalPages: null, totalDeclared: null, source: null, skipped: 0 }
+        : deferred
         ? { status: "errore" as const, reason: "rinviato", items: [], pagesRead: 0, totalPages: null, totalDeclared: null, source: null, skipped: 0 }
         : await fetchWholeSubitoSearch(digest, deps, { maxPages: Math.min(perSearch, budget) });
       budget -= fetched.pagesRead || (deferred ? 0 : digest.searchUrl ? 1 : 0);
       const attempts = deferred ? log.tentativi : log.tentativi + 1;
-      const retry = fetched.status !== "completa" && fetched.reason !== "link_mancante" && (deferred || attempts < SUBITO_MAX_ATTEMPTS);
+      const retry = !unauthorized && fetched.status !== "completa" && fetched.reason !== "link_mancante" && (deferred || attempts < SUBITO_MAX_ATTEMPTS);
       Object.assign(log, {
         esito: fetched.status, motivo: fetched.reason, motivo_testo: SUBITO_REASON_TEXT[fetched.reason] || fetched.reason,
         pagine_lette: fetched.pagesRead, pagine_dichiarate: fetched.totalPages, annunci_dichiarati_ricerca: fetched.totalDeclared,
@@ -333,7 +338,10 @@ export async function subitoFullSearchRows(
       });
       count(fetched.status + ":" + fetched.reason);
 
-      const classified = await classifyFullSearchItems(fetched.items, deps);
+      const territoryItems = fetched.items.filter(item => { const town = municipality(String(item.location || "")); return !town || isTargetMunicipality(town); });
+      const outsideTerritory = fetched.items.length - territoryItems.length;
+      if (outsideTerritory) count("fuori_territorio");
+      const classified = await classifyFullSearchItems(territoryItems, deps);
       const inserted: Array<{ id: string; url: string; title: string | null }> = [];
       const archived: SubitoAcquisition["archived"] = [];
       const toUnify: Array<{ subito_id: string; candidati: string[] }> = [];
@@ -376,6 +384,7 @@ export async function subitoFullSearchRows(
         filtro_venditore: sellerFilter.status,
         filtro_venditore_prova: sellerFilter.evidence,
         voci_non_leggibili: fetched.skipped,
+        fuori_territorio: outsideTerritory,
         nuove: inserted.slice(0, 100),
         gia_in_archivio: archived.slice(0, 100).map(entry => ({ id: entry.id, annuncio_id: entry.annuncio_id, eliminato_dall_archivio: entry.eliminato })),
         duplicati_da_unificare: toUnify.slice(0, 50)
