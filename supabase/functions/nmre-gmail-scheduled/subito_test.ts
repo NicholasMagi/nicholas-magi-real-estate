@@ -65,7 +65,7 @@ async function syncCycle(db: ReturnType<typeof fakeSupabase>, emails: Any[], fet
   const entries = emails.map(e => ({ email: e, digest: subitoSavedSearchDigest(e)! })).filter(entry => entry.digest);
   const counters = newSaveCounters();
   const cycle = await subitoRowsForEmails(entries, supabaseSubitoDeps(db.client, OWNER, fetchPage), {
-    owner: OWNER, classifySeller: text => sellerClassificationDetails(text), now: () => "2026-11-26T10:00:00.000Z"
+    owner: OWNER, classifySeller: text => sellerClassificationDetails(text), now: () => "2026-11-26T10:00:00.000Z", allowAutomatedPageFetch: true
   });
   const failures = [...cycle.failures, ...await processRowsIsolated(cycle.rows, row => String(row.notification_source_id || row.source_email_id),
     async row => { await saveCandidateRow(db.client, OWNER, row, counters, () => "2026-11-26T10:00:00.000Z"); })];
@@ -89,6 +89,20 @@ async function afterPreviousDigest(seed: FakeRow[] = [], notices: FakeRow[] = []
   await syncCycle(db, [EMAIL_25], pages({ html: PAGE }).fetchPage);
   return db;
 }
+
+// ---------- Autorizzazione lettura automatica ----------
+Deno.test("Subito result-page acquisition is disabled by default and preserves the email digest", async () => {
+  const db = fakeSupabase();
+  const fetcher = pages({ html: PAGE });
+  const entries = [{ email: EMAIL_26, digest: subitoSavedSearchDigest(EMAIL_26)! }];
+  const cycle = await subitoRowsForEmails(entries, supabaseSubitoDeps(db.client, OWNER, fetcher.fetchPage), {
+    owner: OWNER, classifySeller: text => sellerClassificationDetails(text), now: () => "2026-11-26T10:00:00.000Z"
+  });
+  eq(fetcher.calls.length, 0, "nessuna richiesta automatica alla pagina Subito");
+  eq(cycle.rows.length, 1, "la notifica riepilogativa resta salvabile");
+  eq(cycle.rows[0].dati_estratti.ricerca_subito.motivo, "autorizzazione_richiesta", "motivo esplicito");
+  eq(cycle.rows[0].dati_estratti.ricerca_subito.nuovo_tentativo, false, "nessun retry automatico");
+});
 
 // ---------- 1 · Riconoscimento ----------
 Deno.test("1 · email Subito di ricerca salvata riconosciuta (numero dichiarato, nome della ricerca)", () => {
