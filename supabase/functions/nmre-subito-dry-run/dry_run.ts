@@ -189,7 +189,9 @@ export async function subitoDryRun(input: { message: any; db: ReadOnlyDb; owner:
   try {
     // Riga riepilogativa di questa stessa email già salvata da una sincronizzazione?
     emailInfo.gia_registrata_in_nmre = !!(await deps.existingDigest(String(email.id)));
-    acquisition = await acquireSubitoDigest(email, digest, deps);
+    // Endpoint manuale autenticato del titolare: una sola lettura esplicita, senza scritture.
+    // Non è il ciclo automatico schedulato; i blocchi anti-robot restano rispettati.
+    acquisition = await acquireSubitoDigest(email, digest, deps, { acquisitionEnabled: true });
     // Inizio della finestra (email precedente della stessa ricerca), letto come fa la decisione.
     if (digest.searchKey && receivedIso) previousIso = await deps.previousDigestDate(digest.searchKey, receivedIso);
   } catch (error) {
