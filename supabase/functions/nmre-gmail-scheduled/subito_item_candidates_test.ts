@@ -183,7 +183,7 @@ Deno.test("novità non dimostrata: un testo da privato non porta all'archiviazio
   const cycle = await subitoRowsForEmails(
     emails.map(e => ({ email: e, digest: subitoDigestById.get(String(e.id))! })),
     supabaseSubitoDeps(db.client, OWNER, () => Promise.resolve({ status: 200, finalUrl: FINAL_URL, html: REAL_PAGE })),
-    { owner: OWNER, classifySeller: () => ({ classification: "Privato", confidence: 99, evidence: "Etichetta esplicita: venditore privato" }), now: () => NOW, itemCandidates: true }
+    { owner: OWNER, classifySeller: () => ({ classification: "Privato", confidence: 99, evidence: "Etichetta esplicita: venditore privato" }), now: () => NOW, itemCandidates: true, allowAutomatedPageFetch: true }
   );
   const items = cycle.rows.filter((row: Any) => String(row.dedup_key).startsWith("subito:"));
   eq(items.length, 6, "schede proposte");
