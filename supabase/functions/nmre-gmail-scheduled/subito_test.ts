@@ -505,7 +505,7 @@ Deno.test("11 · limite di pagine per ciclo: le email in eccesso sono rinviate s
   const list = Array.from({ length: 3 }, (_v, index) => email("19a9" + index, "Thu, 26 Nov 2026 0" + (index + 1) + ":00:00 +0100"));
   const fetcher = pages({ html: PAGE });
   const entries = list.map(e => ({ email: e, digest: subitoSavedSearchDigest(e)! }));
-  const cycle = await subitoRowsForEmails(entries, supabaseSubitoDeps(db.client, OWNER, fetcher.fetchPage), { owner: OWNER, classifySeller: t => sellerClassificationDetails(t), maxPages: 2 });
+  const cycle = await subitoRowsForEmails(entries, supabaseSubitoDeps(db.client, OWNER, fetcher.fetchPage), { owner: OWNER, classifySeller: t => sellerClassificationDetails(t), maxPages: 2, allowAutomatedPageFetch: true });
   eq(fetcher.calls.length, 2, "2 pagine lette");
   const deferred = cycle.rows.find(row => row.dedup_key === "gmail:19a92")!;
   eq(deferred.dati_estratti.ricerca_subito.motivo, "rinviato", "terza email rinviata");
