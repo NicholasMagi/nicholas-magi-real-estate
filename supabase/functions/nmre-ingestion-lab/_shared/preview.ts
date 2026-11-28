@@ -1,5 +1,5 @@
 import { municipality } from "../../nmre-gmail-scheduled/_shared/parser.ts";
-import { territoryClassification } from "../../_shared/territory.ts";
+import { normalizeMunicipality, territoryClassification } from "../../_shared/territory.ts";
 
 function textContent(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -19,7 +19,7 @@ function flattenJsonLd(value: unknown, out: Record<string, unknown>[]) {
 }
 
 /** Estrae solo dati strutturati esplicitamente pubblicati nella pagina. */
-export function parsePublicListingPreview(html: string, pageUrl: string) {
+export function parsePublicListingPreview(html: string, pageUrl: string, allowed45MinuteMunicipalities: ReadonlySet<string> | null = null) {
   const blocks: Record<string, unknown>[] = [];
   for (const match of html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
     try { flattenJsonLd(JSON.parse(match[1]), blocks); } catch { /* JSON-LD malformato: ignora il blocco */ }
@@ -48,6 +48,7 @@ export function parsePublicListingPreview(html: string, pageUrl: string) {
       locality,
       municipality: town,
       territory: territoryClassification(town),
+      within_45_min: allowed45MinuteMunicipalities && town ? allowed45MinuteMunicipalities.has(normalizeMunicipality(town)) : null,
       price: offers["price"] ?? obj["price"] ?? null,
       currency: offers["priceCurrency"] ?? null,
       seller: "Da verificare",
