@@ -1,5 +1,7 @@
 import { municipality } from "../../nmre-gmail-scheduled/_shared/parser.ts";
 import { normalizeMunicipality, territoryClassification } from "../../_shared/territory.ts";
+import { municipality as parseMunicipality } from "../../nmre-gmail-scheduled/_shared/parser.ts";
+import { parseSubitoResultsPage } from "../../nmre-gmail-scheduled/_shared/subito.ts";
 
 function textContent(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -55,4 +57,27 @@ export function parsePublicListingPreview(html: string, pageUrl: string, allowed
       importable: false
     };
   });
+}
+
+/** Adattatore Subito: usa il parser di produzione, senza paginazione o richieste aggiuntive. */
+export function parseSubitoPreview(html: string, allowed45MinuteMunicipalities: ReadonlySet<string> | null = null) {
+  const page = parseSubitoResultsPage(html);
+  const items = page.items.map((item, index) => {
+    const town = parseMunicipality(String(item.location || ""));
+    return {
+      source_index: index + 1,
+      title: item.title,
+      description: item.description,
+      url: item.url,
+      locality: item.location,
+      municipality: town,
+      territory: territoryClassification(town),
+      within_45_min: allowed45MinuteMunicipalities && town ? allowed45MinuteMunicipalities.has(normalizeMunicipality(town)) : null,
+      price: item.price,
+      currency: "EUR",
+      seller: item.advertiserCompany === false ? "Privato" : item.advertiserCompany === true ? "Agenzia" : "Da verificare",
+      importable: false
+    };
+  });
+  return { page_status: page.status, page_source: page.source, skipped: page.skipped || 0, items };
 }
