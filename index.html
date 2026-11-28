@@ -4605,7 +4605,9 @@ function nmreGoogleMapsDirectionsUrl(item){
  if(Number.isFinite(item.latitude)&&Number.isFinite(item.longitude)){
   destination=String(item.latitude)+","+String(item.longitude);
  }else{
-  destination=[item.address,item.municipality,"Italia"].filter(Boolean).join(", ");
+  const location=[item.address,item.municipality].filter(Boolean).join(", ");
+  if(!location)return "";
+  destination=location+", Italia";
  }
  if(!destination)return "";
  return "https://www.google.com/maps/dir/?api=1&destination="+encodeURIComponent(destination)+"&travelmode=driving";
