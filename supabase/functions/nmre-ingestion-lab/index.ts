@@ -3,7 +3,7 @@
 // L'host deve essere stato autorizzato esplicitamente tramite allowlist server-side.
 // Il risultato è solo un'anteprima: nessuna scrittura su Supabase.
 import { withSupabase } from "npm:@supabase/server@^1";
-import { parsePublicListingPreview } from "./_shared/preview.ts";
+import { parsePublicListingPreview, parseSubitoPreview } from "./_shared/preview.ts";
 import { normalizeMunicipality } from "../_shared/territory.ts";
 
 const MAX_HTML_BYTES = 1_500_000;
@@ -60,9 +60,14 @@ export default {
       const html = (await response.text()).slice(0, MAX_HTML_BYTES);
       const allowed45MinuteMunicipalities = new Set((Deno.env.get("NMRE_INGESTION_45MIN_MUNICIPALITIES") || "")
         .split(",").map(normalizeMunicipality).filter(Boolean));
-      const items = parsePublicListingPreview(html, url.toString(), allowed45MinuteMunicipalities.size ? allowed45MinuteMunicipalities : null);
+      const allowed45 = allowed45MinuteMunicipalities.size ? allowed45MinuteMunicipalities : null;
+      const isSubito = url.hostname === "subito.it" || url.hostname.endsWith(".subito.it");
+      const subito = isSubito ? parseSubitoPreview(html, allowed45) : null;
+      const items = subito ? subito.items : parsePublicListingPreview(html, url.toString(), allowed45);
       return Response.json({
         mode: "preview_read_only",
+        parser: isSubito ? "subito_results" : "json_ld",
+        ...(subito ? { page_status: subito.page_status, page_source: subito.page_source, skipped: subito.skipped } : {}),
         source_host: url.hostname,
         http_status: response.status,
         bytes_examined: Math.min(new TextEncoder().encode(html).length, MAX_HTML_BYTES),
