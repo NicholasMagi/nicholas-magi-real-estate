@@ -570,6 +570,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .nmre-map-popup strong{display:block;margin-bottom:4px}
 .nmre-map-popup small{color:#667085}
 .nmre-map-popup a{display:inline-block;margin-top:6px}
+.nmre-map-popup a.nmre-map-directions{display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:8px 11px;border-radius:8px;background:#1a73e8;color:#fff;font-weight:700;text-decoration:none}
 @media(max-width:620px){
  .nmre-map-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
  .nmre-property-map{height:66vh;min-height:380px}
@@ -4117,6 +4118,18 @@ function nmreMapCategoryLabel(category){
 function nmreMapCategoryColor(category){
  return category==="incarico"?"#b18a50":category==="venduto"?"#32866c":"#758197";
 }
+function nmreGoogleMapsDirectionsUrl(item){
+ let destination="";
+ if(Number.isFinite(item.latitude)&&Number.isFinite(item.longitude)){
+  destination=String(item.latitude)+","+String(item.longitude);
+ }else{
+  const location=[item.address,item.municipality].filter(Boolean).join(", ");
+  if(!location)return "";
+  destination=location+", Italia";
+ }
+ if(!destination)return "";
+ return "https://www.google.com/maps/dir/?api=1&destination="+encodeURIComponent(destination)+"&travelmode=driving";
+}
 function nmreMapFiltersAllow(category){
  if(category==="incarico")return $("nmreMapShowMandates").checked;
  if(category==="venduto")return $("nmreMapShowSold").checked;
@@ -4241,7 +4254,9 @@ async function nmreRenderPropertyMap(){
    const address=item.address?item.address+" · "+item.municipality:item.municipality;
    const precision=item.precision==="comune"?"Posizione approssimativa · comune":item.precision==="via"?"Posizione sulla via":item.precision==="civico"?"Posizione al civico":"Posizione salvata";
    const link=item.url&&validUrl(item.url)?'<a href="'+safe(validUrl(item.url))+'" target="_blank" rel="noopener noreferrer">Apri annuncio</a>':"";
-   marker.bindPopup('<div class="nmre-map-popup"><strong>'+safe(item.title)+'</strong><span>'+safe(address||"Località non indicata")+'</span><br><small>'+safe(nmreMapCategoryLabel(item.category))+' · '+safe(precision)+'</small>'+link+'</div>');
+   const directionsUrl=nmreGoogleMapsDirectionsUrl(item);
+   const directionsLink=directionsUrl?'<a class="nmre-map-directions" href="'+safe(directionsUrl)+'" target="_blank" rel="noopener noreferrer">Avvia navigazione con Google Maps ↗</a>':"";
+   marker.bindPopup('<div class="nmre-map-popup"><strong>'+safe(item.title)+'</strong><span>'+safe(address||"Località non indicata")+'</span><br><small>'+safe(nmreMapCategoryLabel(item.category))+' · '+safe(precision)+'</small>'+directionsLink+link+'</div>');
    bounds.push([item.latitude,item.longitude]);
   });
   if(bounds.length>1)nmreMapInstance.fitBounds(L.latLngBounds(bounds).pad(.15),{maxZoom:15});
