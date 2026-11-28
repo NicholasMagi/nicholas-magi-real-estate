@@ -48,6 +48,9 @@ jobs:
       - name: Test recovery panel functions in index.html
         run: node tests/frontend/recovery_test.mjs
 
+      - name: Test Google Maps navigation from property map markers
+        run: node tests/frontend/map_google_maps_navigation_test.mjs
+
       - name: Test recovery panel loading (loadCandidateRecovery) with simulated failures
         run: node tests/frontend/recovery_load_test.mjs
 
