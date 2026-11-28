@@ -331,7 +331,7 @@ Deno.test("4-quinquies · scheda Subito già presente senza chiave dell'immobile
 
 Deno.test("ricerca salvata (percorso dell'email): segnali di agenzia nel testo → «Da verificare» in coda, mai «Agenzia»", () => {
   const item = { id: "700000001", url: "https://www.subito.it/appartamenti/prova-700000001.htm", title: "Agenzia Rossi propone", description: null, price: null,
-    location: null, surfaceMq: null, rooms: null, images: [], publishedAt: null, advertiserCompany: false };
+    location: "Ancona", surfaceMq: null, rooms: null, images: [], publishedAt: null, advertiserCompany: false };
   const row = subitoItemRow(item, { owner: OWNER, email: { id: "e-1", from: "Subito <noreply@subito.it>", subject: "x", date: "Thu, 26 Nov 2026 08:24:27 +0000" },
     digest: emailEntries([realEmail("e-1")])[0].digest, nowIso: NOW,
     classifySeller: () => ({ classification: "Agenzia" as const, confidence: 95, evidence: "Venditore indicato come agenzia" }) }, { pageSource: "next_data" });
