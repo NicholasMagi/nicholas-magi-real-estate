@@ -19,8 +19,11 @@ function grab(name) {
   throw new Error("Funzione non chiusa: " + name);
 }
 
+const constLine = name => { const m = html.match(new RegExp("const " + name + "=[^;]+;")); if (!m) throw new Error("Costante non trovata: " + name); return m[0]; };
 const names = [
   "nmreIdentityKey",
+  "nmreNotesExtraValues",
+  "nmreContactPhoneKeysAll",
   "nmrePhoneKeys",
   "nmrePhoneKey",
   "nmreExtractListingPhones",
@@ -29,6 +32,7 @@ const names = [
 ];
 const api = new Function(
   "let currentUser=null,supabase=null,listingCache=[],nmreCrmContacts=[],nmreCrmProperties=[],nmreCrmPropertyContacts=[];" +
+  constLine("NMRE_EXTRA_PHONES_LABEL") +
   names.map(grab).join("\n") +
   `
   return {

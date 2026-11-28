@@ -9,13 +9,15 @@ import { guardedCandidateUpdate } from "./_shared/guarded.ts";
 import { newSaveCounters, saveCandidateRow } from "./_shared/save_candidate.ts";
 import type { CandidateRow } from "./_shared/save_candidate.ts";
 import { classifyMailbox, emailFromGmailMessage, repairEmailId, sellerForEmail } from "./_shared/mailbox.ts";
-import { subitoRowsForEmails, supabaseSubitoDeps } from "./_shared/subito_acquisition.ts";
+import { subitoItemCandidatesEnabled, subitoRowsForEmails, supabaseSubitoDeps } from "./_shared/subito_acquisition.ts";
+import { saveFullSearchLogs, subitoFullSearchEnabled, subitoFullSearchRows, supabaseFullSearchDeps } from "./_shared/subito_full_search.ts";
 import { assertAllRowsSaved, processRowsIsolated } from "./_shared/row_isolation.ts";
 import type { RowFailure } from "./_shared/row_isolation.ts";
 import {
   captureDubiousAlertsEnabled, dubiousAlertEvidence, promotedSellerClassification
 } from "./_shared/dubious.ts";
 import { withSupabase } from "npm:@supabase/server@^1";
+import { isTargetMunicipality, territoryClassification } from "../_shared/territory.ts";
 
 const ACCOUNT = "nicholasmagirealestate@gmail.com";
 const PORTALS = ["idealista.it","immobiliare.it","casa.it","subito.it","green-acres.it","green-acres.com","gate-away.com","trovacasa.it","wikicasa.it"];
@@ -483,7 +485,10 @@ export default {
       const repairIds = (candidatesToRepair || [])
         .filter((candidate: any) => isRepairEligible(candidate))
         // Annunci di una ricerca salvata Subito: si rilegge l'email riepilogativa.
-        .map((candidate: any) => repairEmailId(candidate.source_email_id));
+        .map((candidate: any) => repairEmailId(candidate.source_email_id))
+        // Seconda protezione: solo identificativi con la forma di un ID Gmail (le schede
+        // importate dal browser, "subito-browser:…", non sono email).
+        .filter((id: string) => /^[0-9A-Za-z]{6,64}$/.test(id));
 
       // Avvisi dubbi (Fase 2): attivi solo con NMRE_CAPTURE_DUBIOUS_ALERTS=true e
       // DOPO l'applicazione della migrazione della tabella nmre_gmail_avvisi_dubbi.
@@ -671,6 +676,7 @@ export default {
           bagni: bathrooms(text),
           dati_estratti: {
             ...extractAdditionalPropertyDetails(text),
+            territorio: territoryClassification(municipality(text)),
             riduzione_prezzo: explicitPriceReduction,
             campi_immobile: {
               titolo: title,
@@ -716,17 +722,41 @@ export default {
         };
       }));
 
+      // I comuni noti fuori dalle province AN/MC non entrano nelle opportunità; località sconosciute restano da verificare.
+      const inTerritoryRows = regularRows.filter(row => !row.comune || isTargetMunicipality(row.comune));
+      const outsideTerritoryNotifications = regularRows.length - inTerritoryRows.length;
+
       // Ricerche salvate Subito: un annuncio per riga, con il proprio URL e ID. In caso di
       // incertezza o errore resta la notifica, da verificare (e ritentata se possibile).
-      const subitoCycle = await subitoRowsForEmails(
-        subitoClassified.map(({ email }) => ({ email, digest: subitoDigestById.get(String(email.id))! })),
-        supabaseSubitoDeps(ctx.supabaseAdmin, owner, fetchSubitoPage),
-        { owner, classifySeller: (text: string) => classifySellerWithRegistry(text, sellerRegistry) }
+      // Intera ricerca salvata (NMRE_SUBITO_FULL_SEARCH=true, solo DOPO la migrazione del
+      // registro 20261127020000): l'email è il segnale, si rilegge tutta la ricerca e ogni
+      // annuncio non ancora presente diventa una scheda con la normale notifica. Senza la
+      // variabile il comportamento resta quello attuale.
+      const automatedSubitoAuthorized = Deno.env.get("NMRE_SUBITO_AUTOMATED_RESULTS_AUTHORIZED") === "true";
+      const fullSearch = automatedSubitoAuthorized && subitoFullSearchEnabled(Deno.env.get("NMRE_SUBITO_FULL_SEARCH"));
+      const subitoEntries = subitoClassified.map(({ email }) => ({ email, digest: subitoDigestById.get(String(email.id))! }));
+      const subitoBaseDeps = supabaseSubitoDeps(ctx.supabaseAdmin, owner, fetchSubitoPage);
+      const fullCycle = fullSearch
+        ? await subitoFullSearchRows(subitoEntries,
+          supabaseFullSearchDeps(ctx.supabaseAdmin, owner, subitoBaseDeps, ms => new Promise(resolve => setTimeout(resolve, ms))),
+          { owner, classifySeller: (text: string) => classifySellerWithRegistry(text, sellerRegistry) })
+        : null;
+      const subitoCycle = fullCycle ?? await subitoRowsForEmails(
+        subitoEntries,
+        subitoBaseDeps,
+        {
+          owner, classifySeller: (text: string) => classifySellerWithRegistry(text, sellerRegistry),
+          // Schede singole «Da verificare» quando la novità non è dimostrabile: solo con
+          // NMRE_SUBITO_ITEM_CANDIDATES=true, DOPO la migrazione 20261126210000 (nessuna
+          // notifica per scheda). Senza la variabile il comportamento resta quello attuale.
+          itemCandidates: subitoItemCandidatesEnabled(Deno.env.get("NMRE_SUBITO_ITEM_CANDIDATES")),
+          allowAutomatedPageFetch: automatedSubitoAuthorized
+        }
       );
       rowFailures.push(...subitoCycle.failures);
       const subitoRows = subitoCycle.rows;
       const subitoOutcomes = subitoCycle.outcomes;
-      const rows: any[] = [...regularRows, ...subitoRows];
+      const rows: any[] = [...inTerritoryRows, ...subitoRows];
 
       const counters = newSaveCounters();
       const promotedCandidateByEmail = new Map<string, string>();
@@ -737,6 +767,10 @@ export default {
       const { inserted, updated, notificationEventsLinked, autoArchived, reopenedOnPriceDrop, notificationsAfterDiscard } = counters;
       // Nessun avanzamento del cursore se anche una sola email non è stata salvata.
       assertAllRowsSaved(rowFailures);
+      // Registro delle ricerche Subito (intera ricerca): scritto solo dopo il salvataggio
+      // di tutte le schede; se non riesce, il cursore non avanza e il ciclo si ripete
+      // (operazioni idempotenti: nessun doppione).
+      if (fullCycle) await saveFullSearchLogs(ctx.supabaseAdmin, fullCycle.logs);
 
       // Esito delle promozioni richieste dal titolare.
       let promotedAlerts = 0;
@@ -777,8 +811,8 @@ export default {
         listed_count: messageIds.length,
         read_count: mailboxEmails.length,
         property_notifications_count: propertyEmails.length,
-        private_recognized_count: rows.filter(row => row.tipo_venditore === "Privato").length,
-        needs_user_review_count: rows.filter(row => row.tipo_venditore === "Da verificare").length,
+        private_recognized_count: rows.filter(row => row.tipo_venditore === "Privato" && !row.sighting_only).length,
+        needs_user_review_count: rows.filter(row => row.tipo_venditore === "Da verificare" && !row.sighting_only).length,
         excluded_agencies_count: excludedAgencies,
         discarded_existing_count: discardedExisting,
         inserted_count: inserted,
@@ -796,7 +830,7 @@ export default {
       }
       // Riepilogo diagnostico nei log della funzione: solo conteggi e nomi di regola.
       console.log("nmre-gmail-scheduled summary", JSON.stringify({
-        syncMode, propertyFilterRules, keptForReview, reopenedOnPriceDrop, notificationsAfterDiscard, subitoOutcomes,
+        syncMode, propertyFilterRules, keptForReview, reopenedOnPriceDrop, notificationsAfterDiscard, subitoOutcomes, outsideTerritoryNotifications,
         agencyCandidatesKept: keepAgency, excludedAgencies, dubiousAlertsCaptured: captureDubious,
         dubiousAlertsSaved, promotedAlerts
       }));
@@ -810,8 +844,8 @@ export default {
         listed: messageIds.length,
         read: mailboxEmails.length,
         propertyNotifications: propertyEmails.length,
-        privateRecognized: rows.filter(row => row.tipo_venditore === "Privato").length,
-        needsUserReview: rows.filter(row => row.tipo_venditore === "Da verificare").length,
+        privateRecognized: rows.filter(row => row.tipo_venditore === "Privato" && !row.sighting_only).length,
+        needsUserReview: rows.filter(row => row.tipo_venditore === "Da verificare" && !row.sighting_only).length,
         excludedAgencies,
         discardedExisting,
         inserted,
@@ -828,6 +862,9 @@ export default {
         promotedAlerts,
         propertyFilterRules,
         subitoSavedSearches: subitoOutcomes,
+        subitoFullSearch: fullSearch,
+        subitoSearchLogs: fullCycle ? fullCycle.logs.length : 0,
+        subitoSightingsWithoutChanges: counters.sightingsWithoutChanges || 0,
         duplicatesOrExisting: Math.max(0, rows.length - inserted - updated),
         missingMessages: emails.filter(email => !email).length
       });

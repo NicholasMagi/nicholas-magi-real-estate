@@ -34,7 +34,10 @@ Deno.test("le email Subito di ricerca salvata passano dal recupero e i loro erro
   const failures = handler.indexOf("rowFailures.push(...subitoCycle.failures);");
   assert(subito > failuresStart && subito < loopStart, "il recupero Subito deve precedere il salvataggio delle righe");
   assert(failures > subito && failures < completionCheck, "gli errori del recupero Subito devono entrare in rowFailures prima della verifica");
-  assert(/rows: any\[\] = \[\.\.\.regularRows, \.\.\.subitoRows\]/.test(handler), "le righe Subito vengono salvate con le altre");
+  assert(/rows: any\[\] = \[\.\.\.inTerritoryRows, \.\.\.subitoRows\]/.test(handler), "le righe Subito e quelle Gmail nel territorio vengono salvate con le altre");
+  assert(/const automatedSubitoAuthorized = Deno\.env\.get\("NMRE_SUBITO_AUTOMATED_RESULTS_AUTHORIZED"\) === "true"/.test(handler), "il recupero automatico Subito deve richiedere abilitazione esplicita");
+  assert(/const fullSearch = automatedSubitoAuthorized && subitoFullSearchEnabled/.test(handler), "anche la ricerca completa deve richiedere la stessa autorizzazione");
+  assert(/allowAutomatedPageFetch: automatedSubitoAuthorized/.test(handler), "il percorso standard deve ricevere il gate esplicito");
 });
 
 Deno.test("nessun errore viene ignorato tra la raccolta degli errori e il salvataggio del cursore", () => {

@@ -29,8 +29,18 @@ export type RepairCandidate = {
  * Replica il filtro storico di rielaborazione: un candidato in coda viene
  * riletto da Gmail finché una delle sue versioni è inferiore a quella attuale.
  */
+/**
+ * Riferimenti che NON sono email Gmail: le schede importate dal browser hanno
+ * source_email_id "subito-browser:<lotto>#subito-<id>". Non vanno mai rilette da Gmail
+ * (il riferimento non esiste come messaggio e la lettura fermerebbe la sincronizzazione).
+ */
+export function isNonGmailSourceReference(sourceEmailId: unknown): boolean {
+  return typeof sourceEmailId === "string" && sourceEmailId.startsWith("subito-browser:");
+}
+
 export function isRepairEligible(candidate: RepairCandidate): boolean {
   if (typeof candidate.source_email_id !== "string" || !candidate.source_email_id) return false;
+  if (isNonGmailSourceReference(candidate.source_email_id)) return false;
   if (candidate.seller_manual_override === true) return false;
   if (Number(candidate.deduplication_version || 0) < 1) return true;
   if (Number(candidate.seller_classification_version || 0) < SELLER_CLASSIFICATION_VERSION) return true;

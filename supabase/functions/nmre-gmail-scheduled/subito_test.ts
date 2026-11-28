@@ -6,7 +6,7 @@
 import {
   extractSavedSearchLink, identifyNewSubitoListings, parseSubitoResultsPage, subitoAdId, subitoSavedSearchDigest
 } from "./_shared/subito.ts";
-import { subitoRowsForEmails, supabaseSubitoDeps, SUBITO_MAX_ATTEMPTS } from "./_shared/subito_acquisition.ts";
+import { subitoItemRow, subitoRowsForEmails, supabaseSubitoDeps, SUBITO_MAX_ATTEMPTS } from "./_shared/subito_acquisition.ts";
 import { newSaveCounters, saveCandidateRow } from "./_shared/save_candidate.ts";
 import { assertAllRowsSaved, IncompleteSyncError, processRowsIsolated } from "./_shared/row_isolation.ts";
 import { canonicalListingKey, propertyEmailDecision, sellerClassificationDetails } from "./_shared/parser.ts";
@@ -65,7 +65,7 @@ async function syncCycle(db: ReturnType<typeof fakeSupabase>, emails: Any[], fet
   const entries = emails.map(e => ({ email: e, digest: subitoSavedSearchDigest(e)! })).filter(entry => entry.digest);
   const counters = newSaveCounters();
   const cycle = await subitoRowsForEmails(entries, supabaseSubitoDeps(db.client, OWNER, fetchPage), {
-    owner: OWNER, classifySeller: text => sellerClassificationDetails(text), now: () => "2026-11-26T10:00:00.000Z"
+    owner: OWNER, classifySeller: text => sellerClassificationDetails(text), now: () => "2026-11-26T10:00:00.000Z", allowAutomatedPageFetch: true
   });
   const failures = [...cycle.failures, ...await processRowsIsolated(cycle.rows, row => String(row.notification_source_id || row.source_email_id),
     async row => { await saveCandidateRow(db.client, OWNER, row, counters, () => "2026-11-26T10:00:00.000Z"); })];
@@ -89,6 +89,32 @@ async function afterPreviousDigest(seed: FakeRow[] = [], notices: FakeRow[] = []
   await syncCycle(db, [EMAIL_25], pages({ html: PAGE }).fetchPage);
   return db;
 }
+
+// ---------- Autorizzazione lettura automatica ----------
+Deno.test("Subito result-page acquisition is disabled by default and preserves the email digest", async () => {
+  const db = fakeSupabase();
+  const fetcher = pages({ html: PAGE });
+  const entries = [{ email: EMAIL_26, digest: subitoSavedSearchDigest(EMAIL_26)! }];
+  const cycle = await subitoRowsForEmails(entries, supabaseSubitoDeps(db.client, OWNER, fetcher.fetchPage), {
+    owner: OWNER, classifySeller: text => sellerClassificationDetails(text), now: () => "2026-11-26T10:00:00.000Z"
+  });
+  eq(fetcher.calls.length, 0, "nessuna richiesta automatica alla pagina Subito");
+  eq(cycle.rows.length, 1, "la notifica riepilogativa resta salvabile");
+  eq(cycle.rows[0].dati_estratti.ricerca_subito.motivo, "autorizzazione_richiesta", "motivo esplicito");
+  eq(cycle.rows[0].dati_estratti.ricerca_subito.nuovo_tentativo, false, "nessun retry automatico");
+});
+
+Deno.test("Subito: il comune viene classificato nella provincia corretta e le località ignote restano da verificare", () => {
+  const base = { id: "700000001", url: "https://www.subito.it/appartamenti/prova-700000001.htm", title: "Appartamento", description: "Immobile in vendita", price: 150000, surfaceMq: 80, rooms: 3, images: [], publishedAt: null, advertiserCompany: false };
+  const ctx = { owner: OWNER, email: EMAIL_26, digest: subitoSavedSearchDigest(EMAIL_26)!, nowIso: "2026-11-26T10:00:00.000Z", classifySeller: (text: string) => sellerClassificationDetails(text) };
+  const ancona = subitoItemRow({ ...base, location: "Castelfidardo" }, ctx, { pageSource: "next_data" });
+  const macerata = subitoItemRow({ ...base, location: "Camerino" }, ctx, { pageSource: "next_data" });
+  const unknown = subitoItemRow({ ...base, location: null }, ctx, { pageSource: "next_data" });
+  eq(ancona.dati_estratti.territorio, "Ancona", "provincia di Ancona riconosciuta");
+  eq(macerata.dati_estratti.territorio, "Macerata", "provincia di Macerata riconosciuta");
+  eq(unknown.dati_estratti.territorio, "Da verificare", "località non riconosciuta");
+  eq(unknown.tipo_venditore, "Da verificare", "venditore da verificare se manca il comune");
+});
 
 // ---------- 1 · Riconoscimento ----------
 Deno.test("1 · email Subito di ricerca salvata riconosciuta (numero dichiarato, nome della ricerca)", () => {
@@ -266,14 +292,19 @@ Deno.test("8 · annunci già presenti in archivio o scartati: non reinseriti né
     listing_key: "subito.it/appartamenti/bilocale-arredato-centro-falconara-marittima-608799020.htm", dedup_key: "gmail:old-b", source_email_id: "old-b",
     dati_estratti: { storico_stato: [{ data: "2026-11-25T19:00:00Z", origine: "utente", azione: "scartato", motivo: "Zona non interessante" }] } };
   const db = await afterPreviousDigest([archived, discarded]);
+  const existingBefore = JSON.stringify(db.tables.annunci_candidati.filter((row: Any) => row.dedup_key === "gmail:old-a" || row.dedup_key === "gmail:old-b"));
   const result = await syncCycle(db, [EMAIL_26], pages({ html: PAGE }).fetchPage);
+  eq(JSON.stringify(db.tables.annunci_candidati.filter((row: Any) => row.dedup_key === "gmail:old-a" || row.dedup_key === "gmail:old-b")), existingBefore,
+    "archiviato e scartato identici campo per campo (compreso updated_at)");
   eq(result.counters.inserted, 1, "inserito solo l'annuncio non ancora acquisito");
   eq(byAd(db, "608812345")[0].stato, "confermato", "l'archiviato resta archiviato");
   eq(byAd(db, "608812345")[0].titolo, "Trilocale Adriatico (archiviato)", "dati dell'archiviato invariati");
   const bilocale = byAd(db, "608799020")[0];
   eq(bilocale.stato, "scartato", "lo scarto manuale resta");
   eq(bilocale.dati_estratti.storico_stato[0].motivo, "Zona non interessante", "decisione manuale conservata");
-  eq(bilocale.dati_estratti.notifiche_dopo_scarto?.elenco?.length, 1, "nuova notifica evidenziata sullo scartato");
+  // Decisione del titolare: un annuncio Subito già presente non viene modificato in alcun modo
+  // (nemmeno con il contrassegno di una nuova notifica); la notifica resta nello storico.
+  eq(bilocale.dati_estratti.notifiche_dopo_scarto, undefined, "scheda scartata non modificata (nessun contrassegno)");
   eq(db.tables.annunci_candidati_notifiche.filter(n => String(n.source_email_id).startsWith(EMAIL_26.id)).length, 3, "tutte e tre le notifiche tracciate");
 });
 
@@ -474,7 +505,7 @@ Deno.test("11 · limite di pagine per ciclo: le email in eccesso sono rinviate s
   const list = Array.from({ length: 3 }, (_v, index) => email("19a9" + index, "Thu, 26 Nov 2026 0" + (index + 1) + ":00:00 +0100"));
   const fetcher = pages({ html: PAGE });
   const entries = list.map(e => ({ email: e, digest: subitoSavedSearchDigest(e)! }));
-  const cycle = await subitoRowsForEmails(entries, supabaseSubitoDeps(db.client, OWNER, fetcher.fetchPage), { owner: OWNER, classifySeller: t => sellerClassificationDetails(t), maxPages: 2 });
+  const cycle = await subitoRowsForEmails(entries, supabaseSubitoDeps(db.client, OWNER, fetcher.fetchPage), { owner: OWNER, classifySeller: t => sellerClassificationDetails(t), maxPages: 2, allowAutomatedPageFetch: true });
   eq(fetcher.calls.length, 2, "2 pagine lette");
   const deferred = cycle.rows.find(row => row.dedup_key === "gmail:19a92")!;
   eq(deferred.dati_estratti.ricerca_subito.motivo, "rinviato", "terza email rinviata");
