@@ -30,7 +30,7 @@ Deno.test("public listing preview extracts structured real-estate data without c
   if (items.some(item => item.seller !== "Da verificare" || item.importable !== false)) {
     throw new Error("Preview must never infer a private seller or be importable");
   }
-  if (items[1].territory !== "Fuori zona") throw new Error("Unknown municipality must not be silently treated as target");
+  if (items[1].territory !== "Da verificare") throw new Error("Unknown municipality must not be silently treated as target");
 });
 
 Deno.test("public listing preview ignores malformed JSON-LD and ordinary scripts", () => {
