@@ -38,6 +38,9 @@ Deno.test("estrazione tipologia, metratura e vani",()=>{
 });
 Deno.test("riconoscimento comune marchigiano",()=>{
   assertEquals(municipality("Via Roma, Recanati, appartamento"),"Recanati","comune Recanati");
+  assertEquals(municipality("Casa in vendita a Camerino"),"Camerino","comune Macerata non presente nella lista storica");
+  assertEquals(municipality("Appartamento a Fabriano"),"Fabriano","comune Ancona non presente nella lista storica");
+  assertEquals(municipality("Casa a Fermo"),"Fermo","riconosce anche i comuni fuori zona per poterli filtrare");
 });
 Deno.test("classificazione venditore prudente",()=>{
   assertEquals(sellerClassification("Pubblicato da privato"),"Privato","privato esplicito");
