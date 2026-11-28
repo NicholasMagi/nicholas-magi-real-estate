@@ -3,8 +3,7 @@
 // L'host deve essere stato autorizzato esplicitamente tramite allowlist server-side.
 // Il risultato è solo un'anteprima: nessuna scrittura su Supabase.
 import { withSupabase } from "npm:@supabase/server@^1";
-import { municipality } from "../nmre-gmail-scheduled/_shared/parser.ts";
-import { territoryClassification } from "../_shared/territory.ts";
+import { parsePublicListingPreview } from "./_shared/preview.ts";
 
 const MAX_HTML_BYTES = 1_500_000;
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -24,60 +23,6 @@ function safeUrl(value: unknown): URL | null {
   } catch { return null; }
 }
 
-function textContent(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const clean = value.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&").replace(/\s+/g, " ").trim();
-  return clean ? clean.slice(0, 1000) : null;
-}
-
-function flattenJsonLd(value: unknown, out: Record<string, unknown>[]) {
-  if (Array.isArray(value)) { for (const item of value) flattenJsonLd(item, out); return; }
-  if (!value || typeof value !== "object") return;
-  const obj = value as Record<string, unknown>;
-  out.push(obj);
-  if (obj["@graph"]) flattenJsonLd(obj["@graph"], out);
-  if (obj["mainEntity"]) flattenJsonLd(obj["mainEntity"], out);
-  if (obj["itemListElement"]) flattenJsonLd(obj["itemListElement"], out);
-}
-
-function parsePreview(html: string, pageUrl: string) {
-  const blocks: Record<string, unknown>[] = [];
-  for (const match of html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
-    try { flattenJsonLd(JSON.parse(match[1]), blocks); } catch { /* JSON-LD malformato: ignora il blocco */ }
-  }
-  const candidates = blocks.filter(obj => {
-    const type = Array.isArray(obj["@type"]) ? obj["@type"].join(" ") : String(obj["@type"] || "");
-    return /RealEstateListing|Residence|House|Apartment|SingleFamilyResidence|Product/i.test(type) ||
-      (!!obj["offers"] && (!!obj["address"] || !!obj["name"]));
-  }).slice(0, 40);
-
-  const items = candidates.map((obj, index) => {
-    const address = (obj["address"] && typeof obj["address"] === "object")
-      ? obj["address"] as Record<string, unknown> : {};
-    const locality = textContent(address["addressLocality"] || address["addressRegion"] || obj["location"]);
-    const town = locality ? municipality(locality) : null;
-    const offers = (obj["offers"] && typeof obj["offers"] === "object")
-      ? obj["offers"] as Record<string, unknown> : {};
-    const rawUrl = textContent(obj["url"] || obj["@id"]);
-    let listingUrl: string | null = null;
-    try { listingUrl = rawUrl ? new URL(rawUrl, pageUrl).toString() : null; } catch { /* URL non valida */ }
-    return {
-      source_index: index + 1,
-      title: textContent(obj["name"] || obj["headline"]),
-      description: textContent(obj["description"]),
-      url: listingUrl,
-      locality,
-      municipality: town,
-      territory: territoryClassification(town),
-      price: offers["price"] ?? obj["price"] ?? null,
-      currency: offers["priceCurrency"] ?? null,
-      seller: "Da verificare",
-      importable: false
-    };
-  });
-  return items;
-}
 
 export default {
   fetch: withSupabase({ auth: "user" }, async (req, ctx) => {
@@ -112,7 +57,7 @@ export default {
         return Response.json({ error: "La risorsa non è una pagina HTML pubblica", content_type: type }, { status: 415 });
       }
       const html = (await response.text()).slice(0, MAX_HTML_BYTES);
-      const items = parsePreview(html, url.toString());
+      const items = parsePublicListingPreview(html, url.toString());
       return Response.json({
         mode: "preview_read_only",
         source_host: url.hostname,
