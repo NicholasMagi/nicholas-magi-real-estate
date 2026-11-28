@@ -1,14 +1,6 @@
-export const ALLOWED_MUNICIPALITIES = new Set([
-  "castelfidardo", "ancona", "osimo", "loreto", "recanati", "camerano",
-  "numana", "sirolo", "jesi", "macerata", "fermo", "senigallia",
-  "filottrano", "polverigi", "agugliano", "offagna", "chiaravalle",
-  "ostra", "tolentino", "staffolo", "cupramontana", "monsano",
-  "trecastelli", "corridonia", "montegranaro", "porto sant'elpidio",
-  "porto recanati", "porto san giorgio", "civitanova marche",
-  "falconara marittima", "santa maria nuova", "maiolati spontini",
-  "monte san vito", "monte urano", "monte roberto", "montecassiano",
-  "morro d'alba", "montemarciano"
-]);
+import { TARGET_MUNICIPALITIES, normalizeMunicipality } from "../_shared/territory.ts";
+
+export const ALLOWED_MUNICIPALITIES = TARGET_MUNICIPALITIES;
 
 export const NMRE_BOUNDING_BOX = {
   type: "Polygon",
@@ -22,11 +14,7 @@ export const NMRE_BOUNDING_BOX = {
 };
 
 function normalize(value: unknown): string {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLocaleLowerCase("it");
+  return normalizeMunicipality(value);
 }
 
 export function formatInsightsDate(date: Date): string {
