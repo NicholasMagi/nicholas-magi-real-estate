@@ -1,4 +1,4 @@
-import { parsePublicListingPreview } from "./_shared/preview.ts";
+import { parsePublicListingPreview, parseSubitoPreview } from "./_shared/preview.ts";
 
 Deno.test("public listing preview extracts structured real-estate data without classifying the seller", () => {
   const html = \`<script type="application/ld+json">
@@ -39,4 +39,15 @@ Deno.test("public listing preview ignores malformed JSON-LD and ordinary scripts
   const html = \`<script type="application/ld+json">{bad json}</script><script>window.__DATA__ = {}</script>\`;
   const items = parsePublicListingPreview(html, "https://example.test");
   if (items.length !== 0) throw new Error("Expected no candidates");
+});
+
+
+Deno.test("Subito adapter reuses the established result parser and never imports automatically", () => {
+  const fixture = Deno.readTextFileSync(new URL("../nmre-gmail-scheduled/fixtures/subito_results_page.html", import.meta.url));
+  const result = parseSubitoPreview(fixture, new Set(["ancona"]));
+  if (result.page_status !== "ok") throw new Error("Expected readable Subito results page");
+  if (result.page_source !== "next_data") throw new Error("Expected Subito structured result data");
+  if (result.items.length !== 8) throw new Error("Expected eight fixture listings");
+  if (!result.items.every(item => item.importable === false)) throw new Error("Subito preview must not import automatically");
+  if (!result.items.every(item => item.within_45_min === true)) throw new Error("Ancona listings should match configured test territory");
 });
